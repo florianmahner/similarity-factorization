@@ -4,7 +4,7 @@ Similarity-based Representation Factorization (SRF).
 
 ### Installation
 
-This project uses [Poetry](https://python-poetry.org/) for dependency management and includes the `ml-toolkit` as a git subtree in the `srf/tools` directory.
+This project uses [Poetry](https://python-poetry.org/) for dependency management and includes the `ml-toolkit` as a git subtree in the `srf/ml-toolkit` directory.
 
 1.  **Clone the repository:**
     ```bash
@@ -12,21 +12,21 @@ This project uses [Poetry](https://python-poetry.org/) for dependency management
     cd srf
     ```
 
-2.  **[Optional] If tools directory is missing or needs updating:**
-    The tools directory should be included when you clone the repository. However, if you need to add or update it manually:
+2.  **[Optional] If ml-toolkit directory is missing or needs updating:**
+    The ml-toolkit directory should be included when you clone the repository. However, if you need to add or update it manually:
     ```bash
-    # To add the tools subtree if missing:
-    git subtree add --prefix=srf/tools https://github.com/florianmahner/ml-toolkit.git main --squash
+    # To add the ml-toolkit subtree if missing:
+    git subtree add --prefix=srf/ml-toolkit https://github.com/florianmahner/ml-toolkit.git main --squash
 
-    # To update the tools subtree later:
-    git subtree pull --prefix=srf/tools https://github.com/florianmahner/ml-toolkit.git main --squash
+    # To update the ml-toolkit subtree later:
+    git subtree pull --prefix=srf/ml-toolkit https://github.com/florianmahner/ml-toolkit.git main --squash
     ```
 
 3.  **Install Poetry:**
     Follow the instructions on the [official Poetry website](https://python-poetry.org/docs/#installation) if you don't have it installed.
 
 4.  **Install dependencies:**
-    This command installs the main project dependencies and the tools package:
+    This command installs the main project dependencies and the ml-toolkit package:
     ```bash
     poetry install
     ```
@@ -34,7 +34,7 @@ This project uses [Poetry](https://python-poetry.org/) for dependency management
 ### Project Structure
 
 - `srf/`: Main project code
-- `srf/tools/`: ML toolkit (included as a git subtree) providing utilities for data handling, feature extraction, and analysis
+- `srf/ml-toolkit/`: Machine Learning toolkit (included as a git subtree) providing utilities for data handling, feature extraction, and analysis
 
 ### TODOs and Open Questions
 
