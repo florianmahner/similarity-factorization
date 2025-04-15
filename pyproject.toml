@@ -4,7 +4,7 @@ version = "0.0.1"
 description = "Similarity-based Representation Factorization (SRF) tools for modeling representations in minds, brains, and machines."
 authors = ["florianmahner <florian.mahner@icloud.com>"]
 readme = "README.md"
-packages = [{include = "srf"}, {include = "ml-toolkit", from = "srf"}]
+packages = [{include = "srf"}, {include = "tools", from = "srf/ml-toolkit"}]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.12"
