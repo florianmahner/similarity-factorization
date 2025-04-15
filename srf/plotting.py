@@ -40,6 +40,7 @@ def plot_simulation(x: Array, m: Array, f: Array, s: Array):
     axes[3].set_title("Correlation Matrix (s)", fontsize=10)
     plt.colorbar(im3, ax=axes[3], fraction=0.046, pad=0.04)
     plt.tight_layout()
+    plt.show()
     return fig
 
 
@@ -59,6 +60,7 @@ def plot_images_from_embedding(w, images, top_k=12, dpi=300):
                 img = img_path
             ax.imshow(img)
             ax.axis("off")
+    plt.show()
     return fig
 
 
@@ -70,4 +72,5 @@ def plot_tri_factors(model: TrifactorCD):
     ax[1].set_title("h")
     ax[2].hist(model.a_.flatten(), bins=50)
     ax[2].set_title("a")
+    plt.show()
     return fig
