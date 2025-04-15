@@ -5,6 +5,7 @@ from sklearn.utils.validation import check_random_state
 from tqdm import tqdm
 from .metrics import frobenius_norm
 from sklearn.utils.extmath import randomized_svd, squared_norm
+from typing import Any, Optional
 
 Array = np.ndarray
 
@@ -14,7 +15,10 @@ def norm(x: Array) -> Array:
 
 
 def nndsvd(
-    x: Array, rank: int, eps: float = np.finfo(float).eps, random_state: int = None
+    x: Array,
+    rank: int,
+    eps: float = np.finfo(float).eps,
+    random_state: Optional[int] = None,
 ) -> tuple[Array, Array]:
     """adapted from https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/decomposition/_nmf.py"""
 
@@ -65,15 +69,15 @@ def nndsvd(
 class BaseNMF(BaseEstimator, TransformerMixin, ABC):
     def __init__(
         self,
-        rank=10,
-        max_iter=1000,
-        tol=1e-5,
-        random_state=None,
-        init="random",
-        verbose=False,
-        eval_every=100,
-        eps=np.finfo(float).eps,
-    ):
+        rank: int = 10,
+        max_iter: int = 1000,
+        tol: float = 1e-5,
+        random_state: Optional[int] = None,
+        init: str = "random",
+        verbose: bool = False,
+        eval_every: int = 100,
+        eps: float = np.finfo(float).eps,
+    ) -> None:
         self.rank = rank
         self.max_iter = max_iter
         self.tol = tol
@@ -84,10 +88,9 @@ class BaseNMF(BaseEstimator, TransformerMixin, ABC):
         self.init = init
 
     @abstractmethod
-    def fit(self, X, y=None):
+    def fit(self, X: Array, y: Optional[Array] = None) -> "BaseNMF":
         """Fit the NMF model."""
         pass
-
 
     def init_factor(self, s: Array) -> Array:
         rng = check_random_state(self.random_state)
@@ -101,7 +104,9 @@ class BaseNMF(BaseEstimator, TransformerMixin, ABC):
         elif self.init == "nndsvdar":
             factor, _ = nndsvd(s, self.rank, self.eps, self.random_state)
             avg = s.mean()
-            factor[factor == 0] = abs(avg * rng.standard_normal(size=len(factor[factor == 0])) / 100)
+            factor[factor == 0] = abs(
+                avg * rng.standard_normal(size=len(factor[factor == 0])) / 100
+            )
         else:
             raise ValueError(f"Invalid initialization method: {self.init}")
 
@@ -110,7 +115,7 @@ class BaseNMF(BaseEstimator, TransformerMixin, ABC):
     def relative_error(self, x: Array, x_hat: Array) -> float:
         return frobenius_norm(x, x_hat) / (np.linalg.norm(x, ord="fro") + self.eps)
 
-    def init_progress_bar(self, total=None):
+    def init_progress_bar(self, total: Optional[int] = None) -> None:
         """Initialize a progress bar to track iterations."""
         if self.verbose:
             self.pbar = tqdm(
@@ -124,13 +129,13 @@ class BaseNMF(BaseEstimator, TransformerMixin, ABC):
 
     def print_progress(
         self,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         if self.verbose:
             self.pbar.set_postfix({k.capitalize(): v for k, v in kwargs.items()})
             self.pbar.update(1)
 
-    def close_progress_bar(self):
+    def close_progress_bar(self) -> None:
         if self.verbose:
             self.pbar.close()
 

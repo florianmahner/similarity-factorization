@@ -1,8 +1,10 @@
 import numpy as np
 from dataclasses import dataclass
+from numpy.random import Generator
 
+RNG = np.random.default_rng(0)
 
-RNG = np.random.default_rng(42)
+Array = np.ndarray
 
 
 @dataclass
@@ -23,7 +25,7 @@ class SimulationParams:
     base_concentration: float = 1.0
 
 
-def generate_hard_membership_loadings(n_samples, n_clusters):
+def generate_hard_membership_loadings(n_samples: int, n_clusters: int) -> np.ndarray:
     m = np.zeros((n_samples, n_clusters))
     start_idx = 0
     # Distribute n_samples as evenly as possible among n_clusters
@@ -42,12 +44,12 @@ def generate_hard_membership_loadings(n_samples, n_clusters):
 
 
 def generate_dirichlet_membership_loadings(
-    n_samples,
-    n_clusters,
-    primary_concentration=5.0,
-    base_concentration=1.0,
-    rng=RNG,
-):
+    n_samples: int,
+    n_clusters: int,
+    primary_concentration: float = 5.0,
+    base_concentration: float = 1.0,
+    rng: Generator = RNG,
+) -> np.ndarray:
     m = np.zeros((n_samples, n_clusters))
     cluster_sizes = [n_samples // n_clusters] * n_clusters
     leftover = n_samples - sum(cluster_sizes)
@@ -73,35 +75,41 @@ def generate_dirichlet_membership_loadings(
     return soft_m
 
 
-def generate_feature_matrix(p, k, rng=RNG):
+def generate_feature_matrix(p: int, k: int, rng: Generator = RNG) -> np.ndarray:
     f = rng.normal(size=(k, p))
     return f
 
 
-def add_noise_with_snr(x, snr, rng=None):
+def add_noise_with_snr(
+    x: np.ndarray, snr: float, rng: Generator | int | None = None
+) -> np.ndarray:
     if rng is None:
-        rng = np.random.default_rng()
+        rng_gen = np.random.default_rng()
     elif isinstance(rng, np.random.Generator):
-        rng = rng
+        rng_gen = rng
     else:
-        rng = np.random.default_rng(rng)
+        rng_gen = np.random.default_rng(rng)
     # Ensure snr is within [0, 1]
     snr = np.clip(snr + 1e-12, 1e-12, 1.0)
     # Compute the standard deviation of the signal X
     signal_std = np.std(x, ddof=1)
     # Generate noise with the same standard deviation as the signal
-    noise = rng.standard_normal(size=x.shape) * signal_std
+    noise = rng_gen.standard_normal(size=x.shape) * signal_std
     # Combine signal and noise using square-root mixing
     return np.sqrt(snr) * x + np.sqrt(1 - snr) * noise
 
 
-def generate_data_matrix(m, f, snr=0.1, rng=RNG):
+def generate_data_matrix(
+    m: Array, f: Array, snr: float = 0.1, rng: Generator = RNG
+) -> Array:
     """Generate noisy data matrix with a given SNR between 0 and 1."""
     x = m @ f  # Compute the clean signal
     return add_noise_with_snr(x, snr, rng)
 
 
-def generate_simulation_data(params):
+def generate_simulation_data(
+    params: SimulationParams,
+) -> tuple[Array, Array, Array]:
     rng = np.random.default_rng(params.rng_state)
     print(
         f"Generating membership matrix with {params.n} samples and {params.k} clusters"
@@ -116,4 +124,5 @@ def generate_simulation_data(params):
 
     f = generate_feature_matrix(params.p, params.k, rng)
     x = generate_data_matrix(m, f, params.snr, rng)
-    return x, m, f
+    s = np.corrcoef(x)
+    return x, m, f, s

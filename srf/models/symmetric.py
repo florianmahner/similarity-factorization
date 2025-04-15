@@ -1,9 +1,33 @@
 import numpy as np
 from .base import BaseNMF
-from .normal_eqs import regularized_normal_eqs
 from .metrics import sse, frobenius_norm
+from .nnls_block import nnlsm_blockpivot
 
 Array = np.ndarray
+
+
+def solve_stacked_normal_eqs(
+    s: Array, fixed: Array, alpha: float, update: Array
+) -> Array:
+    """
+    We stack the matrices and rearrange the normal equations.
+    see eq. 16 and 17 in Kuang et al. (2014)
+    """
+    sqrt_alpha = np.sqrt(alpha)
+    rank = fixed.shape[1]
+    # Build the stacked matrices:
+    # a_stack has A^T on top and sqrt(alpha)*fixed.T on the bottom.
+    a_stack = np.vstack([s.T, sqrt_alpha * fixed.T])
+    # c_stack has fixed on top and sqrt(alpha)*I on the bottom.
+    c_stack = np.vstack([fixed, sqrt_alpha * np.eye(rank)])
+
+    # solve for x (which approximates the updated factor's transpose) via NNLS.
+    # this basically solves the normal equations for the stacked matrices
+    left = c_stack.T @ c_stack
+    right = c_stack.T @ a_stack
+    x_t = nnlsm_blockpivot(left, right, True, update.T)[0]
+    # transpose back to get the updated factor.
+    return x_t.T
 
 
 def _compute_gradients(
@@ -56,7 +80,7 @@ def _normalize_factors_column(w: Array, h: Array) -> tuple[Array, Array]:
     return w, h
 
 
-class SymmetricANLS(BaseNMF):
+class SymmetricCD(BaseNMF):
     def __init__(
         self,
         rank: int,
@@ -66,9 +90,9 @@ class SymmetricANLS(BaseNMF):
         random_state: int | None = None,
         init: str = "random",
         verbose: bool = False,
-        eval_every=100,
-        eps=np.finfo(float).eps,
-    ):
+        eval_every: int = 100,
+        eps: float = np.finfo(float).eps,
+    ) -> None:
         super().__init__(
             rank, max_iter, tol, random_state, init, verbose, eval_every, eps
         )
@@ -77,10 +101,9 @@ class SymmetricANLS(BaseNMF):
     def fit(
         self,
         s: Array,
-    ):
+    ) -> "SymmetricCD":
         """
-        Implementation of the ANLS algorithm for Symmetric NMF by (Kuang et al., 2014)
-
+        Implementation of the coordinate descent algorithm for Symmetric NMF by (Kuang et al., 2014)
         """
         self.init_progress_bar(self.max_iter)
 
@@ -94,9 +117,8 @@ class SymmetricANLS(BaseNMF):
 
         for iter in range(1, self.max_iter + 1):
             # solve the non negative least squares problem for w with h fixed
-
-            w = regularized_normal_eqs(s, fixed=h, alpha=self.alpha, update=w)
-            h = regularized_normal_eqs(s, fixed=w, alpha=self.alpha, update=h)
+            w = solve_stacked_normal_eqs(s, fixed=h, alpha=self.alpha, update=w)
+            h = solve_stacked_normal_eqs(s, fixed=w, alpha=self.alpha, update=h)
 
             grad_w, grad_h = _compute_gradients(s, w, h, self.alpha)
 

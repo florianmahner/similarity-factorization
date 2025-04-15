@@ -1,2 +1,2 @@
-from .trifactor import TrifactorANLS
-from .anls import SymmetricANLS
+from .trifactor import TrifactorCD
+from .symmetric import SymmetricCD
