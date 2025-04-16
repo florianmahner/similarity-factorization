@@ -8,9 +8,10 @@ Array = np.ndarray
 
 # TODO Consider implementing ADMM for alternating minimization.
 # TODO Consider warming alpha every iteration eg alpha -> 1.01 alpha. In the limit W and H are then the same.
+# TODO Implement an augmented matrix for the normal equations.
 
 
-def update_a(s: Array, w: Array, h: Array) -> Array:
+def update_a(s: Array, w: Array, h: Array, epsilon: float = 1e-12) -> Array:
     """
     update rule for a given s, w, and h.
 
@@ -24,8 +25,11 @@ def update_a(s: Array, w: Array, h: Array) -> Array:
     we first solve (w.t @ w) * x = w.t @ s @ h for x (i.e., x = (w.t @ w)^{-1} w.t @ s @ h),
     then obtain a by right-multiplying x with (h.t @ h)^{-1}.
     """
-    wtw = w.T @ w  # (r, r)
-    hth = h.T @ h  # (r, r)
+    # compute gram matrices, adding a small regularization to avoid singularity
+    wtw = w.T @ w + epsilon * np.eye(w.shape[1])  # (r, r)
+    hth = h.T @ h + epsilon * np.eye(h.shape[1])  # (r, r)
+    wts = w.T @ s @ h  # (r, r)
+
     wts = w.T @ s @ h  # (r, r)
 
     # First, solve for the intermediate matrix X: (W.T @ W) * X = W.T @ S @ H
@@ -35,60 +39,70 @@ def update_a(s: Array, w: Array, h: Array) -> Array:
     return a
 
 
-def update_w(s: Array, w: Array, h: Array, a: Array, alpha: float) -> Array:
+def update_w(
+    s: np.ndarray, w: np.ndarray, h: np.ndarray, a: np.ndarray, alpha: float
+) -> np.ndarray:
     """
-    update rule for w (with fixed a and h).
+    Update step for W using stacked normal equations and NNLS.
 
-    we aim to minimize:
-         ||s - w a h.t||_f^2 + alpha * ||w - h||_f^2
-    with the constraint w >= 0.
-
-    by differentiating (and not ignoring the nonnegativity), we get the normal
-    eqn:
-         w * (a (h.t @ h) a.t + alpha * i) = s @ h @ a.t + alpha * h
-
-    let:
-         g_w = a (h.t @ h) a.t + alpha * i   (r x r)
-         f_w = s @ h @ a.t + alpha * h         (n x r)
-
-    so we have: w * g_w = f_w.
-
-    to solve this nnls problem, we rewrite it in the form:
-         g_w.t * x = f_w.t,
-    where x = w.t.
-
-    we then use nnlsm_blockpivot to solve for x (with x >= 0, which
-    enforces nonnegativity on w) and finally set w = x.t.
-
-    note: we pass g_w.t and f_w.t with is_input_prod=True since these matrices
-    are the precomputed products (like a^t a and a^t b) needed by the solver.
+    Solves: min_W ||S - WAH^T||_F^2 + alpha * ||W - H||_F^2
     """
-    r = w.shape[1]
-    g_w = a @ (h.T @ h) @ a.T + alpha * np.eye(r)
-    f_w = s @ h @ a.T + alpha * h
-
-    x, _ = nnlsm_blockpivot(g_w.T, f_w.T, is_input_prod=True)
-    return x.T
-
-
-def update_h(s: Array, w: Array, h: Array, a: Array, alpha: float) -> Array:
-    """
-    update rule for h (with fixed a and w).
-
-    we aim to minimize:
-         ||s - w a h.t||_f^2 + alpha * ||w - h||_f^2
-    with the constraint h >= 0.
-    normal eqn:
-        h * (a.t (w.t @ w) a + alpha * i) = s @ w @ a + alpha * w
-
-    and solve like before for w
-    """
+    sqrt_alpha = np.sqrt(alpha)
     r = h.shape[1]
 
-    g_h = a.T @ (w.T @ w) @ a + alpha * np.eye(r)
-    f_h = s @ w @ a + alpha * w
-    x, _ = nnlsm_blockpivot(g_h.T, f_h.T, is_input_prod=True)
-    return x.T
+    # Design matrix shape (n + r, r)
+    A_aug = np.vstack([h @ a.T, sqrt_alpha * np.eye(r)])  # (n, r)  # (r, r)
+
+    # Target matrix shape (n + r, n)
+    B_aug = np.vstack([s.T, sqrt_alpha * h.T])  # (n, n)  # (r, n)
+
+    # Normal equations
+    left = A_aug.T @ A_aug  # (r x r)
+    right = A_aug.T @ B_aug  # (r x n)
+
+    x_t = nnlsm_blockpivot(left, right, is_input_prod=True, init=w.T)[0]
+    return x_t.T
+
+
+def update_h(
+    s: np.ndarray, w: np.ndarray, h: np.ndarray, a: np.ndarray, alpha: float
+) -> np.ndarray:
+    """
+    Update step for H using stacked normal equations and NNLS.
+
+    Solves: min_H ||S - WAH^T||_F^2 + alpha * ||H - W||_F^2
+    """
+    sqrt_alpha = np.sqrt(alpha)
+    r = w.shape[1]
+
+    # Design matrix C and target A for stacked system
+    A_aug = np.vstack([w @ a, sqrt_alpha * np.eye(r)])  # (n, r)  # (r, r)
+
+    B_aug = np.vstack([s.T, sqrt_alpha * w.T])  # (n, n)  # (r, n)
+    # Normal equations
+    left = A_aug.T @ A_aug  # (r x r)
+    right = A_aug.T @ B_aug  # (r x n)
+
+    x_t = nnlsm_blockpivot(left, right, is_input_prod=True, init=h.T)[0]
+    return x_t.T
+
+
+def _normalize_factors_column(w: Array, h: Array) -> tuple[Array, Array]:
+    """
+    Column normalization: for matrices where both W and H are (n x r),
+    normalize each column by scaling them using the geometric mean of the
+    column norms.
+
+    This ensures that the product of the column norms is preserved.
+    """
+    norms_w = np.linalg.norm(w, axis=0)
+    norms_h = np.linalg.norm(h, axis=0)
+    norms = np.sqrt(norms_w * norms_h)
+    norms_w = np.where(norms_w == 0, 1, norms_w)
+    norms_h = np.where(norms_h == 0, 1, norms_h)
+    w = w * (norms / norms_w)
+    h = h * (norms / norms_h)
+    return w, h
 
 
 class TrifactorCD(BaseNMF):
@@ -149,7 +163,12 @@ class TrifactorCD(BaseNMF):
         for it in range(1, self.max_iter + 1):
             w = update_w(s, w, h, a, self.alpha)
             h = update_h(s, w, h, a, self.alpha)
+
             a = update_a(s, w, h)
+
+            w, h = _normalize_factors_column(w, h)
+            a = np.diag(np.linalg.norm(w, axis=0)) @ a
+
             self.make_symmetric_(a)
 
             # Compute the reconstruction error.
