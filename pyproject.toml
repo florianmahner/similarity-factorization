@@ -8,7 +8,7 @@ packages = [{include = "srf"}, {include = "tools", from = "srf/ml-toolkit"}]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.12"
-tomlparse = "1.1.1"
+tomlparse = "1.1.2"
 numpy = "^2.2.4"
 matplotlib = "^3.10.1"
 seaborn = "^0.13.2"
@@ -20,6 +20,9 @@ scikit-image = "^0.25.2"
 numba = "^0.61.2"
 nilearn = "^0.11.1"
 h5py = "^3.13.0"
+scipy = "^1.15.2"
+statsmodels = "^0.14.4"
+nimfa = "^1.4.0"
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.29.5"

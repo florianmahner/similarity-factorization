@@ -6,6 +6,7 @@ from tqdm import tqdm
 from .metrics import frobenius_norm
 from sklearn.utils.extmath import randomized_svd, squared_norm
 from typing import Any, Optional
+from dataclasses import dataclass
 
 Array = np.ndarray
 
@@ -66,26 +67,15 @@ def nndsvd(
     return w, h
 
 
+@dataclass(kw_only=True)
 class BaseNMF(BaseEstimator, TransformerMixin, ABC):
-    def __init__(
-        self,
-        rank: int = 10,
-        max_iter: int = 1000,
-        tol: float = 1e-5,
-        random_state: Optional[int] = None,
-        init: str = "random",
-        verbose: bool = False,
-        eval_every: int = 100,
-        eps: float = np.finfo(float).eps,
-    ) -> None:
-        self.rank = rank
-        self.max_iter = max_iter
-        self.tol = tol
-        self.random_state = random_state
-        self.verbose = verbose
-        self.eval_every = eval_every
-        self.eps = eps
-        self.init = init
+    rank: int = 10
+    max_iter: int = 1000
+    tol: float = 1e-5
+    random_state: Optional[int] = None
+    init: str = "random"
+    verbose: bool = False
+    eps: float = np.finfo(float).eps
 
     @abstractmethod
     def fit(self, X: Array, y: Optional[Array] = None) -> "BaseNMF":
@@ -95,7 +85,7 @@ class BaseNMF(BaseEstimator, TransformerMixin, ABC):
     def init_factor(self, s: Array) -> Array:
         rng = check_random_state(self.random_state)
         if self.init == "random":
-            factor = 0.01 * rng.rand(s.shape[0], self.rank)
+            factor = 0.001 * rng.rand(s.shape[0], self.rank)
         elif self.init == "random_sqrt":
             avg = np.sqrt(s.mean() / self.rank)
             factor = rng.rand(s.shape[0], self.rank) * avg

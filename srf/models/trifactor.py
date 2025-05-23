@@ -1,42 +1,139 @@
+from dataclasses import dataclass, field
 import numpy as np
-from .base import BaseNMF
-from .metrics import explained_variance
-from .nnls_block import nnlsm_blockpivot
-from typing import Any
+from scipy.linalg import cho_factor, cho_solve, eigh
+from srf.models.nnls_block import nnlsm_blockpivot
+from srf.models.base import BaseNMF
+from scipy.stats import pearsonr, spearmanr, kendalltau
 
 Array = np.ndarray
 
-# TODO Consider implementing ADMM for alternating minimization.
-# TODO Consider warming alpha every iteration eg alpha -> 1.01 alpha. In the limit W and H are then the same.
-# TODO Implement an augmented matrix for the normal equations.
 
-
-def update_a(s: Array, w: Array, h: Array, epsilon: float = 1e-12) -> Array:
+def rsa_score(
+    rsm_pred: np.ndarray, rsm_behav: np.ndarray, method: str = "spearman"
+) -> float:
     """
-    update rule for a given s, w, and h.
-
-    we have the optimality condition:
-         (w.t @ w) * a * (h.t @ h) = w.t @ s @ h.
-
-    the closed-form solution for a is:
-         a = (w.t @ w)^{-1} * (w.t @ s @ h) * (h.t @ h)^{-1}.
-
-    to compute a efficiently and stably without explicitly inverting large matrices,
-    we first solve (w.t @ w) * x = w.t @ s @ h for x (i.e., x = (w.t @ w)^{-1} w.t @ s @ h),
-    then obtain a by right-multiplying x with (h.t @ h)^{-1}.
+    Return correlation between the upper-triangle entries of two
+    representational similarity matrices (square, symmetric).
     """
-    # compute gram matrices, adding a small regularization to avoid singularity
-    wtw = w.T @ w + epsilon * np.eye(w.shape[1])  # (r, r)
-    hth = h.T @ h + epsilon * np.eye(h.shape[1])  # (r, r)
+    iu = np.triu_indices_from(rsm_pred, k=1)
+    x, y = rsm_pred[iu], rsm_behav[iu]
+
+    if method == "pearson":
+        return pearsonr(x, y)[0]
+    if method == "spearman":
+        return spearmanr(x, y, nan_policy="omit")[0]
+    if method == "kendall":
+        return kendalltau(x, y, variant="a").correlation
+    raise ValueError("method must be 'pearson', 'spearman', or 'kendall'")
+
+
+def update_a(s: Array, w: Array, h: Array, eps: float = 1e-12) -> Array:
+    wtw = w.T @ w + eps * np.eye(w.shape[1])  # (r, r)
+    hth = h.T @ h + eps * np.eye(h.shape[1])  # (r, r)
     wts = w.T @ s @ h  # (r, r)
 
-    wts = w.T @ s @ h  # (r, r)
-
-    # First, solve for the intermediate matrix X: (W.T @ W) * X = W.T @ S @ H
     x = np.linalg.solve(wtw, wts)
-    # Then, A = X * (H.T @ H)^{-1}
     a = x @ np.linalg.inv(hth)
     return a
+
+
+def update_a_cholesky(s: Array, w: Array, h: Array, eps: float = 1e-12) -> Array:
+    # 1) form the small r×r Gram‐matrices
+    wtw = w.T @ w + eps * np.eye(w.shape[1])
+    hth = h.T @ h + eps * np.eye(h.shape[1])
+    m = w.T @ s @ h
+
+    # 2) Cholesky‐factor both
+    c_w, lower_w = cho_factor(wtw, overwrite_a=False, check_finite=False)
+    c_h, lower_h = cho_factor(hth, overwrite_a=False, check_finite=False)
+
+    # 3) solve (WᵀW)·X = M  →  X = (WᵀW)^{-1} M
+    x = cho_solve((c_w, lower_w), m, overwrite_b=False, check_finite=False)
+
+    # 4) solve (HᵀH)·Aᵀ = Xᵀ  →  Aᵀ = (HᵀH)^{-1} Xᵀ  ⇒  A = (cho_solve on transposed)
+    a = cho_solve((c_h, lower_h), x.T, overwrite_b=False, check_finite=False).T
+
+    return a
+
+
+def update_a_near_identity(
+    S: np.ndarray,
+    W: np.ndarray,
+    H: np.ndarray,
+    mu: float = 1.0,  # “stay-close” weight
+    eps: float = 1e-12,
+) -> np.ndarray:
+    """
+    Exact solution of  (WᵀW) A (HᵀH) + μA = Wᵀ S H + μI .
+    Setting μ→0 reproduces the free update; large μ pins A≈I.
+    """
+    r = W.shape[1]
+
+    # Gram matrices -----------------------------------------------------------
+    K = W.T @ W + eps * np.eye(r)
+    L = H.T @ H + eps * np.eye(r)
+    M = W.T @ S @ H
+
+    # Eigendecompositions -----------------------------------------------------
+    d_k, U = np.linalg.eigh(K)  # K = U diag(d_k) Uᵀ
+    d_l, V = np.linalg.eigh(L)  # L = V diag(d_l) Vᵀ
+
+    # Transform RHS -----------------------------------------------------------
+    Mt = U.T @ M @ V  # Uᵀ M V
+    UtV = U.T @ V  #   Uᵀ I V  (dense!)
+
+    # Element-wise solve ------------------------------------------------------
+    denom = d_k[:, None] * d_l[None, :] + mu  # r×r
+    Y = (Mt + mu * UtV) / denom  # r×r
+
+    # Back-transform ----------------------------------------------------------
+    A = U @ Y @ V.T
+    return A
+
+
+def update_a_diag(
+    S: np.ndarray, W: np.ndarray, H: np.ndarray, eps: float = 1e-12
+) -> np.ndarray:
+    """
+    Exact least-squares update of **A = diag(d)** solving
+        (WᵀW)·diag(d)·(HᵀH) = Wᵀ S H
+    with small Tikhonov eps for numerical stability.
+    """
+    r = W.shape[1]
+    K = W.T @ W + eps * np.eye(r)  # SPD
+    L = H.T @ H + eps * np.eye(r)  # SPD
+    M = W.T @ S @ H  # off-line once
+
+    G = K * L.T  # Hadamard  (r×r)
+    rhs = np.diag(M)  # (r,)
+
+    # Solve (G) d = rhs   (SPD, size r×r)
+    c, lower = cho_factor(G, check_finite=False)
+    d = cho_solve((c, lower), rhs, check_finite=False)
+
+    return np.diag(d)
+
+
+def update_a_diag_ridge(
+    S: np.ndarray, W: np.ndarray, H: np.ndarray, lam: float = 1e-2, eps: float = 1e-12
+) -> np.ndarray:
+    """
+    Ridge-regularised variant solving
+        (WᵀW) diag(d) (HᵀH) + λ diag(d) = Wᵀ S H  .
+    """
+    r = W.shape[1]
+    K = W.T @ W + eps * np.eye(r)
+    L = H.T @ H + eps * np.eye(r)
+    M = W.T @ S @ H
+
+    G = K * L.T
+    G[np.diag_indices_from(G)] += lam  # ==> G + λI_r
+    rhs = np.diag(M)
+
+    c, lower = cho_factor(G, check_finite=False)
+    d = cho_solve((c, lower), rhs, check_finite=False)
+
+    return np.diag(d)
 
 
 def update_w(
@@ -77,7 +174,6 @@ def update_h(
 
     # Design matrix C and target A for stacked system
     A_aug = np.vstack([w @ a, sqrt_alpha * np.eye(r)])  # (n, r)  # (r, r)
-
     B_aug = np.vstack([s.T, sqrt_alpha * w.T])  # (n, n)  # (r, n)
     # Normal equations
     left = A_aug.T @ A_aug  # (r x r)
@@ -87,110 +183,113 @@ def update_h(
     return x_t.T
 
 
-def _normalize_factors_column(w: Array, h: Array) -> tuple[Array, Array]:
+def normalize_factors_(w: Array, h: Array, a: Array) -> tuple[Array, Array, Array]:
+    d = np.sqrt(np.clip(np.diag(a), 1e-12, None))
+    a /= d[:, None] * d[None, :]  #  (C-1)
+    w *= d[None, :]
+    h *= d[None, :]
+
+
+def update_a_identity(
+    s: np.ndarray, w: np.ndarray, h: np.ndarray, lam: float = 1.0, eps: float = 1e-12
+):
+    r = w.shape[1]
+    k = w.T @ w + eps * np.eye(r)
+    l = h.T @ h + eps * np.eye(r)
+    m = w.T @ s @ h
+    d_k, u = np.linalg.eigh(k)
+    d_l, v = np.linalg.eigh(l)
+    mt = u.T @ m @ v
+    utv = u.T @ v
+    denom = d_k[:, None] * d_l[None, :] + lam
+    y = (mt + lam * utv) / denom
+    return u @ y @ v.T
+
+
+def soft_threshold_a(A_raw: np.ndarray, lam: float) -> np.ndarray:
     """
-    Column normalization: for matrices where both W and H are (n x r),
-    normalize each column by scaling them using the geometric mean of the
-    column norms.
-
-    This ensures that the product of the column norms is preserved.
+    Soft-threshold the off-diagonals of (A_raw - I) at level lam.
+    Returns A_new = I + soft(A_raw - I, lam).
     """
-    norms_w = np.linalg.norm(w, axis=0)
-    norms_h = np.linalg.norm(h, axis=0)
-    norms = np.sqrt(norms_w * norms_h)
-    norms_w = np.where(norms_w == 0, 1, norms_w)
-    norms_h = np.where(norms_h == 0, 1, norms_h)
-    w = w * (norms / norms_w)
-    h = h * (norms / norms_h)
-    return w, h
+    r = A_raw.shape[0]
+    # Compute delta = A_raw - I
+    Delta = A_raw.copy()
+    np.fill_diagonal(Delta, 0)
+    Delta = Delta  # now Delta[i,i]=0
+
+    # Soft-threshold off-diagonals
+    # sign(x)*max(|x|-lam, 0)
+    Delta = np.sign(Delta) * np.maximum(np.abs(Delta) - lam, 0.0)
+
+    # Reassemble A_new
+    A_new = Delta
+    np.fill_diagonal(A_new, 1.0)
+    return A_new
 
 
-class TrifactorCD(BaseNMF):
-    """
-    Tri-factor coordinate descent of the form  min ||S - W A H.T||_F^2 + alpha * ||W - H||_F^2
-    """
+@dataclass(kw_only=True)
+class TriFactor(BaseNMF):
+    rank: int = 10
+    alpha: float = 1.0
+    init: str = "random_sqrt"
+    max_iter: int = 300
+    verbose: bool = False
+    random_state: int | None = None
+    lam: float = 0.01
+    update_a: bool = True
+    # runtime fields (initialised at fit)
+    w_: Array | None = field(init=False, default=None)
+    h_: Array | None = field(init=False, default=None)
+    a_: Array | None = field(init=False, default=None)
+    history: dict[str, list[float]] = field(init=False, default_factory=dict)
 
-    def __init__(
-        self,
-        rank: int,
-        alpha: float | None = None,
-        max_iter: int = 1000,
-        tol: float = 1e-5,
-        random_state: int | None = None,
-        init: str = "random_sqrt",
-        verbose: bool = False,
-        eval_every: int = 100,
-        eps: float = np.finfo(float).eps,
-        **kwargs: Any,
-    ) -> None:
-        super().__init__(
-            rank, max_iter, tol, random_state, init, verbose, eval_every, eps
-        )
-        self.alpha = alpha
+    def fit(self, s: Array) -> "TriFactor":
+        self.w_ = self.init_factor(s)
+        self.h_ = self.w_.copy()
+        self.a_ = np.eye(self.rank)
 
-    def make_symmetric_(self, a: Array) -> None:
-        a += a.T
-        a *= 0.5
+        self.history = {"obj": [], "rsa": []}
 
-    def init_mixing(self) -> Array:
-        """Initialize a symmetric mixing matrix with small random values"""
-        a = 0.01 * np.random.randn(self.rank, self.rank)
-        self.make_symmetric_(a)
-        return a
+        for it in range(self.max_iter):
 
-    def normalize_factors_(self, w: Array, h: Array, a: Array) -> None:
-        """normalization step to resolve scaling ambiguity:
-        compute the l2 norm of each column of w (or h)
-        # FIXME: this is not working right now. think about theory how to remove scaling ambiguity
-        """
-        norms = np.linalg.norm(w, axis=0) + 1e-10
-        # normalize the columns of w and h
-        w /= norms
-        h /= norms  # since the regularizer pushes w and h to be similar, they get the same normalization
-        a[:] = np.diag(norms) @ a
+            self.w_ = update_w(s, self.w_, self.h_, self.a_, self.alpha)
+            self.h_ = update_h(s, self.w_, self.h_, self.a_, self.alpha)
 
-    def fit(self, s: Array) -> "TrifactorCD":
-        if self.alpha is None:
-            self.alpha = np.max(s) ** 2
+            if self.update_a:
+                # NOTE replaced this
+                self.a_ = update_a_cholesky(s, self.w_, self.h_, self.eps)
+                # self.a_ = update_a_diag_ridge(s, self.w_, self.h_, self.lam, self.eps)
+                # self.a_ = update_a_diag(s, self.w_, self.h_, self.eps)
 
-        w = self.init_factor(s)
-        h = w.copy()
-        a = self.init_mixing()
+                # self.a_ = update_a_identity(s, self.w_, self.h_, self.lam, self.eps)
+                # self.a_ = update_a(s, self.w_, self.h_, self.eps)
 
-        if self.alpha is None:
-            self.alpha = np.max(s) ** 2
+                # # 2) Choose lam by percentile heuristic:
+                # offdiag = np.abs(self.a_ - np.eye(self.rank))[
+                #     ~np.eye(self.rank, dtype=bool)
+                # ]
+                # lam = np.percentile(offdiag, 90)  # keep top 10% of interactions
 
-        for it in range(1, self.max_iter + 1):
-            w = update_w(s, w, h, a, self.alpha)
-            h = update_h(s, w, h, a, self.alpha)
+                # # 3) Apply soft‐threshold:
+                # self.a_ = soft_threshold_a(self.a_, lam)
 
-            a = update_a(s, w, h)
+            self.s_hat_ = self.w_ @ self.a_ @ self.h_.T
+            rec_error = np.linalg.norm(s - self.s_hat_, "fro") ** 2
+            penalty = self.alpha * np.linalg.norm(self.w_ - self.h_, "fro") ** 2
+            l1_offdiag = self.lam * np.sum(np.abs(self.a_ - np.eye(self.rank)))
+            obj = rec_error + penalty + l1_offdiag
+            self.history["obj"].append(obj)
+            self.history["rsa"].append(rsa_score(self.s_hat_, s))
 
-            w, h = _normalize_factors_column(w, h)
-            a = np.diag(np.linalg.norm(w, axis=0)) @ a
+            # TODO make this dependent on freeze a and more elegant
+            normalize_factors_(self.w_, self.h_, self.a_)
 
-            self.make_symmetric_(a)
-
-            # Compute the reconstruction error.
-            s_hat = w @ a @ h.T
-            obj = np.linalg.norm(s - s_hat, "fro") ** 2
+            if not self.update_a:
+                self.a_ = np.eye(self.rank)
 
             if self.verbose:
-                explained_var = explained_variance(s, s_hat)
-                print(
-                    f"Iteration {it}, objective: {obj:.3f}, explained variance: {explained_var:.3f}",
-                    end="\r",
-                )
-            if obj < self.tol:
-                if self.verbose:
-                    print(f"Converged at iteration {it} with objective {obj:.4e}")
-                break
+                print(f"Iter {it:4d}/{self.max_iter:4d}  Obj={obj:.2f}", end="\r")
 
-        self.w_ = w
-        self.h_ = h
-        self.a_ = a
-        self.s_hat_ = s_hat
-        self.iter_ = it
         return self
 
     def fit_transform(self, s: Array) -> Array:

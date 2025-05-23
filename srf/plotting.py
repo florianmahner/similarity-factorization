@@ -1,5 +1,4 @@
 import matplotlib.pyplot as plt
-from .models.trifactor import TrifactorCD
 import skimage.io as sio
 import numpy as np
 
@@ -64,7 +63,7 @@ def plot_images_from_embedding(w, images, top_k=12, dpi=300):
     return fig
 
 
-def plot_tri_factors(model: TrifactorCD):
+def plot_tri_factors(model):
     fig, ax = plt.subplots(1, 3, figsize=(12, 3))
     ax[0].hist(model.w_.flatten(), bins=50)
     ax[0].set_title("w")

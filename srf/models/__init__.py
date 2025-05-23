@@ -1,2 +1,2 @@
-from .trifactor import TrifactorCD
-from .symmetric import SymmetricCD
+from .trifactor import TriFactor
+from .symmetric import Symmetric

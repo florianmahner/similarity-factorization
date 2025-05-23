@@ -1,6 +1,8 @@
 import numpy as np
 from dataclasses import dataclass
 from numpy.random import Generator
+from srf.helpers import add_noise_with_snr
+from tools.metrics import cosine_similarity
 
 RNG = np.random.default_rng(0)
 
@@ -80,25 +82,6 @@ def generate_feature_matrix(p: int, k: int, rng: Generator = RNG) -> np.ndarray:
     return f
 
 
-def add_noise_with_snr(
-    x: np.ndarray, snr: float, rng: Generator | int | None = None
-) -> np.ndarray:
-    if rng is None:
-        rng_gen = np.random.default_rng()
-    elif isinstance(rng, np.random.Generator):
-        rng_gen = rng
-    else:
-        rng_gen = np.random.default_rng(rng)
-    # Ensure snr is within [0, 1]
-    snr = np.clip(snr + 1e-12, 1e-12, 1.0)
-    # Compute the standard deviation of the signal X
-    signal_std = np.std(x, ddof=1)
-    # Generate noise with the same standard deviation as the signal
-    noise = rng_gen.standard_normal(size=x.shape) * signal_std
-    # Combine signal and noise using square-root mixing
-    return np.sqrt(snr) * x + np.sqrt(1 - snr) * noise
-
-
 def generate_data_matrix(
     m: Array, f: Array, snr: float = 0.1, rng: Generator = RNG
 ) -> Array:
@@ -124,5 +107,9 @@ def generate_simulation_data(
 
     f = generate_feature_matrix(params.p, params.k, rng)
     x = generate_data_matrix(m, f, params.snr, rng)
-    s = np.corrcoef(x)
+    # NOTE replaced with cosine
+    # s = np.corrcoef(x)
+    # s = cosine_similarity(x, x)
+    s = x @ x.T
+    s = s / s.max()
     return x, m, f, s

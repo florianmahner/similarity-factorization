@@ -2,6 +2,8 @@ import numpy as np
 from .base import BaseNMF
 from .metrics import sse, frobenius_norm
 from .nnls_block import nnlsm_blockpivot
+from dataclasses import dataclass
+from collections import defaultdict
 
 Array = np.ndarray
 
@@ -80,30 +82,23 @@ def _normalize_factors_column(w: Array, h: Array) -> tuple[Array, Array]:
     return w, h
 
 
-class SymmetricCD(BaseNMF):
-    def __init__(
-        self,
-        rank: int,
-        alpha: float | None = None,
-        max_iter: int = 1000,
-        tol: float = 1e-5,
-        random_state: int | None = None,
-        init: str = "random",
-        verbose: bool = False,
-        eval_every: int = 100,
-        eps: float = np.finfo(float).eps,
-    ) -> None:
-        super().__init__(
-            rank, max_iter, tol, random_state, init, verbose, eval_every, eps
-        )
-        self.alpha = alpha
+@dataclass(kw_only=True)
+class Symmetric(BaseNMF):
+    alpha: float | None = None
+    max_iter: int = 1000
+    tol: float = 1e-5
+    random_state: int | None = None
+    init: str = "random"
+    verbose: bool = False
+    eval_every: int = 100
+    eps: float = np.finfo(float).eps
 
     def fit(
         self,
         s: Array,
-    ) -> "SymmetricCD":
+    ) -> "Symmetric":
         """
-        Implementation of the coordinate descent algorithm for Symmetric NMF by (Kuang et al., 2014)
+        Implementation of NNLS for Symmetric NMF by (Kuang et al., 2014)
         """
         self.init_progress_bar(self.max_iter)
 
@@ -114,6 +109,7 @@ class SymmetricCD(BaseNMF):
         h = w.copy()
 
         initgrad = None
+        self.history = defaultdict(list)
 
         for iter in range(1, self.max_iter + 1):
             # solve the non negative least squares problem for w with h fixed
@@ -129,6 +125,10 @@ class SymmetricCD(BaseNMF):
                 projnorm = _projected_grad_norm(grad_w, w, grad_h, h)
 
             obj = frobenius_norm(s, w @ h.T)
+
+            self.history["rec_error"].append(obj)
+            self.history["diff"].append(projnorm / initgrad)
+
             if projnorm < self.tol * initgrad and self.tol > 0:
                 break
             else:
