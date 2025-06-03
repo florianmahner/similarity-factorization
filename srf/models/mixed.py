@@ -5,6 +5,7 @@ from .nnls_block import nnlsm_blockpivot
 from .metrics import frobenius_norm
 from collections import defaultdict
 from scipy.optimize import lsq_linear
+from ..helpers import median_matrix_split, evar, reconstruct_matrix
 
 Array = np.ndarray
 
@@ -208,6 +209,155 @@ class SymmetricMixed(BaseNMF):
         self.s_hat_ = s_hat
         self.objective_ = error
         self.iter_ = it
+
+        self.close_progress_bar()
+        return self
+
+    def fit_transform(self, x: Array) -> Array:
+        """Fit the model and return the combined factor W = W⁺ - W⁻."""
+        self.fit(x)
+        # Ensure factors are computed before returning
+        if self.w_pos_ is None or self.w_neg_ is None:
+            raise RuntimeError("Fit method must be called before fit_transform.")
+        return self.w_pos_ - self.w_neg_
+
+    # Added property for consistency with TriFactor attribute access, though not strictly necessary
+    @property
+    def w_(self) -> Array | None:
+        """Return the combined factor W = W⁺ - W⁻."""
+        if self.w_pos_ is None or self.w_neg_ is None:
+            return None
+        return self.w_pos_ - self.w_neg_
+
+
+def solve_stacked_normal_eqs(
+    s: Array, fixed: Array, alpha: float, update: Array
+) -> Array:
+    """
+    We stack the matrices and rearrange the normal equations.
+    see eq. 16 and 17 in Kuang et al. (2014)
+    """
+    sqrt_alpha = np.sqrt(alpha)
+    rank = fixed.shape[1]
+    # Build the stacked matrices:
+    # a_stack has A^T on top and sqrt(alpha)*fixed.T on the bottom.
+    a_stack = np.vstack([s.T, sqrt_alpha * fixed.T])
+    # c_stack has fixed on top and sqrt(alpha)*I on the bottom.
+    c_stack = np.vstack([fixed, sqrt_alpha * np.eye(rank)])
+
+    # solve for x (which approximates the updated factor's transpose) via NNLS.
+    # this basically solves the normal equations for the stacked matrices
+    left = c_stack.T @ c_stack
+    right = c_stack.T @ a_stack
+    x_t = nnlsm_blockpivot(left, right, True, update.T)[0]
+    # transpose back to get the updated factor.
+    return x_t.T
+
+
+@dataclass(kw_only=True)
+class SymmetricMixedResFree(BaseNMF):
+
+    # Parameters (with defaults)
+    rank: int = 10
+    alpha: float | None = None  # Default set in fit if None
+    init: str = "random_sqrt"
+    max_iter: int = 300
+    tol: float = 1e-6
+    verbose: bool = False
+    random_state: int | None = None
+    normalize_factors: bool = False  # Geometric mean normalization per iteration
+
+    # Runtime fields (initialized in fit)
+    w_pos_: Array | None = field(init=False, default=None)
+    h_pos_: Array | None = field(init=False, default=None)
+    w_neg_: Array | None = field(init=False, default=None)
+    h_neg_: Array | None = field(init=False, default=None)
+    x_hat_: Array | None = field(init=False, default=None)
+    objective_: float | None = field(init=False, default=None)
+    iter_: int | None = field(init=False, default=None)
+    projection_step: bool = True  # project onto feasible set insteaf of bounded NNLS
+    history: dict[str, list[float]] = field(
+        init=False, default_factory=dict
+    )  # Added history like TriFactor
+
+    def fit(self, s: Array) -> "SymmetricMixed":
+        self.init_progress_bar(self.max_iter)  # Keep progress bar for now
+
+        alpha = self.alpha if self.alpha is not None else np.max(s) ** 2
+
+        # Initialize factors. W, H are (n x r) for an (n x n) matrix X
+        w_pos = self.init_factor(s)
+        h_pos = w_pos.copy()
+        w_neg = self.init_factor(s)
+        h_neg = w_neg.copy()
+
+        s_hat = w_pos @ h_pos.T - w_neg @ h_neg.T
+        error_init = frobenius_norm(s, s_hat)
+        previous_error = error_init
+
+        self.history = defaultdict(list)
+
+        s_plus, s_minus, thresh = median_matrix_split(s)
+
+        # TODO recerror not correctly defined.
+
+        for it in range(1, self.max_iter + 1):
+
+            w_pos = solve_stacked_normal_eqs(
+                s_plus, fixed=h_pos, alpha=self.alpha, update=w_pos
+            )
+            h_pos = solve_stacked_normal_eqs(
+                s_plus, fixed=w_pos, alpha=self.alpha, update=h_pos
+            )
+
+            w_neg = solve_stacked_normal_eqs(
+                s_minus, fixed=h_neg, alpha=self.alpha, update=w_neg
+            )
+            h_neg = solve_stacked_normal_eqs(
+                s_minus, fixed=w_neg, alpha=self.alpha, update=h_neg
+            )
+
+            if self.normalize_factors:
+                w_pos, h_pos = _normalize_factors_column(w_pos, h_pos)
+                w_neg, h_neg = _normalize_factors_column(w_neg, h_neg)
+
+            s_hat = reconstruct_matrix(w_pos, h_pos, w_neg, h_neg, thresh)
+            s_minus_hat = w_neg @ h_neg.T
+            s_plus_hat = w_pos @ h_pos.T
+            error = frobenius_norm(s, s_hat)
+            diff = (previous_error - error) / error_init if error_init > 0 else 0.0
+
+            self.history["rec_error"].append(error)
+            self.history["diff"].append(diff)
+            self.history["neg_mass"].append(np.linalg.norm(w_neg + h_neg, "fro"))
+            self.history["pos_mass"].append(np.linalg.norm(w_pos + h_pos, "fro"))
+            self.history["s_plus_evar"].append(evar(s_plus, s_plus_hat))
+            self.history["s_minus_evar"].append(evar(s_minus, s_minus_hat))
+
+            if self.verbose:
+
+                print(
+                    f"Iter {it:4d}/{self.max_iter:4d}: RecErr={error:.4f}",
+                    end="\r",
+                )
+                # Could replace print with self.update_progress_bar if preferred
+
+            if diff < self.tol and self.tol > 0:
+                if self.verbose:
+                    print()  # Newline after final status
+                break
+            previous_error = error
+
+        # Save final factors and related metrics.
+        self.w_pos_ = w_pos
+        self.h_pos_ = h_pos
+        self.w_neg_ = w_neg
+        self.h_neg_ = h_neg
+        self.s_hat_ = s_hat
+        self.objective_ = error
+        self.iter_ = it
+        self.s_plus_ = s_plus
+        self.s_minus_ = s_minus
 
         self.close_progress_bar()
         return self
