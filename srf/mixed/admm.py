@@ -52,6 +52,7 @@ class ADMM:
             w = update_w(T, w, max_iter=self.w_inner, tol=self.tol)
             lam = update_lambda(lam, v, w, self.rho)
 
+            # TODO make a composite check also with the dual objective. this is not sufficient!
             if np.linalg.norm(v - w @ w.T, "fro") < self.tol:
                 break
             if self.verbose:
@@ -147,21 +148,22 @@ def train_val_test_split(n, keep_ratio, train_ratio, rng):
 
 
 def train_val_split(n, train_ratio, rng):
-    train_mask = rng.random((n, n)) < train_ratio
-    train_mask = train_mask + train_mask.T
-    train_mask = train_mask > 0
+    mask_upper = rng.random((n, n)) < train_ratio
+    mask_upper = np.triu(mask_upper, 1)
+    train_mask = mask_upper + mask_upper.T
     val_mask = ~train_mask
+    np.fill_diagonal(train_mask, False)
+    np.fill_diagonal(val_mask, False)
     return train_mask, val_mask
 
 
-def admm(s, rank, keep_ratio=0.8, train_ratio=0.8, rng=None, bounds=None):
+def admm(s, rank, train_ratio=0.8, rng=None, bounds=None):
     if rng is None:
         rng = np.random.default_rng()
 
     # TODO Continue with the mask val!
     mask_train, mask_val = train_val_split(s.shape[0], train_ratio, rng)
 
-    breakpoint()
     w_est = admm_symnmf_masked(
         s,
         mask_train,
@@ -199,9 +201,7 @@ def _evaluate_rank(
     )
 
     w_est = model.fit_transform(s_full, mask_train, seed, bounds)
-
     s_pred = compute_similarity(w_est, w_est, similarity_measure)
-
     val_rmse = np.linalg.norm(mask_val * (s_full - s_pred), "fro") / np.sqrt(
         mask_val.sum()
     )
