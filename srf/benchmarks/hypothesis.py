@@ -151,7 +151,7 @@ if __name__ == "__main__":
 
     all_tasks = [(snr, rep) for snr in cfg.snr_list for rep in range(cfg.n_repeats)]
 
-    model = ADMM(rank=cfg.rank, max_outer=10, w_inner=20, tol=1e-6, verbose=False)
+    model = ADMM(rank=cfg.rank, max_outer=50, w_inner=20, tol=1e-6, verbose=False)
 
     # test = process_single_run(
     #     model, data, hypotheses, snr=0.5, repeat=0, n_permutations=cfg.n_permutations

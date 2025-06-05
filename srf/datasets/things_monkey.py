@@ -2,6 +2,7 @@ import numpy as np
 import joblib
 from .registry import register_dataset
 from .base import BaseDataset, BaseDatasetLoader
+from tools.rsa import compute_similarity
 
 
 @register_dataset("things-monkey-22k")
@@ -46,9 +47,11 @@ class ThingsMonkey2k(BaseDatasetLoader):
             "/LOCAL/fmahner/monkey-dimensions/data/monkey/2k/f/index_to_image.txt",
             dtype=str,
         )
+        rsm = compute_similarity(x_it, x_it, "pearson")
 
         return BaseDataset(
             name="things-monkey-2k",
             it=x_it,
             filenames=filenames,
+            rsm=rsm,
         )

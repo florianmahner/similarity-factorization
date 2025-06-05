@@ -15,6 +15,33 @@ def norm(x: Array) -> Array:
     return np.sqrt(squared_norm(x))
 
 
+def init_factor(
+    s: Array,
+    rank: int,
+    init: str,
+    random_state: Optional[int] = None,
+    eps: float = np.finfo(float).eps,
+) -> Array:
+    rng = check_random_state(random_state)
+    if init == "random":
+        factor = 0.001 * rng.rand(s.shape[0], rank)
+    elif init == "random_sqrt":
+        avg = np.sqrt(s.mean() / rank)
+        factor = rng.rand(s.shape[0], rank) * avg
+    elif init == "nndsvd":
+        factor, _ = nndsvd(s, rank, eps, random_state)
+    elif init == "nndsvdar":
+        factor, _ = nndsvd(s, rank, eps, random_state)
+        avg = s.mean()
+        factor[factor == 0] = abs(
+            avg * rng.standard_normal(size=len(factor[factor == 0])) / 100
+        )
+    else:
+        raise ValueError(f"Invalid initialization method: {init}")
+
+    return factor
+
+
 def nndsvd(
     x: Array,
     rank: int,
@@ -83,24 +110,7 @@ class BaseNMF(BaseEstimator, TransformerMixin, ABC):
         pass
 
     def init_factor(self, s: Array) -> Array:
-        rng = check_random_state(self.random_state)
-        if self.init == "random":
-            factor = 0.001 * rng.rand(s.shape[0], self.rank)
-        elif self.init == "random_sqrt":
-            avg = np.sqrt(s.mean() / self.rank)
-            factor = rng.rand(s.shape[0], self.rank) * avg
-        elif self.init == "nndsvd":
-            factor, _ = nndsvd(s, self.rank, self.eps, self.random_state)
-        elif self.init == "nndsvdar":
-            factor, _ = nndsvd(s, self.rank, self.eps, self.random_state)
-            avg = s.mean()
-            factor[factor == 0] = abs(
-                avg * rng.standard_normal(size=len(factor[factor == 0])) / 100
-            )
-        else:
-            raise ValueError(f"Invalid initialization method: {self.init}")
-
-        return factor
+        return init_factor(s, self.rank, self.init, self.random_state, self.eps)
 
     def relative_error(self, x: Array, x_hat: Array) -> float:
         return frobenius_norm(x, x_hat) / (np.linalg.norm(x, ord="fro") + self.eps)

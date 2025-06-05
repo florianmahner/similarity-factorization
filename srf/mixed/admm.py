@@ -1,13 +1,14 @@
 import pyximport
-
+import pandas as pd
 import numpy as np
 
 pyximport.install(language_level=3, setup_args={"include_dirs": np.get_include()})
 from srf.mixed.bsum_cython import update_w
 from srf.mixed.cd_updates import update_v, update_lambda
 from tools.rsa import compute_similarity
+from collections import defaultdict
 from joblib import Parallel, delayed
-
+from srf.models.base import init_factor
 
 # TODO rewrite loss only based on nan mask entries and then print this explained variance or so / also determine convergence.
 # TODO I probably need to do the correc train/val/test split so that we can then afterwards get a true estimate on the entire matrix?
@@ -25,6 +26,9 @@ class ADMM:
         w_inner=40,
         tol=1e-4,
         verbose=False,
+        init="random_sqrt",
+        random_state=None,
+        eps=np.finfo(float).eps,
     ):
         self.rank = rank
         self.rho = rho
@@ -32,6 +36,9 @@ class ADMM:
         self.w_inner = w_inner
         self.tol = tol
         self.verbose = verbose
+        self.init = init
+        self.random_state = random_state
+        self.eps = eps
 
     def fit(
         self,
@@ -40,11 +47,11 @@ class ADMM:
         seed=None,
         bounds=None,
     ):
-        rng = np.random.default_rng(seed)
-        n = s.shape[0]
-        w = 0.001 * rng.random((n, self.rank))  # TODO Make generic init!
+        w = init_factor(s, self.rank, self.init, self.random_state, self.eps)
         lam = np.zeros_like(s)
         min_val, max_val = bounds if bounds is not None else (None, None)
+
+        history = defaultdict(list)
 
         for i in range(1, self.max_outer + 1):
             v = update_v(mask, s, w, lam, self.rho, min_val, max_val)
@@ -52,25 +59,32 @@ class ADMM:
             w = update_w(T, w, max_iter=self.w_inner, tol=self.tol)
             lam = update_lambda(lam, v, w, self.rho)
 
-            # TODO make a composite check also with the dual objective. this is not sufficient!
+            # Compute all three terms of the objective
+            data_fit = np.linalg.norm(mask * (s - v), "fro") ** 2
+            penalty = (self.rho / 2) * np.linalg.norm(v - w @ w.T, "fro") ** 2
+            lagrangian = np.sum(lam * (v - w @ w.T))
+            total_obj = data_fit + penalty + lagrangian
+
+            evar = 1 - np.linalg.norm(mask * (s - w @ w.T), "fro") / np.linalg.norm(
+                s * mask, "fro"
+            )
+            history["evar"].append(evar)
+            history["data_fit"].append(data_fit)
+            history["penalty"].append(penalty)
+            history["lagrangian"].append(lagrangian)
+            history["total_objective"].append(total_obj)
+            history["rec_error"].append(np.linalg.norm((s - w @ w.T) * mask, "fro"))
+
             if np.linalg.norm(v - w @ w.T, "fro") < self.tol:
                 break
             if self.verbose:
-                frob = np.linalg.norm(
-                    (s - w @ w.T) * mask, "fro"
-                )  # Only compute error on masked entries
-                evar = 1 - (
-                    frob / np.linalg.norm(s * mask, "fro")
-                )  # Normalize by masked entries
                 print(
-                    f"Iteration {i} of {self.max_outer} completed, evar: {evar}, frob: {frob}",
+                    f"Iter {i}/{self.max_outer} | Obj: {total_obj:.6f} | Evar: {evar:.6f} | Recon: {data_fit:.6f} | Penalty: {penalty:.6f} | Lag: {lagrangian:.6f}",
                     end="\r",
                 )
 
         self.s_hat_ = mask * (w @ w.T)
-        self.history = {
-            "rec_error": np.linalg.norm((s - w @ w.T) * mask, "fro"),
-        }
+        self.history_ = history
         self.w_ = w
         return w
 
@@ -80,6 +94,11 @@ class ADMM:
 
         self.fit(s, mask, seed, bounds)
         return self.w_
+
+    def fit_w(self, s):
+        x0 = init_factor(s, self.rank, self.init, self.random_state, self.eps)
+        w = update_w(s, x0, max_iter=self.w_inner, tol=self.tol)
+        return w
 
 
 def admm_symnmf_masked(
@@ -232,25 +251,32 @@ def find_best_rank(
     bounds=None,
     similarity_measure: str = "cosine",
     mask=None,
+    n_repeats=1,
 ):
     if rng is None:
         rng = np.random.default_rng()
 
-    if mask is None:
-        mask_train, mask_val = train_val_split(s.shape[0], train_ratio, rng)
-    else:
-        mask_train, mask_val = second_order_mask(mask, train_ratio, rng)
+    tasks = []
+    for repeat in range(n_repeats):
+        if mask is None:
+            mask_train, mask_val = train_val_split(s.shape[0], train_ratio, rng)
+        else:
+            mask_train, mask_val = second_order_mask(mask, train_ratio, rng)
 
-    tasks = [
-        delayed(_evaluate_rank)(
-            rank, s, mask_train, mask_val, rng, bounds, similarity_measure
+        tasks.extend(
+            [
+                delayed(_evaluate_rank)(
+                    rank, s, mask_train, mask_val, rng, bounds, similarity_measure
+                )
+                for rank in candidate_ranks
+            ]
         )
-        for rank in candidate_ranks
-    ]
 
-    results_list = Parallel(n_jobs=-1, verbose=10)(tasks)
-    results = dict(results_list)
-    return results
+    results_list = Parallel(n_jobs=-1)(tasks)
+    results_df = pd.DataFrame(results_list, columns=["rank", "rmse"])
+    results_df["repeat"] = np.repeat(range(n_repeats), len(candidate_ranks))
+
+    return results_df
 
 
 def run_cv_experiment(

@@ -4,17 +4,14 @@
 import joblib
 import pandas as pd
 import numpy as np
-from sklearn.metrics import confusion_matrix, accuracy_score
+from sklearn.metrics import accuracy_score
 from sklearn.metrics.pairwise import pairwise_distances
-from scipy.optimize import linear_sum_assignment
 from tools.rsa import compute_rsm
-from tools.stats import standardize
-from sklearn.metrics.cluster import contingency_matrix
 from sklearn.cluster import KMeans
 from sklearn.decomposition import NMF
 from sklearn.cluster import SpectralClustering
 from srf.datasets import load_dataset
-from _trash.trifactor_sym import SingleFactorADMM
+from srf.mixed.admm import ADMM
 from srf.helpers import (
     map_labels_with_hungarian,
     purity_score,
@@ -136,14 +133,13 @@ def create_models(rank, seed):
     }
 
     register_model(
-        "SymNMF TriFactor",
-        SingleFactorADMM(
+        "SyNMF ADMM",
+        ADMM(
             rank=rank,
-            max_iter=MAX_ITER,
-            lam=1.0,
-            admm_iter=50,
+            max_outer=MAX_ITER,
+            w_inner=100,
+            tol=0.0,
             verbose=VERBOSE,
-            # random_state=seed,
         ),
         preprocessors=kernel_preprocessors,
     )
@@ -169,7 +165,7 @@ def create_models(rank, seed):
             random_state=seed,
             init="random",
             max_iter=MAX_ITER,
-            solver="mu",
+            solver="cd",
         ),
         preprocessors=data_preprocessors,
     )
