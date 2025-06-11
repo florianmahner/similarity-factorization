@@ -96,9 +96,13 @@ class ADMM:
         return self.w_
 
     def fit_w(self, s):
+        # TODO intergrate into the fit transform somehow!
         x0 = init_factor(s, self.rank, self.init, self.random_state, self.eps)
-        w = update_w(s, x0, max_iter=self.w_inner, tol=self.tol)
-        return w
+        self.w_ = update_w(s, x0, max_iter=self.w_inner, tol=self.tol)
+        self.s_hat_ = self.w_ @ self.w_.T
+        self.history_ = defaultdict(list)
+        self.history_["rec_error"] = np.linalg.norm(s - self.s_hat_, "fro")
+        return self.w_
 
 
 def admm_symnmf_masked(
@@ -207,16 +211,19 @@ def _evaluate_rank(
     similarity_measure: str = "linear",
 ):
 
-    bounds_min = s_full[mask_train].min()
-    bounds_max = s_full[mask_train].max()
-    bounds = (bounds_min, bounds_max)
+    # TODO is this correct??
+    # bounds_min = s_full[mask_train].min()
+    # bounds_max = s_full[mask_train].max()
+    # bounds = (bounds_min, bounds_max)
+    bounds = (None, None)
 
     model = ADMM(
         rank=rank,
         rho=1.0,
         max_outer=20,
-        w_inner=50,
-        tol=1e-8,
+        w_inner=30,
+        tol=0.0,
+        init="random",
     )
 
     w_est = model.fit_transform(s_full, mask_train, seed, bounds)

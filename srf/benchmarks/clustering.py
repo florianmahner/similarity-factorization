@@ -23,8 +23,8 @@ from pathlib import Path
 
 
 # Constants
-MAX_ITER = 1_000
-SEEDS = range(10)
+MAX_ITER = 1000
+SEEDS = range(100)
 VERBOSE = False
 
 # Model and Dataset Registries
@@ -135,9 +135,10 @@ def create_models(rank, seed):
     register_model(
         "SyNMF ADMM",
         ADMM(
+            init="random_sqrt",
             rank=rank,
-            max_outer=MAX_ITER,
-            w_inner=100,
+            max_outer=10,
+            w_inner=MAX_ITER,
             tol=0.0,
             verbose=VERBOSE,
         ),
@@ -166,6 +167,7 @@ def create_models(rank, seed):
             init="random",
             max_iter=MAX_ITER,
             solver="cd",
+            tol=0.0,
         ),
         preprocessors=data_preprocessors,
     )

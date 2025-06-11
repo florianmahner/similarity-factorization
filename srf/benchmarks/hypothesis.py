@@ -74,7 +74,7 @@ def process_single_run(
     noisy_data = add_noise_with_snr(data, snr, rng=seed)
 
     measured_similarity = compute_similarity(noisy_data, noisy_data, METRIC)
-    w = model.fit_transform(measured_similarity)
+    w = model.fit_w(measured_similarity)
     denoised_similarity = model.s_hat_
 
     rank = data.shape[1]
