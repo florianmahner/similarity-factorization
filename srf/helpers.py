@@ -4,10 +4,9 @@ from sklearn.metrics import confusion_matrix
 from sklearn.metrics.cluster import contingency_matrix
 from scipy.optimize import linear_sum_assignment
 from numpy.random import Generator
-
+from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
 from dataclasses import dataclass
-
-from tqdm import tgrange
+from tqdm import tqdm
 
 SPOSE_PATH = "/LOCAL/fmahner/srf/data/misc/spose_embedding_66d.txt"
 
@@ -177,6 +176,14 @@ def compute_entropy(y, y_hat):
         total_entropy += cluster_entropy * len(indices)
 
     return total_entropy / (len(y) * np.log2(len(unique_classes)))
+
+
+def compute_metrics(true_labels, predicted_labels):
+    ari = adjusted_rand_score(true_labels, predicted_labels)
+    nmi = normalized_mutual_info_score(true_labels, predicted_labels)
+    purity = purity_score(true_labels, predicted_labels)
+    entropy = compute_entropy(true_labels, predicted_labels)
+    return ari, nmi, purity, entropy
 
 
 def compute_sparseness(matrix):

@@ -94,9 +94,6 @@ def generate_simulation_data(
     params: SimulationParams,
 ) -> tuple[Array, Array, Array]:
     rng = np.random.default_rng(params.rng_state)
-    print(
-        f"Generating membership matrix with {params.n} samples and {params.k} clusters"
-    )
     m = generate_dirichlet_membership_loadings(
         params.n,
         params.k,
@@ -107,9 +104,5 @@ def generate_simulation_data(
 
     f = generate_feature_matrix(params.p, params.k, rng)
     x = generate_data_matrix(m, f, params.snr, rng)
-    # NOTE replaced with cosine
-    # s = np.corrcoef(x)
-    # s = cosine_similarity(x, x)
     s = x @ x.T
-    s = s / s.max()
     return x, m, f, s

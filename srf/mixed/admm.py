@@ -212,26 +212,27 @@ def _evaluate_rank(
 ):
 
     # TODO is this correct??
-    # bounds_min = s_full[mask_train].min()
-    # bounds_max = s_full[mask_train].max()
-    # bounds = (bounds_min, bounds_max)
-    bounds = (None, None)
+    bounds_min = s_full[mask_train].min()
+    bounds_max = s_full[mask_train].max()
+    bounds = (bounds_min, bounds_max)
 
     model = ADMM(
         rank=rank,
         rho=1.0,
-        max_outer=20,
-        w_inner=30,
+        max_outer=10,
+        w_inner=50,
         tol=0.0,
-        init="random",
+        init="random_sqrt",
     )
 
     w_est = model.fit_transform(s_full, mask_train, seed, bounds)
-    s_pred = compute_similarity(w_est, w_est, similarity_measure)
-    val_rmse = np.linalg.norm(mask_val * (s_full - s_pred), "fro") / np.sqrt(
-        mask_val.sum()
-    )
-    return rank, val_rmse
+    s_pred = compute_similarity(
+        w_est, w_est, similarity_measure
+    )  # NOTE this should be dot probably!!!
+
+    val_mse = np.sum(mask_val * (s_full - s_pred) ** 2) / np.sum(mask_val)
+
+    return rank, val_mse
 
 
 def second_order_mask(mask, keep_ratio, rng):

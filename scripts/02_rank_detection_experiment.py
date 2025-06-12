@@ -22,11 +22,15 @@ import argparse
 import time
 from pathlib import Path
 from sklearn.metrics.pairwise import cosine_similarity
+from tools.rsa import compute_similarity
 
 warnings.filterwarnings("ignore")
 
 # Import your SRF functions
 from srf.mixed.admm import _evaluate_rank, train_val_split
+
+
+METRIC = "linear"
 
 
 def simulate_rsm_data(n_objects, true_rank, snr=1.0, seed=None):
@@ -36,9 +40,8 @@ def simulate_rsm_data(n_objects, true_rank, snr=1.0, seed=None):
     # Generate ground truth embedding
     w_true = rng.random((n_objects, true_rank))
 
-    # Create RSM
-    # rsm = w_true @ w_true.T
-    rsm = cosine_similarity(w_true)
+    # TODO Check coherence here!
+    rsm = compute_similarity(w_true, w_true, METRIC)
 
     # Add noise
     if snr > 0:
@@ -52,45 +55,28 @@ def simulate_rsm_data(n_objects, true_rank, snr=1.0, seed=None):
 
 def evaluate_rank_for_trial(n_objects, train_ratio, true_rank, trial_id, seed, rank):
     """Evaluate a single rank for a single trial - this will be parallelized"""
-    try:
-        # Generate synthetic data
-        rng = np.random.default_rng(seed)
-        rsm, _ = simulate_rsm_data(n_objects, true_rank, snr=0.0, seed=seed)
 
-        # Create train/val split manually
-        mask_train, mask_val = train_val_split(rsm.shape[0], train_ratio, rng)
-        bounds = (None, None)
-        # Evaluate the rank
-        try:
-            _, rmse = _evaluate_rank(
-                rank, rsm, mask_train, mask_val, rng, bounds, "cosine"
-            )
-        except Exception as e:
-            rmse = np.inf
+    # Generate synthetic data
+    rng = np.random.default_rng(seed)
+    rsm, _ = simulate_rsm_data(n_objects, true_rank, snr=0.0, seed=seed)
 
-        return {
-            "n_objects": n_objects,
-            "train_ratio": train_ratio,
-            "trial_id": trial_id,
-            "rank": rank,
-            "true_rank": true_rank,
-            "rmse": rmse,
-            "seed": seed,
-        }
+    # Create train/val split manually
+    mask_train, mask_val = train_val_split(rsm.shape[0], train_ratio, rng)
+    # NOTE: I think no matter of the metric used to generate the RSM, I need to use a linear kernel here!!!
+    # Make this more explicit by not passing any metric here!
+    _, mse = _evaluate_rank(
+        rank, rsm, mask_train, mask_val, rng, (None, None), "linear"
+    )
 
-    except Exception as e:
-        print(
-            f"Evaluation failed: n={n_objects}, ratio={train_ratio:.3f}, trial={trial_id}, rank={rank}, error={e}"
-        )
-        return {
-            "n_objects": n_objects,
-            "train_ratio": train_ratio,
-            "trial_id": trial_id,
-            "rank": rank,
-            "true_rank": true_rank,
-            "rmse": np.inf,
-            "seed": seed,
-        }
+    return {
+        "n_objects": n_objects,
+        "train_ratio": train_ratio,
+        "trial_id": trial_id,
+        "rank": rank,
+        "true_rank": true_rank,
+        "mse": mse,
+        "seed": seed,
+    }
 
 
 def run_experiment(
@@ -109,46 +95,24 @@ def run_experiment(
     output_dir = Path(output_dir)
     output_dir.mkdir(exist_ok=True)
 
-    if verbose:
-        print("🔬 RANK DETECTION EXPERIMENT")
-        print("=" * 50)
-        print(f"Object counts: {n_objects_list}")
-        print(
-            f"Training ratios: {len(train_ratios)} values from {train_ratios.min():.2f} to {train_ratios.max():.2f}"
-        )
-        print(f"True ranks: {true_ranks}")
-        print(f"Trials per condition: {n_trials_per_condition}")
-        print(
-            f"Total conditions: {len(n_objects_list) * len(train_ratios) * len(true_ranks)}"
-        )
-        print(
-            f"Total trials: {len(n_objects_list) * len(train_ratios) * len(true_ranks) * n_trials_per_condition}"
-        )
-        print(f"Parallel jobs: {n_jobs if n_jobs > 0 else 'all cores'}")
-        print(f"Output directory: {output_dir}")
-        print()
-
     # Create ALL individual rank evaluations for FULL parallelization
     all_evaluations = []
     seed_counter = 0
+
+    # TODO Maybe also check rho range in the analysis!
 
     for true_rank in true_ranks:
         for n_obj in n_objects_list:
             for ratio in train_ratios:
                 for trial_id in range(n_trials_per_condition):
-                    # For each trial, evaluate all candidate ranks
-                    candidate_ranks = range(max(1, true_rank - 2), true_rank + 2)
+
+                    candidate_ranks = range(max(1, true_rank - 2), true_rank + 3)
+
                     for rank in candidate_ranks:
                         all_evaluations.append(
                             (n_obj, ratio, true_rank, trial_id, seed_counter, rank)
                         )
                     seed_counter += 1
-
-    if verbose:
-        print(
-            f"🚀 Running {len(all_evaluations)} individual rank evaluations in parallel..."
-        )
-        print()
 
     # Record start time
     start_time = time.time()
@@ -168,12 +132,40 @@ def run_experiment(
     # Convert to DataFrame
     eval_df = pd.DataFrame(evaluation_results)
 
-    # Find best rank for each trial
+    # Save the full evaluation results (all ranks tested)
+    results_output_file = output_dir / "rank_detection_full_results.csv"
+    eval_df.to_csv(results_output_file, index=False)
+
+    if verbose:
+        print("Experiment completed!")
+        print(f"Runtime: {runtime_minutes:.1f} minutes")
+        print(f"Total evaluations: {len(eval_df)}")
+
+        # Show some summary stats
+        n_trials = len(
+            eval_df.groupby(["true_rank", "n_objects", "train_ratio", "trial_id"])
+        )
+        n_conditions = len(eval_df.groupby(["true_rank", "n_objects", "train_ratio"]))
+
+        print(f"Number of trials: {n_trials}")
+        print(f"Number of conditions: {n_conditions}")
+        print(f"Average ranks tested per trial: {len(eval_df) / n_trials:.1f}")
+        print()
+        print("Sample of results:")
+        print(eval_df.head(10))
+        print()
+        print(f"Results saved to: {results_output_file}")
+
+    return eval_df
+
+
+def find_best_ranks(eval_df):
+    """Find the best rank for each trial from full evaluation data"""
     trial_results = []
     for (true_rank, n_obj, ratio, trial_id), group in eval_df.groupby(
         ["true_rank", "n_objects", "train_ratio", "trial_id"]
     ):
-        best_rank = group.loc[group["rmse"].idxmin()]
+        best_rank = group.loc[group["mse"].idxmin()]
         trial_results.append(
             {
                 "n_objects": n_obj,
@@ -183,29 +175,23 @@ def run_experiment(
                 "true_rank": true_rank,
                 "success": 1 if best_rank["rank"] == true_rank else 0,
                 "seed": best_rank["seed"],
-                "best_rmse": best_rank["rmse"],
+                "best_mse": best_rank["mse"],
                 "n_candidate_ranks": len(group),
             }
         )
+    return pd.DataFrame(trial_results)
 
-    # Convert to DataFrame
-    trial_df = pd.DataFrame(trial_results)
 
-    # Add experiment metadata
-    trial_df["experiment_timestamp"] = pd.Timestamp.now()
-    trial_df["runtime_minutes"] = runtime_minutes
+def create_summary_stats(eval_df):
+    """Create summary statistics from full evaluation results"""
+    trial_df = find_best_ranks(eval_df)
 
-    # Save individual trial results
-    trial_output_file = output_dir / "rank_detection_trial_results.csv"
-    trial_df.to_csv(trial_output_file, index=False)
-
-    # Aggregate to get accuracy per condition (now including true_rank)
     summary_df = (
         trial_df.groupby(["true_rank", "n_objects", "train_ratio"])
         .agg(
             {
                 "success": ["mean", "std", "count"],
-                "best_rmse": ["mean", "std"],
+                "best_mse": ["mean", "std"],
                 "detected_rank": lambda x: (
                     x.mode().iloc[0] if len(x.mode()) > 0 else -1
                 ),
@@ -222,12 +208,12 @@ def run_experiment(
         "accuracy_mean",
         "accuracy_std",
         "n_trials_completed",
-        "rmse_mean",
-        "rmse_std",
+        "mse_mean",
+        "mse_std",
         "most_common_detected_rank",
     ]
 
-    # Add confidence intervals (assuming normal distribution)
+    # Add confidence intervals
     summary_df["accuracy_ci_lower"] = summary_df["accuracy_mean"] - 1.96 * summary_df[
         "accuracy_std"
     ] / np.sqrt(summary_df["n_trials_completed"])
@@ -235,32 +221,7 @@ def run_experiment(
         "accuracy_std"
     ] / np.sqrt(summary_df["n_trials_completed"])
 
-    # Save summary results
-    summary_output_file = output_dir / "rank_detection_summary.csv"
-    summary_df.to_csv(summary_output_file, index=False)
-
-    if verbose:
-        print("Experiment completed!")
-        print(f"Runtime: {runtime_minutes:.1f} minutes")
-        print(f"Individual trials: {len(trial_df)}")
-        print(f"Rank not detected: {len(trial_df[trial_df['success'] == 0])}")
-        print(f"Overall success rate: {trial_df['success'].mean():.1%}")
-        print()
-        print("Success rate by true rank:")
-        for true_rank in true_ranks:
-            subset = trial_df[trial_df["true_rank"] == true_rank]
-            print(
-                f"  Rank {true_rank}: {subset['success'].mean():.1%} ({len(subset)} trials)"
-            )
-        print()
-        print("Output files:")
-        print(f"  - Individual trials: {trial_output_file}")
-        print(f"  - Summary statistics: {summary_output_file}")
-        print()
-        print("Sample results:")
-        print(summary_df.head())
-
-    return trial_df, summary_df
+    return summary_df
 
 
 def main():
@@ -270,7 +231,7 @@ def main():
         "--objects",
         nargs="+",
         type=int,
-        default=[100, 200, 500, 1000, 2000],
+        default=np.logspace(2, 3, 10).astype(int),
         help="List of object counts to test",
     )
     parser.add_argument(
@@ -281,7 +242,7 @@ def main():
         help="True ranks for synthetic data",
     )
     parser.add_argument(
-        "--trials", type=int, default=5, help="Number of trials per condition"
+        "--trials", type=int, default=20, help="Number of trials per condition"
     )
     parser.add_argument(
         "--jobs",
@@ -296,10 +257,7 @@ def main():
 
     args = parser.parse_args()
 
-    # train_ratios = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8])
-    # train_ratios = np.linspace(0.1, 0.8, 5)
-    # train_ratios = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8])
-    train_ratios = np.array([0.1, 0.2, 0.4, 0.6, 0.8])
+    train_ratios = np.arange(0.2, 0.9, 0.1).round(2)
 
     run_experiment(
         n_objects_list=args.objects,
