@@ -1,29 +1,78 @@
+"""
+Hypothesis testing benchmark for comparing RSA, NMF, and Latent space methods
+across different signal-to-noise ratios.
+"""
+
 import numpy as np
 import pandas as pd
-
-from srf.helpers import load_spose_embedding
-from srf.mixed.admm import ADMM
-from scipy.stats import pearsonr
+from pathlib import Path
 from joblib import Parallel, delayed
+from scipy.stats import pearsonr
 from statsmodels.stats.multitest import multipletests
 
-from pathlib import Path
-from srf.helpers import add_noise_with_snr, align_latent_dimensions
+from srf.helpers import (
+    load_spose_embedding,
+    add_noise_with_snr,
+    align_latent_dimensions,
+)
+from srf.mixed.admm import ADMM
 from tools.metrics import compute_similarity
 
-METRIC = "linear"
+# PARAMETERS
+
+# Data parameters
+MAX_OBJECTS = 1854
+MAX_DIMS = 66
+SELECTED_DIMS = [3, 5, 8, 12, 14]  # Subsample of the SPOSE dimensions
+
+# Experiment parameters
+SNR_LIST = np.linspace(0, 0.3, 5)
+N_REPEATS = 100
+N_PERMUTATIONS = 500
+ALPHA = 0.05
+
+# Model parameters
+SIMILARITY_METRIC = "linear"
+ADMM_MAX_OUTER = 15
+ADMM_W_INNER = 10
+ADMM_TOLERANCE = 0.0
+
+# Processing parameters
+MAX_JOBS = 140
+
+# Output parameters
+OUTPUT_PATH = "/LOCAL/fmahner/srf/results/benchmarks/hypothesis_tests.csv"
+
+# STATISTICAL TESTS
 
 
 def mantel_test(A, B, permutations=10000, random_state=None, two_sided=False):
+    """
+    Mantel test for correlation between two distance/similarity matrices.
+
+    Args:
+        A, B: Square matrices to compare
+        permutations: Number of permutations for null distribution
+        random_state: Random seed for reproducibility
+        two_sided: Whether to use two-sided test
+
+    Returns:
+        p_value, null_distribution, observed_statistic
+    """
     if random_state is not None:
         np.random.seed(random_state)
 
+    # Extract upper triangular elements
     idx_upper = np.triu_indices_from(A, k=1)
     sim1 = A[idx_upper]
     sim2 = B[idx_upper]
+
+    # Observed correlation
     obs = pearsonr(sim1, sim2).statistic
     if two_sided:
         obs = abs(obs)
+
+    # Generate null distribution
     nulls = np.zeros(permutations)
     for i in range(permutations):
         perm = np.random.permutation(B.shape[0])
@@ -33,58 +82,88 @@ def mantel_test(A, B, permutations=10000, random_state=None, two_sided=False):
             sc = abs(sc)
         nulls[i] = sc
 
+    # Calculate p-value
     p = (np.sum(nulls >= obs) + 1) / (permutations + 1)
     return p, nulls, obs
 
 
 def permutation_test(A, B, permutations=10000, random_state=None, two_sided=False):
-    """Permutation test for the correlation between two vectors"""
+    """
+    Permutation test for correlation between two vectors.
+
+    Args:
+        A, B: Vectors to compare
+        permutations: Number of permutations for null distribution
+        random_state: Random seed for reproducibility
+        two_sided: Whether to use two-sided test
+
+    Returns:
+        p_value, null_distribution, observed_correlation
+    """
     if random_state is not None:
         np.random.seed(random_state)
 
+    # Observed correlation
     observed_corr = pearsonr(A, B).statistic
     if two_sided:
         observed_corr = np.abs(observed_corr)
 
+    # Generate null distribution
     greater = 0
     null_corrs = np.zeros(permutations)
     for i in range(permutations):
         perm = np.random.permutation(B)
-
-        # Permuted correlation of null distribution
         perm_corr = pearsonr(A, perm).statistic
         if two_sided:
             perm_corr = np.abs(perm_corr)
 
         if perm_corr >= observed_corr:
             greater += 1
-
         null_corrs[i] = perm_corr
 
-    # Empirical p-value, make slight correction to avoid p=0
+    # Calculate p-value with correction to avoid p=0
     p_value = (greater + 1) / (permutations + 1)
-
     return p_value, null_corrs, observed_corr
 
 
+# EXPERIMENT PROCESSING
+
+
 def process_single_run(
-    model, data, hypotheses, snr, repeat, n_permutations, alpha=0.05
+    model, data, hypotheses, snr, repeat, n_permutations, alpha=ALPHA
 ):
+    """
+    Process a single experimental run with given SNR and repeat number.
+
+    Args:
+        model: ADMM model instance
+        data: Original clean data
+        hypotheses: List of hypothesis matrices
+        snr: Signal-to-noise ratio
+        repeat: Repeat number for this SNR
+        n_permutations: Number of permutations for statistical tests
+        alpha: Significance level for multiple testing correction
+
+    Returns:
+        List of result dictionaries
+    """
+    # Generate reproducible noise
     seed = int(snr * 100 + repeat)
     noisy_data = add_noise_with_snr(data, snr, rng=seed)
 
-    measured_similarity = compute_similarity(noisy_data, noisy_data, METRIC)
-    # NOTE I only fit w here (so max outer is not taken into account)
-    w = model.fit_w(measured_similarity)
+    # Compute similarities and fit model
+    measured_similarity = compute_similarity(noisy_data, noisy_data, SIMILARITY_METRIC)
+    w = model.fit_transform(measured_similarity)
     denoised_similarity = w @ w.T
 
+    # Align latent dimensions and compute reconstruction error
     rank = data.shape[1]
     w_aligned = align_latent_dimensions(data, w)
     rec_error = np.linalg.norm(
         measured_similarity - denoised_similarity
     ) / np.linalg.norm(measured_similarity)
 
-    # Run RSA and NMF tests: Mantel between hypothesis and (observed/denoised)
+    # Run statistical tests
     rsa_tests = [
         mantel_test(h, measured_similarity, permutations=n_permutations)
         for h in hypotheses
@@ -93,23 +172,24 @@ def process_single_run(
         mantel_test(h, denoised_similarity, permutations=n_permutations)
         for h in hypotheses
     ]
-
     latent_tests = [
         permutation_test(data[:, i], w_aligned[:, i], permutations=n_permutations)
         for i in range(rank)
     ]
 
-    # Combine results into a dict for iteration
+    # Organize test results
     test_results = {
         "RSA": rsa_tests,
         "NMF": nmf_tests,
         "Latent": latent_tests,
     }
 
+    # Apply multiple testing correction and format results
     results = []
     for method, tests in test_results.items():
-        raw_ps = [t[0] for t in tests]  # p_value from (p_value, null_corrs, obs_corr)
+        raw_ps = [t[0] for t in tests]
         reject, corr_ps = multipletests(raw_ps, alpha, method="fdr_bh")[:2]
+
         for i, (test, corrected_p, rej) in enumerate(zip(tests, corr_ps, reject)):
             results.append(
                 {
@@ -121,56 +201,65 @@ def process_single_run(
                     "Corrected_p": corrected_p,
                     "Significant": bool(rej),
                     "Rec_error": rec_error,
-                    # You can optionally add null_corrs / obs_corr if needed:
-                    # "Observed_corr": test[2],
-                    # "Null_corr_mean": np.mean(test[1]),
                 }
             )
+
     return results
 
 
-# TODO replace by parseargs possibly.
-class Config:
-    snr_list = np.linspace(0, 0.3, 8)
-    n_repeats = 100
-    n_permutations = 500
-    max_objects = 1000
-    MAX_JOBS = 100
-    # TODO Maybe i need to actually subsample at random at some point to show that these results hold!!!
-    dims = [3, 5, 8, 12, 14]  # subs    ample of the spose dimensions
+def main():
+    """Main execution function."""
+    print("Loading data...")
+    data = load_spose_embedding(max_objects=MAX_OBJECTS, max_dims=MAX_DIMS)
+    data = data[:, SELECTED_DIMS]
+    rank = len(SELECTED_DIMS)
 
+    print(f"Data shape: {data.shape}")
+    print(f"Using dimensions: {SELECTED_DIMS}")
 
-if __name__ == "__main__":
-    cfg = Config()
-
-    data = load_spose_embedding(max_objects=cfg.max_objects, max_dims=66)
-    data = data[:, cfg.dims]
-    cfg.rank = len(cfg.dims)
+    # Create hypotheses (one per dimension)
+    print("Creating hypotheses...")
     hypotheses = []
-    for i in range(cfg.rank):
+    for i in range(rank):
         x_i = data[:, [i]]
-        # NOTE here again check the kernel, ensure it is consistent throughout!!
-        s_i = compute_similarity(x_i, x_i, METRIC)
+        s_i = compute_similarity(x_i, x_i, SIMILARITY_METRIC)
         hypotheses.append(s_i)
 
-    all_tasks = [(snr, rep) for snr in cfg.snr_list for rep in range(cfg.n_repeats)]
+    # Generate all task combinations
+    all_tasks = [(snr, rep) for snr in SNR_LIST for rep in range(N_REPEATS)]
+    print(f"Total tasks: {len(all_tasks)}")
 
-    model = ADMM(rank=cfg.rank, max_outer=10, w_inner=300, tol=1e-6, verbose=False)
+    # Initialize model
+    model = ADMM(
+        rank=rank,
+        max_outer=ADMM_MAX_OUTER,
+        w_inner=ADMM_W_INNER,
+        tol=ADMM_TOLERANCE,
+        verbose=False,
+    )
 
-    # test = process_single_run(
-    #     model, data, hypotheses, snr=0.5, repeat=0, n_permutations=cfg.n_permutations
-    # )
-
+    # Run parallel processing
     print("Starting parallel processing...")
-    results = Parallel(n_jobs=cfg.MAX_JOBS, verbose=10)(
+    results = Parallel(n_jobs=MAX_JOBS, verbose=10)(
         delayed(process_single_run)(
-            model, data, hypotheses, snr, repeat, cfg.n_permutations
+            model, data, hypotheses, snr, repeat, N_PERMUTATIONS
         )
         for snr, repeat in all_tasks
     )
 
+    # Combine and save results
+    print("Combining results...")
     results_df = pd.DataFrame([item for sublist in results for item in sublist])
 
-    path = Path("/LOCAL/fmahner/srf/results/benchmarks/hypothesis_tests.csv")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    results_df.to_csv(path, index=False)
+    # Ensure output directory exists
+    output_path = Path(OUTPUT_PATH)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Save results
+    results_df.to_csv(output_path, index=False)
+    print(f"Results saved to: {output_path}")
+    print(f"Final results shape: {results_df.shape}")
+
+
+if __name__ == "__main__":
+    main()

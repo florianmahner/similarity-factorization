@@ -135,6 +135,18 @@ def add_noise_with_snr(
     return np.sqrt(snr) * x + np.sqrt(1 - snr) * noise
 
 
+def add_noise_with_snr_traditional(x, snr_db, rng=None):
+    """Add noise with traditional SNR in dB"""
+    if rng is None:
+        rng = np.random.default_rng()
+
+    signal_power = np.var(x)
+    snr_linear = 10 ** (snr_db / 10)
+    noise_power = signal_power / snr_linear
+    noise = rng.standard_normal(x.shape) * np.sqrt(noise_power)
+    return x + noise
+
+
 def load_spose_embedding(path=SPOSE_PATH, max_objects=None, max_dims=None):
     x = np.maximum(np.loadtxt(path), 0)
     if max_objects:
