@@ -1,7 +1,7 @@
 import numpy as np
-from srf.models.trifactor import TriFactor
+from srf.mixed.admm import ADMM
 from srf.simulation import add_noise_with_snr
-from srf.helpers import compute_similarity
+from tools.rsa import compute_similarity
 from joblib import Parallel, delayed
 from tqdm import tqdm
 import pandas as pd
@@ -17,6 +17,9 @@ def process_single_model(
     snr,
     seed,
 ):
+    # Set the random seed for reproducibility
+    np.random.seed(seed)
+
     w = model.fit_transform(rsm)
     corrs = best_pairwise_match(spose_embedding, w)
     results = []
@@ -36,33 +39,28 @@ def process_single_model(
 def run_spose_reconstruction_simulation(
     model,
     spose_embedding,
-    snrs=[0.0, 0.25, 0.5, 1.0],
+    seeds=[0, 42, 123, 456, 789],
+    snr=1.0,
     similarity_measure="cosine",
 ):
 
     k = spose_embedding.shape[1]
 
-    noise_data = {}
-    for snr in snrs:
-        if snr == 1.0:
-            noisy_spose = spose_embedding
-        else:
-            noisy_spose = add_noise_with_snr(spose_embedding, snr)
+    # Apply noise once with the specified SNR
+    if snr == 1.0:
+        noisy_spose = spose_embedding
+    else:
+        noisy_spose = add_noise_with_snr(spose_embedding, snr)
 
-        simk = compute_similarity(noisy_spose, noisy_spose, similarity_measure)
-        if similarity_measure == "linear":
-            simk = simk / simk.max()
-        noise_data[snr] = (simk, spose_embedding)
+    simk = compute_similarity(noisy_spose, noisy_spose, similarity_measure)
 
-    # Create all tasks for parallel processing
+    # Create all tasks for parallel processing with different seeds
     tasks = []
-    for i, snr in enumerate(snrs):
-        simk, original_spose = noise_data[snr]
-        seed = i * 100  # Unique seed for each task
-        tasks.append((model, original_spose, simk, snr, seed))
+    for seed in seeds:
+        tasks.append((model, spose_embedding, simk, snr, seed))
 
     # Run all tasks in parallel
-    print(f"Running {len(tasks)} tasks in parallel...")
+    print(f"Running {len(tasks)} tasks in parallel with different seeds...")
     all_results = Parallel(n_jobs=-1)(
         delayed(process_single_model)(*task) for task in tqdm(tasks)
     )
@@ -79,16 +77,23 @@ if __name__ == "__main__":
     max_dims = 66
 
     spose_embedding = load_spose_embedding(max_objects=max_objects, max_dims=max_dims)
-    model = TriFactor(
+    model = ADMM(
         rank=max_dims,
-        alpha=1.0,
-        max_iter=300,
+        max_outer=100,
+        w_inner=10,
+        tol=0.0,
+        rho=1.0,
+        init="random_sqrt",
         verbose=True,
     )
 
-    # Run the simulation
+    # Run the simulation with different seeds
     df = run_spose_reconstruction_simulation(
-        model, spose_embedding, snrs=[1.0], similarity_measure="linear"
+        model,
+        spose_embedding,
+        seeds=np.arange(30),
+        snr=1.0,  # Fixed SNR (no noise)
+        similarity_measure="cosine",
     )
     path = Path("/LOCAL/fmahner/srf/results/benchmarks/spose_reconstruction.csv")
     path.parent.mkdir(parents=True, exist_ok=True)

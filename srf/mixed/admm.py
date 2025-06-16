@@ -44,7 +44,6 @@ class ADMM:
         self,
         s,
         mask,
-        seed=None,
         bounds=None,
     ):
         w = init_factor(s, self.rank, self.init, self.random_state, self.eps)
@@ -75,7 +74,7 @@ class ADMM:
             history["total_objective"].append(total_obj)
             history["rec_error"].append(np.linalg.norm((s - w @ w.T) * mask, "fro"))
 
-            if np.linalg.norm(v - w @ w.T, "fro") < self.tol:
+            if np.linalg.norm(v - w @ w.T, "fro") < self.tol and self.tol > 0.0:
                 break
             if self.verbose:
                 print(
@@ -88,11 +87,11 @@ class ADMM:
         self.w_ = w
         return w
 
-    def fit_transform(self, s, mask=None, seed=None, bounds=None):
+    def fit_transform(self, s, mask=None, bounds=None):
         if mask is None:
             mask = np.ones_like(s)  # TODO Check this
 
-        self.fit(s, mask, seed, bounds)
+        self.fit(s, mask, bounds)
         return self.w_
 
     def fit_w(self, s):

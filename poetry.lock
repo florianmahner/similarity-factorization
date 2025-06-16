@@ -1716,6 +1716,21 @@ htmlsoup = ["BeautifulSoup4"]
 source = ["Cython (>=3.0.11,<3.1.0)"]
 
 [[package]]
+name = "mantel"
+version = "2.2.2"
+description = "Python implementation of the Mantel test, a significance test of the correlation between two distance matrices"
+optional = false
+python-versions = ">=3.6"
+files = [
+    {file = "mantel-2.2.2-py3-none-any.whl", hash = "sha256:37a88ea45e9ae07418e2f2099082a6d4b1537e791264fdeeb8e6f9006a400038"},
+    {file = "mantel-2.2.2.tar.gz", hash = "sha256:5897ff18e1589f1b4c5ddc1dc35865654d6dea8df63b643cb67b1353de5673b0"},
+]
+
+[package.dependencies]
+numpy = ">=1.10"
+scipy = ">=1.0"
+
+[[package]]
 name = "markupsafe"
 version = "3.0.2"
 description = "Safely add untrusted strings to HTML/XML markup."
@@ -3948,4 +3963,4 @@ test = ["websockets"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<3.12"
-content-hash = "0b0b7e721c12ba0f2915696329c7a29ed1ca95475ceb5b93cb7a9bfeee22481d"
+content-hash = "edc53a876a943d6fad19a364ef18a35d3c146ba4532f1ddf99fb9bfb60472139"

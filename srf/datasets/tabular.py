@@ -1,4 +1,11 @@
-from sklearn.datasets import load_iris, load_digits, load_diabetes
+from sklearn.datasets import (
+    load_iris,
+    load_digits,
+    load_diabetes,
+    load_wine,
+    load_breast_cancer,
+)
+
 from scipy.io import loadmat
 from torchvision.datasets import MNIST as MNIST_torch
 from .registry import register_dataset
@@ -117,3 +124,37 @@ class SyntheticDataset(BaseDatasetLoader):
             class_sep=self.class_sep,
         )
         return BaseDataset(name="synthetic", data=x, targets=y)
+
+
+@register_dataset("wine")
+class Wine(BaseDatasetLoader):
+    def __init__(self, root: str = None):
+        super().__init__("wine", root)
+
+    def load(self) -> BaseDataset:
+        wine = load_wine()
+        X = wine.data
+        y = wine.target
+        rsm = np.corrcoef(X)
+        return BaseDataset(
+            name="wine",
+            data=X,
+            targets=y,
+            rsm=rsm,
+        )
+
+
+@register_dataset("breast_cancer")
+class BreastCancer(BaseDatasetLoader):
+    def __init__(self, root: str = None):
+        super().__init__("breast_cancer", root)
+
+    def load(self) -> BaseDataset:
+        cancer = load_breast_cancer()
+        X = cancer.data
+        y = cancer.target
+        return BaseDataset(
+            name="breast_cancer",
+            data=X,
+            targets=y,
+        )

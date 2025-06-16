@@ -22,6 +22,12 @@ DATASET_PATHS = {
     "orl": "/SSD/datasets/orl",
     "things-monkey-2k": "/LOCAL/fmahner/monkey-dimensions/data/monkey/2k/f",
     "things-monkey-22k": "/LOCAL/fmahner/monkey-dimensions/data/monkey/22k/f",
+    # Additional tabular datasets (sklearn built-in, using cache directory)
+    "wine": "/SSD/datasets/sklearn_cache",
+    "breast_cancer": "/SSD/datasets/sklearn_cache",
+    # Text datasets (sklearn fetch functions use their own cache)
+    "20newsgroups": "/SSD/datasets/20newsgroups",
+    "20newsgroups_full": "/SSD/datasets/20newsgroups_full",
 }
 
 

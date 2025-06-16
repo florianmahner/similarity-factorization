@@ -1,5 +1,8 @@
 #! /usr/bin/env python3
 
+
+"""This is for thw simulation to check howe well we can clustering in high and low noise regimes!"""
+
 import pandas as pd
 import numpy as np
 import itertools

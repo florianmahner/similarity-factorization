@@ -3,7 +3,7 @@ from scipy.linalg import orthogonal_procrustes
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics.cluster import contingency_matrix
 from scipy.optimize import linear_sum_assignment
-from numpy.random import Generator
+from numpy.random import Generator, default_rng
 from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
 from dataclasses import dataclass
 from tqdm import tqdm
@@ -135,16 +135,68 @@ def add_noise_with_snr(
     return np.sqrt(snr) * x + np.sqrt(1 - snr) * noise
 
 
-def add_noise_with_snr_traditional(x, snr_db, rng=None):
-    """Add noise with traditional SNR in dB"""
-    if rng is None:
-        rng = np.random.default_rng()
+def add_noise_with_snr_db(
+    signal: np.ndarray,
+    snr_db: float,
+    rng: int | np.random.Generator | None = None,
+    centre: bool = True,
+) -> np.ndarray:
+    """
+    Add zero-mean Gaussian noise to *signal* to achieve a target SNR.
 
-    signal_power = np.var(x)
-    snr_linear = 10 ** (snr_db / 10)
-    noise_power = signal_power / snr_linear
-    noise = rng.standard_normal(x.shape) * np.sqrt(noise_power)
-    return x + noise
+    Parameters
+    ----------
+    signal : ndarray of float, shape (..., n_samples)
+        The clean data to which noise will be added.
+    snr_db : float
+        Desired signal-to-noise ratio in decibels (dB).
+        For reference, 20 dB ≈ 10:1 power ratio, 0 dB = 1:1, −10 dB ≈ 0.1:1.
+    rng : int | numpy.random.Generator | None, optional
+        Seed or `Generator` to make the operation reproducible.
+        If *None*, draws from a new, non-deterministic `default_rng()`.
+    centre : bool, default True
+        If True, subtract the mean of *signal* before computing power
+        (recommended unless the DC component is meaningful).
+
+    Returns
+    -------
+    noisy_signal : ndarray, same shape as *signal*
+        The input trace plus Gaussian noise whose variance is set so that
+        the realised SNR equals *snr_db* **in expectation**.
+
+    Notes
+    -----
+    The added noise ε is drawn i.i.d. ~N(0, σ²) with
+
+        σ² = P_signal / 10^(snr_db / 10)
+
+    where `P_signal` is the variance (after optional centring) of *signal*.
+    """
+    rng_gen: np.random.Generator
+    if rng is None:
+        rng_gen = np.random.default_rng()
+    elif isinstance(rng, np.random.Generator):
+        rng_gen = rng
+    else:
+        rng_gen = default_rng(rng)
+
+    sig = signal.astype(float)  # ensure float64
+    if centre:
+        sig_mean = sig.mean(axis=-1, keepdims=True)
+        sig = sig - sig_mean
+
+    # power = variance for zero-mean signals
+    power_signal = np.mean(sig**2, axis=-1, keepdims=True)
+
+    if power_signal == 0:
+        raise ValueError("Signal power is zero; SNR is undefined.")
+
+    snr_linear = 10 ** (snr_db / 10.0)
+    power_noise = power_signal / snr_linear
+    std_noise = np.sqrt(power_noise)
+
+    noise = rng_gen.standard_normal(size=sig.shape) * std_noise
+    return signal + noise
 
 
 def load_spose_embedding(path=SPOSE_PATH, max_objects=None, max_dims=None):

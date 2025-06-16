@@ -23,8 +23,9 @@ from pathlib import Path
 
 
 # Constants
-MAX_ITER = 1000
-SEEDS = range(100)
+MAX_OUTER = 10
+MAX_INNER = 100
+SEEDS = range(50)
 VERBOSE = False
 
 # Model and Dataset Registries
@@ -40,6 +41,11 @@ def flatten_dataset(x):
 def positive_shift_and_scale(x):
     """Normalize data to range [0,1]."""
     return (x - x.min(axis=0)) / (x.max(axis=0) + 1e-10)
+
+
+def standardize_data(x):
+    """Z-score standardization."""
+    return (x - x.mean(axis=0)) / (x.std(axis=0) + 1e-10)
 
 
 def pearson_rsm(x):
@@ -96,40 +102,68 @@ def register_dataset(name, x, y):
 
 
 def load_all_datasets():
-    mnist = load_dataset("mnist")
-    MAX_MNIST_SAMPLES = 1000
-    # register_dataset(
-    #     "mnist",
-    #     mnist.train_data[:MAX_MNIST_SAMPLES],
-    #     mnist.train_targets[:MAX_MNIST_SAMPLES],
-    # )
+    # Small classic tabular datasets
     iris = load_dataset("iris")
     register_dataset("iris", iris.data, iris.targets)
-    # diabetes = load_dataset("diabetes")
-    # register_dataset("diabetes", diabetes.data, diabetes.targets)
 
-    # peterson = load_dataset("peterson-various")
-    # register_dataset("peterson-various", peterson.rsm, peterson.targets)
+    wine = load_dataset("wine")
+    register_dataset("wine", wine.data, wine.targets)
+
+    breast_cancer = load_dataset("breast_cancer")
+    register_dataset("breast_cancer", breast_cancer.data, breast_cancer.targets)
+
+    # Image datasets
+    digits = load_dataset("digits")
+    register_dataset("digits", digits.data, digits.targets)
+
+    mnist = load_dataset("mnist")
+    MAX_MNIST_SAMPLES = 1000
+    register_dataset(
+        "mnist",
+        mnist.train_data[:MAX_MNIST_SAMPLES],
+        mnist.train_targets[:MAX_MNIST_SAMPLES],
+    )
+
+    # Text datasets (excellent for NMF)
+    # newsgroups = load_dataset("20newsgroups")  # 4 categories
+    # register_dataset("20newsgroups", newsgroups.data, newsgroups.targets)
+
+    # Optional: Full newsgroups (commented out for speed)
+    # newsgroups_full = load_dataset("20newsgroups_full")  # All 20 categories
+    # register_dataset("20newsgroups_full", newsgroups_full.data, newsgroups_full.targets)
 
 
 def create_models(rank, seed):
     """Register clustering models with dataset-specific preprocessing."""
 
-    # when it can have mixed signs
+    # For similarity matrices (already computed) - used by SyNMF ADMM
     kernel_preprocessors = {
         "mnist": lambda x: construct_similarity_graph(flatten_dataset(x)),
         "orl": lambda x: construct_similarity_graph(flatten_dataset(x)),
-        "iris": lambda x: construct_similarity_graph(flatten_dataset(x)),
-        "diabetes": lambda x: construct_similarity_graph(flatten_dataset(x)),
-        "peterson-various": lambda x: x,
+        "iris": lambda x: construct_similarity_graph(positive_shift_and_scale(x)),
+        "wine": lambda x: construct_similarity_graph(positive_shift_and_scale(x)),
+        "breast_cancer": lambda x: construct_similarity_graph(
+            positive_shift_and_scale(x)
+        ),
+        "digits": lambda x: construct_similarity_graph(flatten_dataset(x)),
+        "20newsgroups": lambda x: construct_similarity_graph(x),  # Already flattened
+        "20newsgroups_full": lambda x: construct_similarity_graph(x),
+        "peterson-various": lambda x: x,  # Already a similarity matrix
     }
 
+    # For raw data preprocessing - used by NMF (MUST be non-negative!)
     data_preprocessors = {
-        "mnist": lambda x: flatten_dataset(x),
-        "orl": lambda x: flatten_dataset(x),
-        "iris": lambda x: flatten_dataset(x),
-        "diabetes": lambda x: positive_shift_and_scale(x),
-        "peterson-various": lambda x: x,
+        "mnist": lambda x: positive_shift_and_scale(flatten_dataset(x)),
+        "orl": lambda x: positive_shift_and_scale(flatten_dataset(x)),
+        "iris": lambda x: positive_shift_and_scale(x),  # FIXED: NMF needs non-negative
+        "wine": lambda x: positive_shift_and_scale(x),  # FIXED: NMF needs non-negative
+        "breast_cancer": lambda x: positive_shift_and_scale(
+            x
+        ),  # FIXED: NMF needs non-negative
+        "digits": lambda x: positive_shift_and_scale(flatten_dataset(x)),
+        "20newsgroups": lambda x: x,  # TF-IDF already non-negative and normalized
+        "20newsgroups_full": lambda x: x,
+        "peterson-various": lambda x: x,  # Similarity matrix
     }
 
     register_model(
@@ -137,8 +171,8 @@ def create_models(rank, seed):
         ADMM(
             init="random_sqrt",
             rank=rank,
-            max_outer=10,
-            w_inner=MAX_ITER,
+            max_outer=MAX_OUTER,
+            w_inner=MAX_INNER,
             tol=0.0,
             verbose=VERBOSE,
         ),
@@ -151,12 +185,10 @@ def create_models(rank, seed):
             n_clusters=rank,
             init="random",
             random_state=seed,
-            max_iter=MAX_ITER,
+            max_iter=MAX_OUTER * MAX_INNER,
             n_init=1,
         ),
-        preprocessors={
-            **data_preprocessors,
-        },
+        preprocessors=data_preprocessors,
     )
 
     register_model(
@@ -165,7 +197,7 @@ def create_models(rank, seed):
             n_components=rank,
             random_state=seed,
             init="random",
-            max_iter=MAX_ITER,
+            max_iter=MAX_OUTER * MAX_INNER,
             solver="cd",
             tol=0.0,
         ),

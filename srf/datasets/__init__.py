@@ -1,4 +1,5 @@
 from .tabular import *
+from .text import *
 from .mur92 import *
 from .cichy118 import *
 from .peterson import *
