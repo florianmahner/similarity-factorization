@@ -5,8 +5,7 @@ description = "Similarity-based Representation Factorization (SRF) tools for mod
 authors = ["florianmahner <florian.mahner@icloud.com>"]
 readme = "README.md"
 packages = [
-    {include = "*", from = "src"},
-    {include = "*", from = "src/tools"}
+    {include = "*", from = "src"}
 ]
 
 [tool.poetry.dependencies]
