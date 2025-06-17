@@ -1,11 +1,8 @@
 from .registry import register_dataset
 from .base import BaseDataset, BaseDatasetLoader
-from tools.rsa import compute_rsm
-from PIL import Image
 import numpy as np
 from nilearn import datasets
 import pandas as pd
-from nilearn.maskers import NiftiMasker
 import warnings
 
 # TODO - not good yet.
