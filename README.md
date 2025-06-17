@@ -15,11 +15,11 @@ This project uses [Poetry](https://python-poetry.org/) for dependency management
 2.  **[Optional] If ml-toolkit directory is missing or needs updating:**
     The ml-toolkit directory should be included when you clone the repository. However, if you need to add or update it manually:
     ```bash
-    # To add the ml-toolkit subtree if missing:
-    git subtree add --prefix=srf/ml-toolkit https://github.com/florianmahner/ml-toolkit.git main --squash
+    # To add the tools subtree if missing:
+    git subtree add --prefix=src/tools https://github.com/florianmahner/tools.git main --squash
 
-    # To update the ml-toolkit subtree later:
-    git subtree pull --prefix=srf/ml-toolkit https://github.com/florianmahner/ml-toolkit.git main --squash
+    # To update the tools subtree later:
+    git subtree pull --prefix=src/tools https://github.com/florianmahner/tools.git main --squash
     ```
 
 3.  **Install Poetry:**

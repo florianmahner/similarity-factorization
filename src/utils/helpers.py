@@ -177,7 +177,7 @@ def add_noise_with_snr_db(
     elif isinstance(rng, np.random.Generator):
         rng_gen = rng
     else:
-        rng_gen = default_rng(rng)
+        rng_gen = np.random.default_rng(rng)
 
     sig = signal.astype(float)  # ensure float64
     if centre:
