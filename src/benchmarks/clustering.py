@@ -12,6 +12,8 @@ from sklearn.decomposition import NMF
 from sklearn.cluster import SpectralClustering
 from srf.datasets import load_dataset
 from srf.mixed.admm import ADMM
+
+from srf.models.symmetric import ANLS
 from srf.helpers import (
     map_labels_with_hungarian,
     purity_score,
@@ -124,6 +126,9 @@ def load_all_datasets():
         mnist.train_targets[:MAX_MNIST_SAMPLES],
     )
 
+    orl = load_dataset("orl")
+    register_dataset("orl", orl.data, orl.targets)
+
     # Text datasets (excellent for NMF)
     # newsgroups = load_dataset("20newsgroups")  # 4 categories
     # register_dataset("20newsgroups", newsgroups.data, newsgroups.targets)
@@ -167,7 +172,7 @@ def create_models(rank, seed):
     }
 
     register_model(
-        "SyNMF ADMM",
+        "SyNMF",
         ADMM(
             init="random_sqrt",
             rank=rank,

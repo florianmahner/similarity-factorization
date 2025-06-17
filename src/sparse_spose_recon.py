@@ -566,7 +566,7 @@ def main():
     results_df.to_csv(OUTPUT_CSV, index=False)
     summary_df.to_csv(SUMMARY_CSV, index=False)
 
-    similarity_comparison_csv = RESULTS_DIR / MAX_DIM / "similarity_comparison.csv"
+    similarity_comparison_csv = RESULTS_DIR / "similarity_comparison.csv"
     similarity_df.to_csv(similarity_comparison_csv, index=False)
 
     if not low_data_df.empty:

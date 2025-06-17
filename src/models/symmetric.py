@@ -83,7 +83,7 @@ def _normalize_factors_column(w: Array, h: Array) -> tuple[Array, Array]:
 
 
 @dataclass(kw_only=True)
-class Symmetric(BaseNMF):
+class ANLS(BaseNMF):
     alpha: float | None = None
     max_iter: int = 1000
     tol: float = 1e-5
@@ -96,7 +96,7 @@ class Symmetric(BaseNMF):
     def fit(
         self,
         s: Array,
-    ) -> "Symmetric":
+    ) -> "ANLS":
         """
         Implementation of NNLS for Symmetric NMF by (Kuang et al., 2014)
         """

@@ -1,2 +1,2 @@
 from .trifactor import TriFactor
-from .symmetric import Symmetric
+from .symmetric import ANLS
