@@ -27,8 +27,7 @@ from tools.rsa import compute_similarity
 warnings.filterwarnings("ignore")
 
 # Import your SRF functions
-from srf.mixed.admm import _evaluate_rank, train_val_split
-
+from experiments.cross_validation import evaluate_rank, train_val_split
 
 METRIC = "linear"
 
@@ -64,9 +63,7 @@ def evaluate_rank_for_trial(n_objects, train_ratio, true_rank, trial_id, seed, r
     mask_train, mask_val = train_val_split(rsm.shape[0], train_ratio, rng)
     # NOTE: I think no matter of the metric used to generate the RSM, I need to use a linear kernel here!!!
     # Make this more explicit by not passing any metric here!
-    _, mse = _evaluate_rank(
-        rank, rsm, mask_train, mask_val, rng, (None, None), "linear"
-    )
+    _, mse = evaluate_rank(rank, rsm, mask_train, mask_val, rng, (None, None), "linear")
 
     return {
         "n_objects": n_objects,

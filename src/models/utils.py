@@ -1,0 +1,100 @@
+"""Simple utility functions - no wrappers, just helpers."""
+import numpy as np
+from sklearn.utils.validation import check_random_state
+
+Array = np.ndarray
+
+
+def init_factor(s, rank, init, random_state=None, eps=np.finfo(float).eps):
+    """Keep the exact same function from base.py."""
+    rng = check_random_state(random_state)
+    if init == "random":
+        factor = 0.001 * rng.rand(s.shape[0], rank)
+    elif init == "random_sqrt":
+        avg = np.sqrt(s.mean() / rank)
+        factor = rng.rand(s.shape[0], rank) * avg
+    elif init == "nndsvd":
+        factor, _ = nndsvd(s, rank, eps, random_state)
+    elif init == "nndsvdar":
+        factor, _ = nndsvd(s, rank, eps, random_state)
+        avg = s.mean()
+        factor[factor == 0] = abs(
+            avg * rng.standard_normal(size=len(factor[factor == 0])) / 100
+        )
+    else:
+        raise ValueError(f"Invalid initialization method: {init}")
+    return factor
+
+def nndsvd(x, rank, eps=np.finfo(float).eps, random_state=None):
+    """Keep exact same from base.py."""
+    from sklearn.utils.extmath import randomized_svd, squared_norm
+    
+    def norm(x):
+        return np.sqrt(squared_norm(x))
+    
+    u, s, v = randomized_svd(x, rank, random_state=random_state)
+    w = np.zeros_like(u)
+    h = np.zeros_like(v)
+
+    w[:, 0] = np.sqrt(s[0]) * np.abs(u[:, 0])
+    h[0, :] = np.sqrt(s[0]) * np.abs(v[0, :])
+
+    for j in range(1, rank):
+        x_col, y_col = u[:, j], v[j, :]
+        x_p, y_p = np.maximum(x_col, 0), np.maximum(y_col, 0)
+        x_n, y_n = np.abs(np.minimum(x_col, 0)), np.abs(np.minimum(y_col, 0))
+        x_p_nrm, y_p_nrm = norm(x_p), norm(y_p)
+        x_n_nrm, y_n_nrm = norm(x_n), norm(y_n)
+        m_p, m_n = x_p_nrm * y_p_nrm, x_n_nrm * y_n_nrm
+
+        if m_p > m_n:
+            u_update = x_p / x_p_nrm
+            v_update = y_p / y_p_nrm
+            sigma = m_p
+        else:
+            u_update = x_n / x_n_nrm
+            v_update = y_n / y_n_nrm
+            sigma = m_n
+
+        lbd = np.sqrt(s[j] * sigma)
+        w[:, j] = lbd * u_update
+        h[j, :] = lbd * v_update
+
+    w[w < eps] = 0
+    h[h < eps] = 0
+    np.abs(w, out=w)
+    np.abs(h, out=h)
+    return w, h 
+
+
+def explained_variance(x: Array, x_hat: Array, center: bool = False) -> float:
+    """
+    Compute the explained variance of the model based on the upper triangle
+    (excluding the diagonal) of the similarity matrices.
+    """
+
+    x_upper = x[np.triu_indices(x.shape[0], k=1)]
+    x_hat_upper = x_hat[np.triu_indices(x_hat.shape[0], k=1)]
+
+    rss = np.sum((x_upper - x_hat_upper) ** 2)
+
+    if center:
+        tss = np.sum((x_upper - np.mean(x_upper)) ** 2)
+    else:
+        tss = np.sum(x_upper**2)
+
+    if tss == 0:
+        # Handle case where the variance of the original data is zero
+        return 1.0 if rss == 0 else 0.0
+
+    return 1 - (rss / tss)
+
+
+def sse(x: Array, x_hat: Array) -> float:
+    x_upper = x[np.triu_indices(x.shape[0], k=1)]
+    x_hat_upper = x_hat[np.triu_indices(x_hat.shape[0], k=1)]
+    return np.sum((x_upper - x_hat_upper) ** 2)
+
+
+def frobenius_norm(x: Array, x_hat: Array) -> float:
+    return np.linalg.norm(x - x_hat, ord="fro")

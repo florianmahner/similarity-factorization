@@ -1,5 +1,6 @@
 #! /usr/bin/env python3
 import pyximport
+
 pyximport.install(language_level=3, setup_args={"include_dirs": np.get_include()})
 
 import numpy as np
@@ -107,7 +108,7 @@ def admm(s, rank, train_ratio=0.8, rng=None, bounds=None):
     return w_est
 
 
-def _evaluate_rank(
+def evaluate_rank(
     rank,
     s_full,
     mask_train,

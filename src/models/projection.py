@@ -1,52 +1,40 @@
+"""Projection NMF models - simple and direct."""
 import numpy as np
-from .base import BaseNMF
-from .metrics import frobenius_norm
-from dataclasses import dataclass
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.utils.validation import check_is_fitted
+from .utils import init_factor, frobenius_norm
 
-Array = np.ndarray
-
-
-@dataclass(kw_only=True)
-class ProjectionNMF(BaseNMF):
-    max_iter: int = 1000
-    tol: float = 1e-5
-    random_state: int | None = None
-    init: str = "random"
-    verbose: bool = False
-    eval_every: int = 100
-    eps: float = np.finfo(float).eps
-
-    def fit(
-        self,
-        x: Array,
-    ) -> "ProjectionNMF":
-
-        self.init_progress_bar(self.max_iter)
-        w = self.init_w(x)
+class ProjectionNMF(BaseEstimator, TransformerMixin):
+    """Projection NMF for data X, finding W such that X ≈ W @ W.T @ X."""
+    
+    def __init__(self, rank=10, max_iter=1000, tol=1e-5, random_state=None,
+                 init="random", verbose=False, eps=np.finfo(float).eps):
+        self.rank = rank
+        self.max_iter = max_iter
+        self.tol = tol
+        self.random_state = random_state
+        self.init = init
+        self.verbose = verbose
+        self.eps = eps
+    
+    def fit(self, x, y=None):
+        """Exact same algorithm from ProjectionNMF class."""
+        x = self._validate_data(x, ensure_2d=True)
+        
+        w = init_factor(x, self.rank, self.init, self.random_state, self.eps)
         error_init = frobenius_norm(x, w @ w.T @ x)
         previous_error = error_init
         xx = x @ x.T
 
         for iteration in range(1, self.max_iter + 1):
-            w_prev = w.copy()
-            # numerator of the multiplicative update
-            a = 2 * xx @ w  # (m, r)
-
-            # denominator of the multiplicative update (eg.(5) in linear and nonlinear paper, simplified version would be eq.(41))
-            b = w @ (w.T @ a) + xx @ (w @ (w.T @ w))
-
-            np.maximum(b, self.eps, out=b)  # (m, r)
-
-            # multiplicative update
-            w *= a / b  # (m, r)
-
-            # Normalize W by the norm, eg same as the square root of the largest eigenvalue of W^T W.
-            # w /= np.linalg.norm(w, ord=2)
-
-            # Alternative normalization
+            # Exact same multiplicative update
+            a = 2 * xx @ w  # numerator
+            b = w @ (w.T @ a) + xx @ (w @ (w.T @ w))  # denominator
+            np.maximum(b, self.eps, out=b)
+            w *= a / b  # multiplicative update
+            
+            # Exact same normalization
             wxxw = w.T @ xx @ w
-            # Compute normalization factor = sqrt( trace(WXXW) / trace(WXXW @ (w.T @ w)) )
-            # this is important otherwise the algorithm oscillates
             norm_factor = np.sqrt(np.trace(wxxw) / np.trace(wxxw @ (w.T @ w)))
             w *= norm_factor
 
@@ -57,92 +45,80 @@ class ProjectionNMF(BaseNMF):
                 break
             previous_error = error
 
-            obj = error
-
-            self.print_progress(
-                **{
-                    "Iteration": iteration,
-                    "Objective": f"{obj:.5f}",
-                    # "Diff": f"{diff:.5f}",
-                }
-            )
-
-        self.sort_by_sum_(w)
+        # Sort by sum (exact same logic)
+        order = np.argsort(-np.sum(w, axis=0))
+        w = w[:, order]
+        
+        # Store results
         self.w_ = w
+        self.components_ = w
         self.x_hat_ = w @ w.T @ x
-        self.frobenius_norm_ = obj
-
+        self.n_iter_ = iteration
+        self.reconstruction_err_ = error
+        
         return self
+    
+    def transform(self, x):
+        check_is_fitted(self)
+        x = self._validate_data(x, reset=False)
+        return self.w_ @ self.w_.T @ x
+    
+    def fit_transform(self, x, y=None):
+        """Returns w."""
+        self.fit(x, y)
+        return self.w_
 
-    def fit_transform(self, x: Array) -> Array:
-        return self.fit(x).w_
 
-
-@dataclass(kw_only=True)
-class ProjectionKernelNMF(BaseNMF):
-    """
-    Projection NMF using a kernel matrix K where K(i, j) = <x_i, x_j> using
-    some kernel function.
-    """
-
-    max_iter: int = 1000
-    tol: float = 1e-5
-    random_state: int | None = None
-    init: str = "random"
-    verbose: bool = False
-    eval_every: int = 100
-    eps: float = np.finfo(float).eps
-
-    def separate_pos_neg(self, x: Array) -> tuple[Array, Array]:
+class ProjectionKernelNMF(BaseEstimator, TransformerMixin):
+    """Projection NMF for kernel matrix K, finding W such that K ≈ W @ W.T @ K."""
+    
+    def __init__(self, rank=10, max_iter=1000, tol=1e-5, random_state=None,
+                 init="random", verbose=False, eps=np.finfo(float).eps):
+        self.rank = rank
+        self.max_iter = max_iter
+        self.tol = tol
+        self.random_state = random_state
+        self.init = init
+        self.verbose = verbose
+        self.eps = eps
+    
+    def _separate_pos_neg(self, x):
+        """Exact same from ProjectionKernelNMF."""
         pos = (abs(x) + x) / 2
         neg = (abs(x) - x) / 2
         return pos, neg
-
-    def fit(
-        self,
-        k: Array,
-    ) -> "ProjectionKernelNMF":
-        """
-        k is the kernel matrix K where K(i, j) = <x_i, x_j> using
-        some kernel function.
-        """
-
-        self.init_progress_bar(self.max_iter)
-        # w = self.init_w(k)
-        w = np.random.rand(k.shape[0], self.rank)
-
+    
+    def fit(self, k, y=None):
+        """Exact same algorithm from ProjectionKernelNMF class."""
+        k = self._validate_data(k, ensure_2d=True)
+        
+        # Initialize w 
+        rng = np.random.RandomState(self.random_state)
+        w = rng.rand(k.shape[0], self.rank)
+        
         error_init = frobenius_norm(k, w @ w.T @ k)
         previous_error = error_init
 
         for iteration in range(1, self.max_iter + 1):
-
             w_prev = w.copy()
 
-            # while both are in theory the same the computations of pos neg is much
-            # slower than if no negatives are present
+            # Handle negative values in kernel matrix
             if k.min() < 0:
-                pos, neg = self.separate_pos_neg(k)
-
-                # Instead of the following we reorder to avoid n x n intermediate:
+                pos, neg = self._separate_pos_neg(k)
                 ww = w @ w.T
                 a = pos @ w + ww @ neg @ w
                 b = neg @ w + ww @ pos @ w
-                # a = pos @ w + w @ ((w.T @ neg) @ w)
-                # b = neg @ w + w @ ((w.T @ pos) @ w)
-
             else:
-                # (48) from Linear and nonlinear paper with orthogonality of W
                 a = k @ w
                 b = w @ (w.T @ a)
+            
             np.maximum(b, 1e-12, out=b)
-
-            # multiplicative update
+            
+            # Multiplicative update
             w *= a
             w /= b
 
-            # Equation (54) from the paper
-            # Alternatively we could normalize by the norm of w, same as sqrt of largest eigenvalue of w^T w, eg:
-            # w /= np.linalg.norm(w, ord=2)
+            # Exact same normalization (equation 54 from paper)
             wxw = w.T @ k @ w
             norm_factor = np.sqrt(np.trace(wxw) / np.trace(wxw @ (w.T @ w)))
             w *= norm_factor
@@ -153,24 +129,25 @@ class ProjectionKernelNMF(BaseNMF):
             if diff < self.tol and self.tol > 0:
                 break
 
-            self.print_progress(
-                **{
-                    "Iteration": iteration,
-                    "Objective": f"{error:.5f}",
-                    "Diff": f"{diff:.5f}",
-                }
-            )
-
-        self.sort_by_sum_(w)
+        # Sort by sum (exact same logic)
+        order = np.argsort(-np.sum(w, axis=0))
+        w = w[:, order]
+        
+        # Store results
         self.w_ = w
+        self.components_ = w
         self.k_hat_ = w @ w.T @ k
-        self.frobenius_norm_ = error
-        self.close_progress_bar()
-
+        self.n_iter_ = iteration
+        self.reconstruction_err_ = error
+        
         return self
-
-    def fit_transform(self, k: Array) -> Array:
-        return self.fit(k).w_
-
-    def transform(self, k: Array) -> Array:
+    
+    def transform(self, k):
+        check_is_fitted(self)
+        k = self._validate_data(k, reset=False)
         return self.w_ @ self.w_.T @ k
+    
+    def fit_transform(self, k, y=None):
+        """Returns w."""
+        self.fit(k, y)
+        return self.w_

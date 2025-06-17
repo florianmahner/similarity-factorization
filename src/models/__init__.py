@@ -1,2 +1,5 @@
+"""Simple exports."""
+from .anls import SymmetricNMF
 from .trifactor import TriFactor
-from .symmetric import ANLS
+from .admm import ADMM
+from .mixed import MixedNMF
