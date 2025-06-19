@@ -127,15 +127,6 @@ def plot_success_heatmaps(
     noise_levels: Sequence[float] | None = None,
     cmap: str = "viridis",
 ) -> None:
-    """
-    Draw one heat-map per `noise` value.
-
-    Parameters
-    ----------
-    df : DataFrame from run_rank_recovery_sweep
-    noise_levels : list | None
-        Which noise levels to plot; default = all present in df.
-    """
     import seaborn as sns
 
     if noise_levels is None:

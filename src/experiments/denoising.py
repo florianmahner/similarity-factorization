@@ -1,20 +1,15 @@
 #! /usr/bin/env python3
-
-
 """This is for thw simulation to check howe well we can clustering in high and low noise regimes!"""
 
 import pandas as pd
 import numpy as np
 import itertools
 from sklearn.decomposition import NMF
-from sklearn.base import clone
 from utils.helpers import map_labels_with_hungarian, compute_metrics
 from models.admm import ADMM
 from utils.metrics import compute_similarity
-from utils.simulation import generate_simulation_data
+from utils.simulation import generate_simulation_data, SimulationParams
 from joblib import Parallel, delayed
-
-from .registry import register_benchmark
 
 
 def _prepare_nmf_model(x, simulation_params, seed):
@@ -104,7 +99,6 @@ def _process_single_combination(
     return local_results
 
 
-@register_benchmark("denoising")
 def run_model_comparison_simulation(
     simulation_params,
     seeds=range(10),
@@ -129,3 +123,12 @@ def run_model_comparison_simulation(
     # Flatten the list of results and convert to DataFrame
     flat_results = [item for sublist in results_list for item in sublist]
     return pd.DataFrame(flat_results)
+
+
+if __name__ == "__main__":
+    simulation_params = SimulationParams(
+        n=100,
+        k=5,
+        snr=1.0,
+    )
+    run_model_comparison_simulation(simulation_params)

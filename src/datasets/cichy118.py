@@ -1,7 +1,5 @@
 from .registry import register_dataset
 from .base import BaseDataset, BaseDatasetLoader
-from tools.rsa import compute_rsm
-from tools.stats import apply_transform
 from pathlib import Path
 from scipy.io import loadmat
 from glob import glob

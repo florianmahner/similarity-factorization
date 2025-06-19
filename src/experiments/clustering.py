@@ -24,12 +24,6 @@ from utils.helpers import (
 from pathlib import Path
 
 
-# Constants
-MAX_OUTER = 10
-MAX_INNER = 100
-SEEDS = range(50)
-VERBOSE = False
-
 # Model and Dataset Registries
 MODEL_REGISTRY = {}
 DATASET_REGISTRY = {}
@@ -138,7 +132,7 @@ def load_all_datasets():
     # register_dataset("20newsgroups_full", newsgroups_full.data, newsgroups_full.targets)
 
 
-def create_models(rank, seed):
+def create_models(rank, seed, max_outer, max_inner, verbose):
     """Register clustering models with dataset-specific preprocessing."""
 
     # For similarity matrices (already computed) - used by SyNMF ADMM
@@ -174,12 +168,12 @@ def create_models(rank, seed):
     register_model(
         "SyNMF",
         ADMM(
-            init="random_sqrt",
+            init="random",
             rank=rank,
-            max_outer=MAX_OUTER,
-            w_inner=MAX_INNER,
+            max_outer=max_outer,
+            max_inner=max_inner,
             tol=0.0,
-            verbose=VERBOSE,
+            verbose=verbose,
         ),
         preprocessors=kernel_preprocessors,
     )
@@ -190,7 +184,7 @@ def create_models(rank, seed):
             n_clusters=rank,
             init="random",
             random_state=seed,
-            max_iter=MAX_OUTER * MAX_INNER,
+            max_iter=max_outer * max_inner,
             n_init=1,
         ),
         preprocessors=data_preprocessors,
@@ -202,7 +196,7 @@ def create_models(rank, seed):
             n_components=rank,
             random_state=seed,
             init="random",
-            max_iter=MAX_OUTER * MAX_INNER,
+            max_iter=max_outer * max_inner,
             solver="cd",
             tol=0.0,
         ),
@@ -241,32 +235,60 @@ def evaluate_model_on_dataset(model, dataset_name, model_name, seed):
     }
 
 
-if __name__ == "__main__":
+def run_clustering_benchmark(
+    seeds=None,
+    datasets=None,
+    max_outer=100,
+    max_inner=100,
+    verbose=False,
+    n_jobs=-1,
+    output_dir="./results/benchmarks",
+):
+    if seeds is None:
+        seeds = range(100)
+
+    # Set module-level constants
+    global MAX_OUTER, MAX_INNER, VERBOSE
+    MAX_OUTER = max_outer
+    MAX_INNER = max_inner
+    VERBOSE = verbose
+
     load_all_datasets()
     tasks = []
 
-    for seed in SEEDS:
+    for seed in seeds:
         for dname, ds_info in DATASET_REGISTRY.items():
-            rank = len(np.unique(ds_info["y"]))
-            create_models(rank, seed)
+            if datasets is None or dname in datasets:
+                rank = len(np.unique(ds_info["y"]))
+                create_models(rank, seed, max_outer, max_inner, verbose)
 
-            tasks.extend(
-                (
-                    model_info["model"],
-                    dname,
-                    model_name,
-                    seed,
+                tasks.extend(
+                    (
+                        model_info["model"],
+                        dname,
+                        model_name,
+                        seed,
+                    )
+                    for model_name, model_info in MODEL_REGISTRY.items()
                 )
-                for model_name, model_info in MODEL_REGISTRY.items()
-            )
 
-    results = joblib.Parallel(n_jobs=-1, verbose=10)(
+    results = joblib.Parallel(n_jobs=n_jobs, verbose=10 if verbose else 0)(
         joblib.delayed(evaluate_model_on_dataset)(*task) for task in tasks
     )
 
     results_df = pd.DataFrame(results)
-    out_dir = Path("./results/benchmarks")
+
+    # Save results
+    out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     fname = out_dir / "clustering_benchmarks.csv"
     results_df.to_csv(fname, index=False)
-    print(f"Benchmarking complete. Results saved to '{fname}'.")
+
+    if verbose:
+        print(f"Clustering benchmark complete. Results saved to '{fname}'.")
+
+    return results_df
+
+
+# if __name__ == "__main__":
+#     run_clustering_benchmark()

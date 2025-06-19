@@ -1,14 +1,15 @@
 #! /usr/bin/env python3
+import numpy as np
 import pyximport
 
 pyximport.install(language_level=3, setup_args={"include_dirs": np.get_include()})
 
-import numpy as np
+
 import pandas as pd
 from joblib import Parallel, delayed
 from models.admm import ADMM
 from models.bsum_cython import update_w
-from models.cd_updates import update_v, update_lambda
+from models.admm import update_v, update_lambda
 from tools.rsa import compute_similarity
 
 
@@ -18,7 +19,7 @@ def admm_symnmf_masked(
     rank,
     rho=1.0,
     max_outer=15,
-    w_inner=40,
+    max_inner=40,
     tol=1e-4,
     seed=None,
     bounds=None,
@@ -33,7 +34,7 @@ def admm_symnmf_masked(
     for i in range(max_outer):
         v = update_v(mask, s, w, lam, rho, min_val, max_val)
         T = v + lam / rho
-        w = update_w(T, w, max_iter=w_inner, tol=tol)
+        w = update_w(T, w, max_iter=max_inner, tol=tol)
         lam = update_lambda(lam, v, w, rho)
 
         # TODO Check this if it is a good criterion!
@@ -100,7 +101,7 @@ def admm(s, rank, train_ratio=0.8, rng=None, bounds=None):
         rank,
         rho=1.0,
         max_outer=15,
-        w_inner=40,
+        max_inner=40,
         tol=1e-4,
         seed=rng,
         bounds=bounds,
@@ -127,12 +128,15 @@ def evaluate_rank(
         rank=rank,
         rho=1.0,
         max_outer=10,
-        w_inner=50,
+        max_inner=50,
         tol=0.0,
         init="random_sqrt",
+        random_state=seed,
+        mask=mask_train,
+        bounds=bounds,
     )
 
-    w_est = model.fit_transform(s_full, mask_train, seed, bounds)
+    w_est = model.fit_transform(s_full)
     s_pred = compute_similarity(
         w_est, w_est, similarity_measure
     )  # NOTE this should be dot probably!!!
@@ -162,14 +166,13 @@ def find_best_rank(
     s,
     candidate_ranks,
     train_ratio=0.8,
-    rng=None,
+    seed=None,
     bounds=None,
     similarity_measure: str = "cosine",
     mask=None,
     n_repeats=1,
 ):
-    if rng is None:
-        rng = np.random.default_rng()
+    rng = np.random.default_rng(seed)
 
     tasks = []
     for repeat in range(n_repeats):
@@ -180,8 +183,8 @@ def find_best_rank(
 
         tasks.extend(
             [
-                delayed(_evaluate_rank)(
-                    rank, s, mask_train, mask_val, rng, bounds, similarity_measure
+                delayed(evaluate_rank)(
+                    rank, s, mask_train, mask_val, seed, bounds, similarity_measure
                 )
                 for rank in candidate_ranks
             ]
@@ -211,7 +214,7 @@ def run_cv_experiment(
     mask_train, mask_val = train_val_split(n, train_ratio, rng)
 
     tasks = [
-        delayed(_evaluate_rank)(
+        delayed(evaluate_rank)(
             rank, s_full, mask_train, mask_val, seed, bounds, similarity_measure
         )
         for rank in candidate_ranks

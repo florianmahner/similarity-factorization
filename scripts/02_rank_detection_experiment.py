@@ -1,17 +1,5 @@
 #!/usr/bin/env python3
-"""
-Rank Detection Experiment Script
 
-This script tests how the optimal training ratio for rank detection
-depends on the number of objects in RSM matrices, across multiple true ranks.
-
-Usage:
-    python rank_detection_experiment.py
-
-Outputs:
-    - rank_detection_trial_results.csv: Individual trial results
-    - rank_detection_summary.csv: Aggregated results per condition
-"""
 
 import numpy as np
 import pandas as pd
@@ -132,93 +120,6 @@ def run_experiment(
     # Save the full evaluation results (all ranks tested)
     results_output_file = output_dir / "rank_detection_full_results.csv"
     eval_df.to_csv(results_output_file, index=False)
-
-    if verbose:
-        print("Experiment completed!")
-        print(f"Runtime: {runtime_minutes:.1f} minutes")
-        print(f"Total evaluations: {len(eval_df)}")
-
-        # Show some summary stats
-        n_trials = len(
-            eval_df.groupby(["true_rank", "n_objects", "train_ratio", "trial_id"])
-        )
-        n_conditions = len(eval_df.groupby(["true_rank", "n_objects", "train_ratio"]))
-
-        print(f"Number of trials: {n_trials}")
-        print(f"Number of conditions: {n_conditions}")
-        print(f"Average ranks tested per trial: {len(eval_df) / n_trials:.1f}")
-        print()
-        print("Sample of results:")
-        print(eval_df.head(10))
-        print()
-        print(f"Results saved to: {results_output_file}")
-
-    return eval_df
-
-
-def find_best_ranks(eval_df):
-    """Find the best rank for each trial from full evaluation data"""
-    trial_results = []
-    for (true_rank, n_obj, ratio, trial_id), group in eval_df.groupby(
-        ["true_rank", "n_objects", "train_ratio", "trial_id"]
-    ):
-        best_rank = group.loc[group["mse"].idxmin()]
-        trial_results.append(
-            {
-                "n_objects": n_obj,
-                "train_ratio": ratio,
-                "trial_id": trial_id,
-                "detected_rank": best_rank["rank"],
-                "true_rank": true_rank,
-                "success": 1 if best_rank["rank"] == true_rank else 0,
-                "seed": best_rank["seed"],
-                "best_mse": best_rank["mse"],
-                "n_candidate_ranks": len(group),
-            }
-        )
-    return pd.DataFrame(trial_results)
-
-
-def create_summary_stats(eval_df):
-    """Create summary statistics from full evaluation results"""
-    trial_df = find_best_ranks(eval_df)
-
-    summary_df = (
-        trial_df.groupby(["true_rank", "n_objects", "train_ratio"])
-        .agg(
-            {
-                "success": ["mean", "std", "count"],
-                "best_mse": ["mean", "std"],
-                "detected_rank": lambda x: (
-                    x.mode().iloc[0] if len(x.mode()) > 0 else -1
-                ),
-            }
-        )
-        .reset_index()
-    )
-
-    # Flatten column names
-    summary_df.columns = [
-        "true_rank",
-        "n_objects",
-        "train_ratio",
-        "accuracy_mean",
-        "accuracy_std",
-        "n_trials_completed",
-        "mse_mean",
-        "mse_std",
-        "most_common_detected_rank",
-    ]
-
-    # Add confidence intervals
-    summary_df["accuracy_ci_lower"] = summary_df["accuracy_mean"] - 1.96 * summary_df[
-        "accuracy_std"
-    ] / np.sqrt(summary_df["n_trials_completed"])
-    summary_df["accuracy_ci_upper"] = summary_df["accuracy_mean"] + 1.96 * summary_df[
-        "accuracy_std"
-    ] / np.sqrt(summary_df["n_trials_completed"])
-
-    return summary_df
 
 
 def main():

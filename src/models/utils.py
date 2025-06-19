@@ -1,4 +1,5 @@
 """Simple utility functions - no wrappers, just helpers."""
+
 import numpy as np
 from sklearn.utils.validation import check_random_state
 
@@ -9,7 +10,7 @@ def init_factor(s, rank, init, random_state=None, eps=np.finfo(float).eps):
     """Keep the exact same function from base.py."""
     rng = check_random_state(random_state)
     if init == "random":
-        factor = 0.001 * rng.rand(s.shape[0], rank)
+        factor = 0.1 * rng.rand(s.shape[0], rank)
     elif init == "random_sqrt":
         avg = np.sqrt(s.mean() / rank)
         factor = rng.rand(s.shape[0], rank) * avg
@@ -25,13 +26,14 @@ def init_factor(s, rank, init, random_state=None, eps=np.finfo(float).eps):
         raise ValueError(f"Invalid initialization method: {init}")
     return factor
 
+
 def nndsvd(x, rank, eps=np.finfo(float).eps, random_state=None):
     """Keep exact same from base.py."""
     from sklearn.utils.extmath import randomized_svd, squared_norm
-    
+
     def norm(x):
         return np.sqrt(squared_norm(x))
-    
+
     u, s, v = randomized_svd(x, rank, random_state=random_state)
     w = np.zeros_like(u)
     h = np.zeros_like(v)
@@ -64,7 +66,7 @@ def nndsvd(x, rank, eps=np.finfo(float).eps, random_state=None):
     h[h < eps] = 0
     np.abs(w, out=w)
     np.abs(h, out=h)
-    return w, h 
+    return w, h
 
 
 def explained_variance(x: Array, x_hat: Array, center: bool = False) -> float:
