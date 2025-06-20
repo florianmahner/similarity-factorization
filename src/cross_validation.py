@@ -6,56 +6,6 @@ from sklearn.utils import check_random_state
 from .models.admm import ADMM
 
 
-def create_admm_param_grid(
-    rank_range=None,
-    rho_range=None,
-    max_outer_range=None,
-    tol_range=None,
-):
-    """Create parameter grid for ADMM cross-validation.
-
-    Args:
-        rank_range: List of rank values to test (default: [5, 10, 15, 20])
-        rho_range: List of rho values to test (default: None, meaning not optimized)
-        max_outer_range: List of max_outer values to test (default: None)
-        tol_range: List of tolerance values to test (default: None)
-
-    Returns:
-        dict: Parameter grid for GridSearchCV
-
-    Examples:
-        # Only optimize rank
-        grid = create_admm_param_grid()
-
-        # Optimize rank and rho
-        grid = create_admm_param_grid(rho_range=[0.1, 1.0, 10.0])
-
-        # Custom rank range with rho optimization
-        grid = create_admm_param_grid(
-            rank_range=[3, 5, 7, 10],
-            rho_range=[0.5, 2.0, 5.0]
-        )
-    """
-    param_grid = {}
-
-    # Always include rank (most important parameter)
-    if rank_range is None:
-        rank_range = [5, 10, 15, 20]
-    param_grid["rank"] = rank_range
-
-    # Optional parameters
-    if rho_range is not None:
-        param_grid["rho"] = rho_range
-
-    if max_outer_range is not None:
-        param_grid["max_outer"] = max_outer_range
-
-    if tol_range is not None:
-        param_grid["tol"] = tol_range
-
-    return param_grid
-
-
 def train_val_split(n, train_ratio, rng):
     upper = rng.random((n, n)) < train_ratio
     upper = np.triu(upper, 1)
