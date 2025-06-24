@@ -15,6 +15,44 @@ SPOSE_49_PATH = (
 )
 
 
+def estimate_effective_rank(s):
+    """
+    Compute the effective rank of a matrix using the exponential of Shannon entropy
+    of normalized singular values (see Roy and Vetterli, 2007).
+    """
+    s = np.asarray(s)
+
+    if s.ndim == 2:
+        singular_values = np.linalg.svd(s, compute_uv=False)
+    else:
+        singular_values = s
+
+    singular_values = singular_values[singular_values > 0]
+
+    if len(singular_values) == 0:
+        return 0.0
+
+    p = singular_values / np.sum(singular_values)
+
+    # Compute Shannon entropy: H = -sum(p * log(p))
+    entropy = -np.sum(p * np.log(p))
+    return np.exp(entropy)
+
+
+def compute_subsampling_fraction(s: np.ndarray, safety_factor: float = 2.0) -> float:
+    """
+    Compute subsampling fraction based on O(n r log n) bound.
+    """
+    n = s.shape[0]
+    effective_rank = estimate_effective_rank(s)
+
+    total_entries = n * (n + 1) // 2
+    required_samples = safety_factor * effective_rank * n * np.log(n)
+    fraction = min(required_samples / total_entries, 1.0)
+
+    return fraction
+
+
 @dataclass
 class CVParams:
     n_splits: int = 5
@@ -22,7 +60,7 @@ class CVParams:
     max_iter: int = 500
     init: str = "random"
     random_state: int = 0
-    candidate_ranks: list[int] = range(2, 7)
+    candidate_ranks: range = range(2, 7)
     verbose: int = 10
 
 
@@ -147,34 +185,6 @@ def add_noise_with_snr_db(
 ) -> np.ndarray:
     """
     Add zero-mean Gaussian noise to *signal* to achieve a target SNR.
-
-    Parameters
-    ----------
-    signal : ndarray of float, shape (..., n_samples)
-        The clean data to which noise will be added.
-    snr_db : float
-        Desired signal-to-noise ratio in decibels (dB).
-        For reference, 20 dB ≈ 10:1 power ratio, 0 dB = 1:1, −10 dB ≈ 0.1:1.
-    rng : int | numpy.random.Generator | None, optional
-        Seed or `Generator` to make the operation reproducible.
-        If *None*, draws from a new, non-deterministic `default_rng()`.
-    centre : bool, default True
-        If True, subtract the mean of *signal* before computing power
-        (recommended unless the DC component is meaningful).
-
-    Returns
-    -------
-    noisy_signal : ndarray, same shape as *signal*
-        The input trace plus Gaussian noise whose variance is set so that
-        the realised SNR equals *snr_db* **in expectation**.
-
-    Notes
-    -----
-    The added noise ε is drawn i.i.d. ~N(0, σ²) with
-
-        σ² = P_signal / 10^(snr_db / 10)
-
-    where `P_signal` is the variance (after optional centring) of *signal*.
     """
     rng_gen: np.random.Generator
     if rng is None:

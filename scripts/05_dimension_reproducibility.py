@@ -1,5 +1,5 @@
 import numpy as np
-from experiments.bootstrap import run_reproducibility_analysis
+from experiments.dimension_reliability import run_reproducibility_analysis
 
 # Example usage
 if __name__ == "__main__":

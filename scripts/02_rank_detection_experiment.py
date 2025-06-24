@@ -14,8 +14,8 @@ from tools.rsa import compute_similarity
 
 warnings.filterwarnings("ignore")
 
-# Import your SRF functions
-from experiments.cross_validation import evaluate_rank, train_val_split
+from cross_validation import train_val_split, fit_and_score
+from models.admm import ADMM
 
 METRIC = "linear"
 
@@ -47,11 +47,16 @@ def evaluate_rank_for_trial(n_objects, train_ratio, true_rank, trial_id, seed, r
     rng = np.random.default_rng(seed)
     rsm, _ = simulate_rsm_data(n_objects, true_rank, snr=0.0, seed=seed)
 
-    # Create train/val split manually
-    mask_train, mask_val = train_val_split(rsm.shape[0], train_ratio, rng)
-    # NOTE: I think no matter of the metric used to generate the RSM, I need to use a linear kernel here!!!
-    # Make this more explicit by not passing any metric here!
-    _, mse = evaluate_rank(rank, rsm, mask_train, mask_val, rng, (None, None), "linear")
+    # Create train/val split using the cross validation function
+    train_mask, val_mask = train_val_split(rsm, train_ratio, rng)
+
+    # Create ADMM estimator and parameters
+    estimator = ADMM(random_state=seed)
+    params = {"rank": rank}
+
+    # Use the fit_and_score function
+    result = fit_and_score(estimator, rsm, train_mask, val_mask, params)
+    mse = result["score"]
 
     return {
         "n_objects": n_objects,
@@ -121,6 +126,10 @@ def run_experiment(
     results_output_file = output_dir / "rank_detection_full_results.csv"
     eval_df.to_csv(results_output_file, index=False)
 
+    if verbose:
+        print(f"Experiment completed in {runtime_minutes:.2f} minutes")
+        print(f"Results saved to {results_output_file}")
+
 
 def main():
     """Command line interface"""
@@ -136,7 +145,7 @@ def main():
         "--ranks",
         nargs="+",
         type=int,
-        default=[10],
+        default=[5, 10, 20],
         help="True ranks for synthetic data",
     )
     parser.add_argument(

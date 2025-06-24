@@ -14,8 +14,7 @@ from tools.rsa import compute_similarity
 
 warnings.filterwarnings("ignore")
 
-# Import cross-validation functions
-from src.cross_validation import cross_validate_admm
+from cross_validation import cross_validate_admm
 
 METRIC = "linear"
 
@@ -92,7 +91,7 @@ def evaluate_trial_gridsearch(
 def run_experiment_gridsearch(
     n_objects_list=[20, 30, 50, 70, 100, 150, 200],
     train_ratios=None,
-    true_ranks=[5, 10, 20],
+    true_ranks=[5, 10, 20, 30],
     n_trials_per_condition=10,
     n_jobs=-1,
     output_dir="./results",
@@ -176,7 +175,7 @@ def main():
         "--ranks",
         nargs="+",
         type=int,
-        default=[10],
+        default=[20],
         help="True ranks for synthetic data",
     )
     parser.add_argument(

@@ -9,58 +9,54 @@ from collections import defaultdict
 from models.admm import ADMM
 
 
-def estimate_effective_rank(similarity_matrix: np.ndarray) -> int:
-    """Estimate the effective rank of the similarity matrix."""
-    return np.linalg.matrix_rank(similarity_matrix)
+def find_observed_entries(x: np.ndarray, missing_strategy: str = "nan") -> np.ndarray:
+    if missing_strategy not in ["nan", "zero"]:
+        raise ValueError("missing_strategy must be 'nan' or 'zero'")
 
-
-def estimate_subsample_size(similarity_matrix: np.ndarray) -> int:
-    """Estimate the subsample size for the similarity matrix."""
-    # TODO this is where we should add the correct subsampling strategy
-    effective_rank = estimate_effective_rank(similarity_matrix)
-    n = similarity_matrix.shape[0]
-    return int(n * effective_rank / n)
-
-
-# def train_val_split(
-#     n: int, train_ratio: float, rng: np.random.RandomState
-# ) -> tuple[np.ndarray, np.ndarray]:
-#     """Create train/validation masks for symmetric matrix entries."""
-#     upper = rng.random((n, n)) < train_ratio
-#     upper = np.triu(upper, 1)
-#     train_mask = upper + upper.T
-#     val_mask = ~train_mask
-#     np.fill_diagonal(train_mask, False)
-#     np.fill_diagonal(val_mask, False)
-#     return train_mask, val_mask
+    if missing_strategy == "nan":
+        return ~np.isnan(x)
+    else:
+        return x != 0
 
 
 def train_val_split(
-    n: int,
+    x: np.ndarray,
     train_ratio: float,
     rng: np.random.RandomState,
-    observed_mask: np.ndarray = None,
+    missing_strategy: str = "nan",
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Create train/validation masks for symmetric matrix entries."""
-    if observed_mask is None:
-        # Use all off-diagonal entries when no missing data
-        upper = rng.random((n, n)) < train_ratio
+    observed_mask = find_observed_entries(x, missing_strategy)
+
+    if np.all(observed_mask):
+        # if we have no missing entries, we can split the entries randomly
+        upper = rng.random(x.shape) < train_ratio
         upper = np.triu(upper, 1)
         train_mask = upper + upper.T
         val_mask = ~train_mask
     else:
-        # Only split the OBSERVED entries for train/val
+        # if we have missing entries, we need to split the observed entries
         observed_upper = np.triu(observed_mask, 1)
         train_upper = rng.random(observed_upper.shape) < train_ratio
-        train_upper = train_upper & observed_upper  # Only train on observed
+        train_upper = train_upper & observed_upper
         train_mask = train_upper + train_upper.T
-
-        # Validation = observed entries that are NOT in training
         val_mask = observed_mask & ~train_mask
 
-    np.fill_diagonal(train_mask, False)
-    np.fill_diagonal(val_mask, False)
     return train_mask, val_mask
+
+
+def fit_and_score(estimator, x, train_mask, val_mask, params):
+    """Fit estimator with parameters and return validation score."""
+    est = clone(estimator).set_params(**params)
+    est.mask = train_mask.astype(float)
+    est.fit(x)
+
+    val_entries = val_mask.astype(bool)
+
+    if not val_entries.any():
+        return {"params": params, "score": 0.0, "estimator": est}
+
+    mse = np.mean((x[val_entries] - est.reconstruct()[val_entries]) ** 2)
+    return {"params": params, "score": mse, "estimator": est}
 
 
 class EntryMaskSplit(BaseCrossValidator):
@@ -71,10 +67,12 @@ class EntryMaskSplit(BaseCrossValidator):
         n_repeats: int = 5,
         train_ratio: float = 0.8,
         random_state: int | None = None,
+        missing_strategy: str = "nan",
     ):
         self.n_repeats = n_repeats
         self.train_ratio = train_ratio
         self.random_state = random_state
+        self.missing_strategy = missing_strategy
 
     def get_n_splits(
         self, x: np.ndarray = None, y: np.ndarray = None, groups: np.ndarray = None
@@ -85,54 +83,9 @@ class EntryMaskSplit(BaseCrossValidator):
         self, x: np.ndarray, y: np.ndarray = None, groups: np.ndarray = None
     ) -> Generator[tuple[np.ndarray, np.ndarray], None, None]:
         """Generate train/validation mask pairs for the matrix."""
-        if x.shape[0] != x.shape[1]:
-            raise ValueError("Input matrix must be square")
-
         rng = check_random_state(self.random_state)
         for _ in range(self.n_repeats):
-            yield train_val_split(x.shape[0], self.train_ratio, rng)
-
-
-# def _fit_and_score(estimator, x, train_mask, val_mask, params):
-#     """Fit estimator with parameters and return validation score."""
-#     est = clone(estimator).set_params(**params)
-#     est.mask = train_mask.astype(float)
-#     est.fit(x)
-
-#     val_entries = val_mask.astype(bool)
-
-#     if not val_entries.any():
-#         return {"params": params, "score": 0.0, "estimator": est}
-
-#     mse = np.mean((x[val_entries] - est.reconstruct()[val_entries]) ** 2)
-#     return {"params": params, "score": mse, "estimator": est}
-
-
-def _fit_and_score(estimator, x, train_mask, val_mask, params):
-    """Fit estimator with parameters and return validation score."""
-    est = clone(estimator).set_params(**params)
-
-    # Create mask for training: only use observed training entries
-    observed_mask = ~np.isnan(x)
-    final_train_mask = train_mask & observed_mask
-
-    # Replace NaN with zeros for ADMM fitting (will be ignored due to mask)
-    x_clean = np.nan_to_num(x, nan=0.0)
-    est.mask = final_train_mask.astype(float)
-    est.fit(x_clean)
-
-    # Validation: only evaluate on observed entries that were held out
-    val_entries = val_mask & observed_mask
-
-    if not val_entries.any():
-        return {"params": params, "score": 0.0, "estimator": est}
-
-    # Evaluate only on ORIGINAL observed values (not the filled zeros)
-    reconstruction = est.reconstruct()
-    mse = np.mean(
-        (x[val_entries] - reconstruction[val_entries]) ** 2
-    )  # Use original x, not x_clean!
-    return {"params": params, "score": mse, "estimator": est}
+            yield train_val_split(x, self.train_ratio, rng, self.missing_strategy)
 
 
 class ADMMGridSearchCV:
@@ -155,6 +108,7 @@ class ADMMGridSearchCV:
     def fit(self, x: np.ndarray) -> "ADMMGridSearchCV":
         """Fit grid search with full parallelization across all parameter x CV combinations."""
         param_grid = ParameterGrid(self.param_grid)
+
         cv_splits = list(self.cv.split(x))
 
         all_jobs = [
@@ -169,7 +123,7 @@ class ADMMGridSearchCV:
             )
 
         all_results = Parallel(n_jobs=self.n_jobs, verbose=self.verbose)(
-            delayed(_fit_and_score)(self.estimator, x, train_mask, val_mask, params)
+            delayed(fit_and_score)(self.estimator, x, train_mask, val_mask, params)
             for params, train_mask, val_mask in all_jobs
         )
 
@@ -198,19 +152,9 @@ class ADMMGridSearchCV:
         self.best_params_ = results[0]["params"]
         self.best_score_ = results[0]["mean_test_score"]
 
-        # FIX: Handle NaN in final fitting - clean matrix BEFORE fitting
         self.best_estimator_ = clone(self.estimator).set_params(**self.best_params_)
-
-        # For final fit, use all observed entries
-        observed_mask = ~np.isnan(x)
-        np.fill_diagonal(observed_mask, False)  # Exclude diagonal
-
-        # Replace NaN with zeros for fitting
-        x_clean = np.nan_to_num(x, nan=0.0)
-
-        self.best_estimator_.mask = observed_mask.astype(float)
-        self.best_estimator_.fit(x_clean)  # Pass cleaned matrix!
-
+        self.best_estimator_.mask = find_observed_entries(x, self.cv.missing_strategy)
+        self.best_estimator_.fit(x)
         return self
 
 
@@ -248,6 +192,7 @@ class _GridSearchResults:
         )
 
 
+# TODO think about renaming it to cross val score
 def cross_validate_admm(
     similarity_matrix: np.ndarray,
     param_grid: dict[str, list] | None = None,
@@ -256,13 +201,17 @@ def cross_validate_admm(
     random_state: int = 0,
     verbose: int = 1,
     n_jobs: int = -1,
+    missing_strategy: str = "nan",
 ) -> _GridSearchResults:
     """Cross-validate ADMM parameters for matrix completion with full parallelization."""
     if param_grid is None:
         param_grid = {"rank": [5, 10, 15, 20]}
 
     cv = EntryMaskSplit(
-        n_repeats=n_repeats, train_ratio=train_ratio, random_state=random_state
+        n_repeats=n_repeats,
+        train_ratio=train_ratio,
+        random_state=random_state,
+        missing_strategy=missing_strategy,
     )
     grid = ADMMGridSearchCV(
         estimator=ADMM(random_state=random_state),

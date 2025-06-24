@@ -73,27 +73,28 @@ def compute_similarity_matrix(
     n: int, triplets: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:
     counts = np.zeros((n, n))
-    pair_opportunities = np.zeros((n, n))
+    shown = np.zeros((n, n))
 
     for i, j, k in triplets:
         for a, b in [(i, j), (i, k), (j, k)]:
             if a != b:
-                pair_opportunities[a, b] += 1
-                pair_opportunities[b, a] += 1
+                shown[a, b] += 1
+                shown[b, a] += 1
 
         if i != j:
             counts[i, j] += 1
             counts[j, i] += 1
 
-    mask = (pair_opportunities > 0).astype(np.uint8)
-    np.fill_diagonal(mask, 0)
-
+    mask = shown > 0
+    np.fill_diagonal(mask, True)  # we still want self similarities in the loss
     similarity = np.divide(
         counts,
-        pair_opportunities,
+        shown,
         out=np.zeros_like(counts),
-        where=pair_opportunities != 0,
+        where=shown != 0,
     )
+    np.fill_diagonal(similarity, 1.0)
+
     return similarity, mask
 
 

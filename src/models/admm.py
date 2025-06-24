@@ -58,8 +58,8 @@ def update_w(
 ) -> NDArray:
     """
     Block successive upper bound minimization (Shi et al., 2016).
-    Implementation of the algorithm. See TABLE 1 in 'Inexact Block Coordinate
-    Descent Methods For Symmetric Nonnegative Matrix Factorization.'
+    Implementation of the algorithm. See TABLE 1 in "Inexact Block Coordinate
+    Descent Methods For Symmetric Nonnegative Matrix Factorization".
 
     Args:
         m: Target symmetric matrix to factorize
@@ -385,15 +385,12 @@ class ADMM(BaseEstimator, TransformerMixin):
             x: Symmetric matrix to transform
 
         Returns:
-            Transformed data of shape (n_samples, rank)
-
-        Note:
-            This method projects the input using x @ w, which may not be
-            meaningful for all applications of symmetric NMF.
+            Transformed data of shape (n_samples, n_samples)
+        # NOTE might not be meaningful for all applications of symmetric NMF
         """
         check_is_fitted(self)
         x = check_symmetric(x, raise_exception=True)
-        return x @ self.components_
+        return w @ w.T
 
     def fit_transform(self, x, y=None):
         """
