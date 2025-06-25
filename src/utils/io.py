@@ -5,6 +5,26 @@ from pathlib import Path
 import numpy as np
 
 
+def load_spose_embedding(path: str) -> np.ndarray:
+    return np.maximum(np.loadtxt(path), 0)
+
+
+def load_concept_mappings(
+    words_path: str, things_image_path: str, replacements: dict
+) -> list:
+    words48 = pd.read_csv(words_path)
+    cls_names = [replacements.get(name, name) for name in words48["Word"].values]
+
+    images = load_things_image_data(things_image_path, filter_behavior=True)
+    categories = [" ".join(Path(f).stem.split("_")[0:-1]) for f in images]
+    return [categories.index(c) for c in cls_names]
+
+
+def load_words48(words48_path: str) -> np.ndarray:
+    rdm = loadmat(words48_path)["RDM48_triplet"]
+    return 1 - rdm
+
+
 def load_things_image_data(
     img_root: str,
     filter_behavior: bool = False,
