@@ -12,13 +12,38 @@ from collections import defaultdict
 
 import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.utils.validation import check_is_fitted, check_symmetric
-
+from sklearn.utils.validation import check_is_fitted, check_symmetric, validate_data
 from .utils import init_factor
 
 NDArray = np.ndarray
 OptionalFloat = float | None
 OptionalArray = NDArray | None
+
+
+def _get_missing_mask(x: NDArray, missing_values) -> NDArray:
+    """
+    Create a boolean mask indicating missing values.
+
+    Similar to sklearn's _get_mask but adapted for our use case.
+    """
+    if missing_values is np.nan:
+        return np.isnan(x)
+    elif missing_values is None:
+        # Handle None as missing value
+        return pd.isna(x) if hasattr(x, "isna") else np.isnan(x)
+    else:
+        # Handle specific values (like 0.0, -999, etc.)
+        return x == missing_values
+
+
+def _validate_missing_values(missing_values: float | None):
+    """Validate the missing_values parameter."""
+    if missing_values is not np.nan and missing_values is not None:
+        if not isinstance(missing_values, (int, float)):
+            raise ValueError(
+                f"missing_values must be np.nan, None, or a numeric value, "
+                f"got {type(missing_values)}"
+            )
 
 
 def _quartic_root(a: float, b: float, c: float, d: float) -> float:
@@ -117,34 +142,34 @@ def _get_update_w_function():
         pyximport.install(
             language_level=3, setup_args={"include_dirs": np.get_include()}
         )
-        from .bsum_cython import update_w as update_w_cython
+        from .bsum import update_w
 
-        return update_w_cython
+        return update_w
     except ImportError:
         # Silently fall back to Python implementation for multiprocessing compatibility
         return update_w
 
 
 def update_v(
-    m: NDArray,
+    observed_mask: NDArray,
     s: NDArray,
     w: NDArray,
     lam: NDArray,
     rho: float,
-    min_val: OptionalFloat,
-    max_val: OptionalFloat,
+    bound_min: float,
+    bound_max: float,
 ) -> NDArray:
     """
     Update auxiliary variable v in ADMM algorithm.
 
     Args:
-        m: Binary observation mask
+        observed_mask: Binary observation mask
         s: Original data matrix
         w: Current factor matrix
         lam: Lagrange multipliers
         rho: Penalty parameter
-        min_val: Lower bound constraint
-        max_val: Upper bound constraint
+        bound_min: Lower bound constraint
+        bound_max: Upper bound constraint
 
     Returns:
         Updated auxiliary variable v
@@ -152,14 +177,11 @@ def update_v(
     ww = w @ w.T  # current reconstruction
     v = ww - lam / rho  # default (missing-entry) formula
 
-    observed = m.astype(bool)
+    observed = observed_mask.astype(bool)
     v[observed] = (s[observed] + rho * ww[observed] - lam[observed]) / (1.0 + rho)
 
     # since this optimization problem is linear we can do a projection step here to respect the bounds
-    if min_val is not None:
-        v[v < min_val] = min_val
-    if max_val is not None:
-        v[v > max_val] = max_val
+    np.clip(v, bound_min, bound_max, out=v)
 
     return v
 
@@ -180,7 +202,7 @@ def update_lambda(lam: NDArray, v: NDArray, w: NDArray, rho: float) -> NDArray:
     return lam + rho * (v - w @ w.T)
 
 
-class ADMM(BaseEstimator, TransformerMixin):
+class ADMM(TransformerMixin, BaseEstimator):
     """
     Symmetric Non-negative Matrix Factorization using ADMM.
 
@@ -188,7 +210,7 @@ class ADMM(BaseEstimator, TransformerMixin):
     the Alternating Direction Method of Multipliers (ADMM). It can handle missing
     entries and optional bound constraints on the factorization.
 
-    The algorithm solves: min_{w≥0,v} ||M ⊙ (S - v)||²_F + ρ/2 ||v - ww^T||²_F
+    The algorithm solves: min_{w>=0,v} ||M o (S - v)||^2_F + rho/2 ||v - ww^T||^2_F
     subject to optional bounds on v, where M is an observation mask.
 
     Parameters:
@@ -200,8 +222,7 @@ class ADMM(BaseEstimator, TransformerMixin):
         verbose: Whether to print optimization progress
         init: Method for factor initialization ('random', 'random_sqrt', 'nndsvd', 'nndsvdar')
         random_state: Random seed for reproducible initialization
-        mask: Binary mask indicating observed entries (None = all observed)
-        bounds: Optional (min, max) bounds for auxiliary variable entries
+        missing_values: values to be treated as missing to mask the matrix (default: np.nan)
 
     Attributes:
         w_: Learned factor matrix w of shape (n_samples, rank)
@@ -215,14 +236,10 @@ class ADMM(BaseEstimator, TransformerMixin):
         >>> w = model.fit_transform(similarity_matrix)
         >>> reconstruction = w @ w.T
 
-        >>> # Usage with missing data
-        >>> mask = np.random.binomial(1, 0.8, similarity_matrix.shape)
-        >>> model = ADMM(rank=10, mask=mask)
+        >>> # Usage with missing data (NaN values)
+        >>> similarity_matrix[mask] = np.nan
+        >>> model = ADMM(rank=10, missing_values=np.nan)
         >>> w = model.fit_transform(similarity_matrix)
-
-    References:
-        Shi, J., et al. (2016). "Inexact Block Coordinate Descent Methods For
-        Symmetric Nonnegative Matrix Factorization." NIPS.
     """
 
     def __init__(
@@ -235,8 +252,7 @@ class ADMM(BaseEstimator, TransformerMixin):
         verbose: bool = False,
         init: str = "random_sqrt",
         random_state: int | None = None,
-        mask: OptionalArray = None,
-        bounds: tuple[OptionalFloat, OptionalFloat] = None,
+        missing_values: float | None = np.nan,
     ) -> None:
         self.rank = rank
         self.rho = rho
@@ -246,8 +262,7 @@ class ADMM(BaseEstimator, TransformerMixin):
         self.verbose = verbose
         self.init = init
         self.random_state = random_state
-        self.mask = mask
-        self.bounds = bounds
+        self.missing_values = missing_values
 
     def _validate_parameters(self):
         """Validate input parameters."""
@@ -261,33 +276,37 @@ class ADMM(BaseEstimator, TransformerMixin):
             raise ValueError(f"max_inner must be positive, got {self.max_inner}")
         if self.tol < 0:
             raise ValueError(f"tol must be non-negative, got {self.tol}")
-
-    def _validate_input(self, x):
-        """Validate and prepare input data."""
-        x = check_symmetric(x, raise_exception=True)
-
-        if self.mask is None:
-            self.mask = np.ones_like(x)
-        else:
-            if self.mask.shape != x.shape:
-                raise ValueError(
-                    f"mask shape {self.mask.shape} does not match data shape {x.shape}"
-                )
-
-        return x
+        _validate_missing_values(self.missing_values)
 
     def _compute_metrics(
         self, x: NDArray, v: NDArray, w: NDArray, lam: NDArray
     ) -> dict[str, float]:
         """Compute comprehensive optimization metrics for monitoring."""
-        data_fit = np.linalg.norm(self.mask * (x - v), "fro") ** 2
+        # Use the stored observation mask for metrics computation
+        observed_mask = self._observation_mask
+
+        data_fit = np.sum((observed_mask * (x - v)) ** 2)
 
         constraint_violation = v - w @ w.T
         penalty = (self.rho / 2.0) * np.linalg.norm(constraint_violation, "fro") ** 2
         lagrangian = np.sum(lam * constraint_violation)
         total_obj = data_fit + penalty + lagrangian
-        rec_error = np.linalg.norm(self.mask * (x - w @ w.T), "fro")
-        evar = 1.0 - rec_error / np.linalg.norm(x * self.mask, "fro")
+        rec_error = np.sqrt(np.sum((observed_mask * (x - w @ w.T)) ** 2))
+
+        # Explained variance on observed entries only
+        if observed_mask.any():
+            observed_data = x[observed_mask]
+            observed_reconstruction = (w @ w.T)[observed_mask]
+            total_var = np.var(observed_data) * len(observed_data)
+            if total_var > 0:
+                evar = (
+                    1.0
+                    - np.sum((observed_data - observed_reconstruction) ** 2) / total_var
+                )
+            else:
+                evar = 0.0
+        else:
+            evar = 0.0
 
         return {
             "total_objective": total_obj,
@@ -296,15 +315,18 @@ class ADMM(BaseEstimator, TransformerMixin):
             "lagrangian": lagrangian,
             "rec_error": rec_error,
             "evar": evar,
+            "n_observed": observed_mask.sum(),
+            "n_missing": (~observed_mask).sum(),
         }
 
-    def _fit_complete_data(self, x):
+    def _fit_complete_data(self, x: NDArray):
         """Optimized fitting for complete data (no missing entries)."""
         x0 = init_factor(x, self.rank, self.init, self.random_state)
         total_iter = self.max_inner * self.max_outer
 
         update_w_func = _get_update_w_function()
         self.w_ = update_w_func(x, x0, max_iter=total_iter, tol=self.tol)
+
         self.components_ = self.w_
         self.n_iter_ = 1
         self.history_ = defaultdict(list)
@@ -316,19 +338,20 @@ class ADMM(BaseEstimator, TransformerMixin):
 
         return self
 
-    def _fit_missing_data(self, x):
+    def _fit_missing_data(self, x: NDArray):
         """ADMM fitting for data with missing entries."""
         w = init_factor(x, self.rank, self.init, self.random_state)
         lam = np.zeros_like(x)
-        min_val, max_val = self.bounds if self.bounds is not None else (None, None)
-
+        bound_min, bound_max = x.min(), x.max()
         history = defaultdict(list)
 
         update_w_func = _get_update_w_function()
 
         for i in range(1, self.max_outer + 1):
             # Update auxiliary variable v
-            v = update_v(self.mask, x, w, lam, self.rho, min_val, max_val)
+            v = update_v(
+                self._observation_mask, x, w, lam, self.rho, bound_min, bound_max
+            )
 
             # Update factor matrix w
             t = v + lam / self.rho
@@ -346,8 +369,11 @@ class ADMM(BaseEstimator, TransformerMixin):
 
             if self.verbose:
                 print(
-                    f"Iteration {i}/{self.max_outer}, Objective: {metrics['total_objective']:.3f}, "
-                    f"Rec Error: {metrics['rec_error']:.3f}, Evar: {metrics['evar']:.3f}"
+                    f"Iteration {i}/{self.max_outer}, "
+                    f"Objective: {metrics['total_objective']:.3f}, "
+                    f"Rec Error: {metrics['rec_error']:.3f}, "
+                    f"Evar: {metrics['evar']:.3f}, "
+                    f"Observed: {metrics['n_observed']}/{metrics['n_observed'] + metrics['n_missing']}"
                 )
 
         self.w_ = w
@@ -361,18 +387,43 @@ class ADMM(BaseEstimator, TransformerMixin):
         """
         Fit the symmetric NMF model to the data.
 
-        Args:
-            x: Symmetric similarity matrix of shape (n_samples, n_samples)
-            y: Ignored (present for sklearn compatibility)
+        Parameters
+        ----------
+        x : array-like of shape (n_samples, n_samples)
+            Symmetric similarity matrix. Missing values are allowed and should
+            be marked according to the missing_values parameter.
+        y : Ignored
+            Not used, present here for API consistency by convention.
 
-        Returns:
-            self: Fitted estimator
+        Returns
+        -------
+        self : object
+            Fitted estimator.
         """
         self._validate_parameters()
-        x = self._validate_input(x)
 
-        # Choose optimization strategy based on data completeness
-        if np.all(self.mask == 1):
+        x = validate_data(
+            self,
+            x,
+            reset=True,
+            ensure_all_finite="allow-nan" if self.missing_values is np.nan else True,
+        )
+
+        missing_mask = _get_missing_mask(x, self.missing_values)
+        if np.all(missing_mask):
+            raise ValueError(
+                "No observed entries found in the data. All values are missing."
+            )
+
+        check_symmetric(missing_mask, raise_exception=True)
+        observed_mask = ~missing_mask
+        x[missing_mask] = 0.0
+
+        x = check_symmetric(x, raise_exception=True)
+        self._observation_mask = observed_mask
+        self._missing_mask = missing_mask
+
+        if np.all(observed_mask):
             return self._fit_complete_data(x)
         else:
             return self._fit_missing_data(x)
@@ -381,16 +432,18 @@ class ADMM(BaseEstimator, TransformerMixin):
         """
         Project data onto the learned factor space.
 
-        Args:
-            x: Symmetric matrix to transform
+        Parameters
+        ----------
+        x : array-like of shape (n_samples, n_samples)
+            Symmetric matrix to transform
 
-        Returns:
-            Transformed data of shape (n_samples, n_samples)
-        # NOTE might not be meaningful for all applications of symmetric NMF
+        Returns
+        -------
+        w : array-like of shape (n_samples, rank)
+            Transformed data of shape (n_samples, rank)
         """
         check_is_fitted(self)
-        x = check_symmetric(x, raise_exception=True)
-        return w @ w.T
+        return self.w_
 
     def fit_transform(self, x, y=None):
         """
@@ -403,8 +456,7 @@ class ADMM(BaseEstimator, TransformerMixin):
         Returns:
             Learned factor matrix w of shape (n_samples, rank)
         """
-        self.fit(x, y)
-        return self.w_
+        return self.fit(x, y).transform(x)
 
     def reconstruct(self, w=None):
         """
@@ -415,7 +467,7 @@ class ADMM(BaseEstimator, TransformerMixin):
                If None, uses the fitted factors.
 
         Returns:
-            Reconstructed similarity matrix
+            s_hat: Reconstructed similarity matrix
         """
         if w is None:
             check_is_fitted(self)
@@ -425,6 +477,23 @@ class ADMM(BaseEstimator, TransformerMixin):
 
     def score(self, x, y=None):
         """
-        Score the model using reconstruction error.
+        Score the model using reconstruction error on observed entries only.
+        Parameters
+        ----------
+        x : array-like of shape (n_samples, n_samples)
+            Symmetric similarity matrix. Missing values are allowed and should
+            be marked according to the missing_values parameter.
+        y : Ignored
+            Not used, present here for API consistency by convention.
+
+        Returns
+        -------
+        mse : float
+            Mean squared error of the reconstruction on observed entries.
         """
-        return np.linalg.norm(x - self.reconstruct(), "fro")
+        check_is_fitted(self)
+        reconstruction = self.reconstruct()
+        mse = np.mean(
+            (x[self._observation_mask] - reconstruction[self._observation_mask]) ** 2
+        )
+        return mse

@@ -90,23 +90,21 @@ def compute_similarity_matrix(
     similarity = np.divide(
         counts,
         shown,
-        out=np.zeros_like(counts),
+        out=np.nan * np.ones_like(counts),
         where=shown != 0,
     )
     np.fill_diagonal(similarity, 1.0)
 
-    return similarity, mask
+    return similarity
 
 
 def fit_admm_model(
-    similarity: np.ndarray, mask: np.ndarray, params: dict, seed: int = None
+    similarity: np.ndarray, params: dict, seed: int = None
 ) -> np.ndarray:
     local_params = params.copy()
     local_params["random_state"] = seed
-    model = ADMM(**local_params)
-    return model.fit_transform(
-        similarity, mask=mask, bounds=(similarity[mask].min(), similarity[mask].max())
-    )
+    model = ADMM.set_params(**local_params)
+    return model.fit_transform(similarity)
 
 
 def softmax(w_i: np.ndarray, w_j: np.ndarray, w_k: np.ndarray) -> int:
@@ -129,6 +127,7 @@ def evaluate_triplets(
 
 
 def reconstruct_admm_rsm(w):
+    # TODO replace with reconstrut function
     sim = w @ w.T
     sim_copy = sim.copy()
     np.fill_diagonal(sim_copy, 0)
@@ -147,11 +146,10 @@ def run_single_seed(
     indices_48,
     rsm_48_true,
     similarity,
-    mask,
     validation_triplets,
     admm_params,
 ):
-    admm_embedding = fit_admm_model(similarity, mask, admm_params, seed=seed)
+    admm_embedding = fit_admm_model(similarity, admm_params, seed=seed)
 
     rsm_48_spose = reconstruct_rsm_batched(spose_embedding[indices_48])
     rsm_admm = reconstruct_admm_rsm(admm_embedding)
@@ -177,7 +175,9 @@ def run_single_seed(
 def run_low_data_experiment(
     seed, data_percentage, full_triplets, admm_params, validation_triplets
 ):
+    # TODO Check how many triplets are sampled and what the fraction of the similarity matrix is, eg how much is missing.
     sampled_triplets = sample_triplets(full_triplets, data_percentage, seed)
+
     similarity, mask = compute_similarity_matrix(1854, sampled_triplets)
 
     if mask.sum() == 0:
@@ -216,7 +216,7 @@ def load_shared_data(
     rsm_48_true = load_ground_truth(ground_truth_rsm_path, ground_truth_rsm_key)
 
     triplets = np.loadtxt(triplets_path).astype(int)
-    similarity, mask = compute_similarity_matrix(n_items, triplets)
+    similarity = compute_similarity_matrix(n_items, triplets)
     validation_triplets = np.loadtxt(validation_triplets_path).astype(int)
 
     return (
@@ -224,7 +224,6 @@ def load_shared_data(
         indices_48,
         rsm_48_true,
         similarity,
-        mask,
         validation_triplets,
         triplets,
     )

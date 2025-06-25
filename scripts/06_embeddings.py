@@ -207,8 +207,8 @@ def run_full_analysis(
             "peterson-animals": load_dataset("peterson-animals"),
             "peterson-various": load_dataset("peterson-various"),
             "mur92": load_dataset("mur92"),
-            "cichy118": load_dataset("cichy118"),
-            "nsd": load_dataset("nsd"),
+            # "cichy118": load_dataset("cichy118"),
+            # "nsd": load_dataset("nsd"),
         }
 
     output_path = Path(output_dir)

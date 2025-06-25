@@ -54,6 +54,7 @@ ADMM_PARAMS = {
     "tol": 0.0,
     "rho": 1.0,
     "init": "random",
+    "missing_values": np.nan,
 }
 
 # Experiment parameters
@@ -71,7 +72,6 @@ GROUND_TRUTH_RSM_KEY = "RDM48_triplet"
 CATEGORY_REPLACEMENTS = {"camera": "camera1", "file": "file1"}
 
 
-
 def main():
     """Main analysis pipeline with parallel execution across seeds."""
     print(f"\nStarting analysis with {N_SEEDS} seeds using {N_WORKERS} workers...")
@@ -84,9 +84,8 @@ def main():
         indices_48,
         rsm_48_true,
         similarity,
-        mask,
         validation_triplets,
-        full_triplets
+        full_triplets,
     ) = load_shared_data(
         SPOSE_EMBEDDING_PATH,
         WORDS48_PATH,
@@ -97,8 +96,6 @@ def main():
 
     print(f"Running main analysis with {N_SEEDS} seeds in parallel...")
 
-    breakpoint()
-
     # Run main analysis
     results = Parallel(n_jobs=N_WORKERS, verbose=10)(
         delayed(run_single_seed)(
@@ -107,7 +104,6 @@ def main():
             indices_48,
             rsm_48_true,
             similarity,
-            mask,
             validation_triplets,
             ADMM_PARAMS,
         )
@@ -129,7 +125,7 @@ def main():
     similarity_df = pd.DataFrame(all_similarity_data)
 
     summary_df = compute_summary_statistics(results_df)
-    
+
     print(f"\nRunning low data regime experiments...")
     print(f"Data percentages: {[f'{p:.1%}' for p in DATA_PERCENTAGES]}")
 
@@ -175,9 +171,7 @@ def main():
         low_data_df.to_csv(LOW_DATA_CSV, index=False)
         low_data_summary_df.to_csv(LOW_DATA_SUMMARY_CSV, index=False)
 
-
     print("Running SPoSE reconstruction simulation...")
-
 
     spose_embedding = load_spose_embedding(
         max_objects=N_ITEMS, max_dims=MAX_DIM, num_dims=MAX_DIM
@@ -190,6 +184,7 @@ def main():
         rho=1.0,
         init="random_sqrt",
         verbose=True,
+        missing_values=np.nan,
     )
 
     # Run the simulation with different seeds
@@ -203,7 +198,6 @@ def main():
     path = Path(f"results/spose/{MAX_DIM}/spose_reconstruction.csv")
     path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(path, index=False)
-
 
 
 if __name__ == "__main__":
