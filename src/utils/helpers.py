@@ -6,6 +6,9 @@ from scipy.optimize import linear_sum_assignment
 from numpy.random import Generator
 from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
 from dataclasses import dataclass
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import pairwise_distances
+from scipy.stats import entropy
 
 SPOSE_66_PATH = (
     "/LOCAL/fmahner/similarity-factorization/data/misc/spose_embedding_66d.txt"
@@ -15,42 +18,33 @@ SPOSE_49_PATH = (
 )
 
 
-def estimate_effective_rank(s):
+def estimate_effective_rank(rsm: np.ndarray) -> float:
     """
-    Compute the effective rank of a matrix using the exponential of Shannon entropy
-    of normalized singular values (see Roy and Vetterli, 2007).
+    Compute the effective rank of a square matrix
+    following Roy &Vetterli (2007).
     """
-    s = np.asarray(s)
-
-    if s.ndim == 2:
-        singular_values = np.linalg.svd(s, compute_uv=False)
-    else:
-        singular_values = s
-
-    singular_values = singular_values[singular_values > 0]
-
-    if len(singular_values) == 0:
-        return 0.0
-
-    p = singular_values / np.sum(singular_values)
-
-    # Compute Shannon entropy: H = -sum(p * log(p))
-    entropy = -np.sum(p * np.log(p))
-    return np.exp(entropy)
+    singular_values = np.linalg.svd(rsm, compute_uv=False)
+    probabilities = singular_values / singular_values.sum()
+    entropy = -np.sum(probabilities * np.log(probabilities, where=probabilities > 0))
+    return float(np.exp(entropy))
 
 
-def compute_subsampling_fraction(s: np.ndarray, safety_factor: float = 2.0) -> float:
-    """
-    Compute subsampling fraction based on O(n r log n) bound.
-    """
-    n = s.shape[0]
+def compute_subsampling_fraction_symmetric(
+    s: np.ndarray, constant: float = 1.0
+) -> float:
+    n = len(s)
+
+    # For symmetric matrices, we observe upper triangular + diagonal
     effective_rank = estimate_effective_rank(s)
 
-    total_entries = n * (n + 1) // 2
-    required_samples = safety_factor * effective_rank * n * np.log(n)
-    fraction = min(required_samples / total_entries, 1.0)
-
-    return fraction
+    # For symmetric matrices: c n r log(n)**2
+    required_samples = constant * effective_rank * n * (np.log(n) ** 2)
+    degrees_of_freedom = n * (n + 1) // 2
+    print(f"Effective rank: {effective_rank}")
+    print(f"Required samples: {required_samples}")
+    print(f"Degrees of freedom: {degrees_of_freedom}")
+    print(f"Fraction of entries to sample: {required_samples / degrees_of_freedom}")
+    return min(required_samples / degrees_of_freedom, 1.0)
 
 
 @dataclass
@@ -329,3 +323,46 @@ def is_symmetric(x):
 
 def is_psd(x):
     return np.all(np.linalg.eigvals(x) >= 0)
+
+
+def rbf_entropy_heuristic(
+    x: np.ndarray,
+    sigma_values: np.ndarray,
+    n_bins: int = 100,
+    return_entropy: bool = False,
+):
+    """
+    Automatically select RBF sigma by maximizing Shannon entropy of off-diagonal kernel entries.
+    Parameters:
+        x: np.ndarray, shape (n_samples, n_features)
+            Input data.
+        sigma_values: np.ndarray
+            Candidate sigma values to try.
+        n_bins: int
+            Number of bins to use for entropy histogram.
+    """
+
+    x = StandardScaler().fit_transform(x)
+    d = pairwise_distances(x, metric="euclidean") ** 2
+    n = d.shape[0]
+
+    entropy_values = []
+    for sigma in sigma_values:
+        k = np.exp(-d / (2 * sigma**2))
+
+        k_offdiag = k[~np.eye(n, dtype=bool)]
+
+        # Histogram to estimate empirical distribution
+        hist, _ = np.histogram(k_offdiag, bins=n_bins, range=(0, 1), density=True)
+        hist = hist[hist > 0]  # Avoid log(0)
+
+        # Shannon entropy
+        h = entropy(hist, base=np.e)
+        entropy_values.append(h)
+
+    best_idx = np.argmax(entropy_values)
+    best_sigma = sigma_values[best_idx]
+
+    if return_entropy:
+        return best_sigma, entropy_values
+    return best_sigma

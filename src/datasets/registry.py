@@ -30,7 +30,21 @@ def load_dataset(name: str, **kwargs) -> BaseDataset:
 
     # Get __init__ signature and filter kwargs to only pass valid ones
     init_signature = inspect.signature(dataset_cls.__init__)
-    valid_kwargs = {k: v for k, v in kwargs.items() if k in init_signature.parameters}
+
+    # Check if the function accepts **kwargs (VAR_KEYWORD parameter)
+    accepts_var_keyword = any(
+        param.kind == inspect.Parameter.VAR_KEYWORD
+        for param in init_signature.parameters.values()
+    )
+
+    if accepts_var_keyword:
+        # If function accepts **kwargs, pass all kwargs
+        valid_kwargs = kwargs
+    else:
+        # Otherwise, filter to only valid parameter names
+        valid_kwargs = {
+            k: v for k, v in kwargs.items() if k in init_signature.parameters
+        }
 
     # Instantiate dataset loader
     dataset_loader = dataset_cls(**valid_kwargs)

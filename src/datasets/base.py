@@ -34,6 +34,7 @@ class BaseDatasetLoader(ABC):
     def __init__(self, name: str, root: str = None, **kwargs):
         self.name = name
         self.root = root or get_dataset_path(name)  # Default dataset path
+        self.kwargs = kwargs
 
     @abstractmethod
     def load(self) -> BaseDataset:

@@ -28,6 +28,7 @@ DATASET_PATHS = {
     # Text datasets (sklearn fetch functions use their own cache)
     "20newsgroups": "/SSD/datasets/20newsgroups",
     "20newsgroups_full": "/SSD/datasets/20newsgroups_full",
+    "dnn": "/SSD/projects/deepsim/raw/features/",
 }
 
 

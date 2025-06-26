@@ -276,6 +276,7 @@ def load_shared_data(
 
 
 def load_triplets(things_data: Path | str) -> np.ndarray:
+    things_data = Path(things_data)
     train_triplets = np.loadtxt(things_data / "triplets" / "trainset.txt").astype(int)
     validation_triplets = np.loadtxt(
         things_data / "triplets" / "validationset.txt"

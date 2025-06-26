@@ -48,7 +48,7 @@ def fit_and_score(estimator, x, val_mask, fit_params, split_idx):
 
     reconstruction = est.fit(x_copy).reconstruct()
 
-    mse = np.mean((x[val_mask] - reconstruction[val_mask]) ** 2)
+    mse = np.mean((val_mask * (x - reconstruction)) ** 2)
     result = {
         "score": mse,
         "split": split_idx,
@@ -158,6 +158,7 @@ class ADMMGridSearchCV:
         return self
 
 
+# TODO Think about if we actually want to fit the final estimator here on the best parameters
 def cross_val_score(
     similarity_matrix: np.ndarray,
     param_grid: dict[str, list] | None = None,

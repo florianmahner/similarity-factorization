@@ -6,4 +6,5 @@ from .peterson import *
 from .haxbyfaces import *
 from .nsd import *
 from .things_monkey import *
+from .dnn import *
 from .registry import load_dataset, register_dataset

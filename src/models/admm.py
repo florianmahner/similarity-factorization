@@ -246,8 +246,8 @@ class ADMM(TransformerMixin, BaseEstimator):
         self,
         rank: int = 10,
         rho: float = 1.0,
-        max_outer: int = 15,
-        max_inner: int = 40,
+        max_outer: int = 30,
+        max_inner: int = 10,
         tol: float = 1e-4,
         verbose: bool = False,
         init: str = "random_sqrt",
@@ -321,20 +321,32 @@ class ADMM(TransformerMixin, BaseEstimator):
 
     def _fit_complete_data(self, x: NDArray):
         """Optimized fitting for complete data (no missing entries)."""
-        x0 = init_factor(x, self.rank, self.init, self.random_state)
-        total_iter = self.max_inner * self.max_outer
+        w = init_factor(x, self.rank, self.init, self.random_state)
+        history = defaultdict(list)
 
         update_w_func = _get_update_w_function()
-        self.w_ = update_w_func(x, x0, max_iter=total_iter, tol=self.tol)
 
-        self.components_ = self.w_
-        self.n_iter_ = 1
-        self.history_ = defaultdict(list)
-        self.history_["rec_error"] = [np.linalg.norm(x - self.w_ @ self.w_.T, "fro")]
-        evar = 1 - np.linalg.norm(x - self.w_ @ self.w_.T, "fro") / np.linalg.norm(
-            x, "fro"
-        )
-        self.history_["evar"] = [evar]
+        for i in range(1, self.max_outer + 1):
+            w = update_w_func(x, w, max_iter=self.max_inner, tol=self.tol)
+
+            rec_error = np.linalg.norm(x - w @ w.T, "fro")
+            evar = 1 - rec_error / np.linalg.norm(x, "fro")
+
+            history["rec_error"].append(rec_error)
+            history["evar"].append(evar)
+
+            if self.verbose:
+                print(
+                    f"Iteration {i}/{self.max_outer}, "
+                    f"Rec Error: {rec_error:.3f}, "
+                    f"Evar: {evar:.3f}",
+                    end="\r",
+                )
+
+        self.w_ = w
+        self.components_ = w
+        self.n_iter_ = i
+        self.history_ = history
 
         return self
 
@@ -342,7 +354,10 @@ class ADMM(TransformerMixin, BaseEstimator):
         """ADMM fitting for data with missing entries."""
         w = init_factor(x, self.rank, self.init, self.random_state)
         lam = np.zeros_like(x)
-        bound_min, bound_max = x.min(), x.max()
+        bound_min, bound_max = (
+            x[self._observation_mask].min(),
+            x[self._observation_mask].max(),
+        )
         history = defaultdict(list)
 
         update_w_func = _get_update_w_function()
@@ -409,6 +424,10 @@ class ADMM(TransformerMixin, BaseEstimator):
             ensure_all_finite="allow-nan" if self.missing_values is np.nan else True,
         )
 
+        # ensure x is float64 for Cython compatibility
+        if x.dtype != np.float64:
+            x = x.astype(np.float64)
+
         missing_mask = _get_missing_mask(x, self.missing_values)
         if np.all(missing_mask):
             raise ValueError(
@@ -417,7 +436,7 @@ class ADMM(TransformerMixin, BaseEstimator):
 
         check_symmetric(missing_mask, raise_exception=True)
         observed_mask = ~missing_mask
-        x[missing_mask] = 0.0
+        x[missing_mask] = 0.0  # cannot handle nan values
 
         x = check_symmetric(x, raise_exception=True)
         self._observation_mask = observed_mask

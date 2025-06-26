@@ -84,32 +84,3 @@ class ThingsMonkey22k(BaseDatasetLoader):
             filenames=filenames,
             rsm=compute_similarity(data, data, "pearson"),
         )
-
-
-@register_dataset("things-monkey-2k")
-class ThingsMonkey2k(BaseDatasetLoader):
-    def __init__(self, root: str = None, reliability_threshold: float = 0.6):
-        super().__init__("things-monkey-2k", root)
-        self.reliability_threshold = reliability_threshold
-
-    def load(self) -> BaseDataset:
-        data = joblib.load(
-            "/LOCAL/fmahner/monkey-dimensions/data/monkey/2k/f/THINGS_normMUA_processed.pkl"
-        )
-        x = data["train_MUA_averaged"]
-        it_localizer = 768
-        reliab = data["reliab"].mean(0)[it_localizer:]
-        x_it = x[:, it_localizer:]
-        x_it = x_it[:, reliab > self.reliability_threshold]
-        filenames = np.loadtxt(
-            "/LOCAL/fmahner/monkey-dimensions/data/monkey/2k/f/index_to_image.txt",
-            dtype=str,
-        )
-        rsm = compute_similarity(x_it, x_it, "pearson")
-
-        return BaseDataset(
-            name="things-monkey-2k",
-            it=x_it,
-            filenames=filenames,
-            rsm=rsm,
-        )

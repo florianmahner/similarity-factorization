@@ -29,13 +29,13 @@ def simulate_rsm_data(n_objects, true_rank, snr=0.0, seed=None):
 
 
 def evaluate_rank_for_trial(
-    n_objects,
-    observed_fraction,
-    true_rank,
-    trial_id,
-    seed,
-    rank,
-    snr,
+    n_objects: int,
+    observed_fraction: float,
+    true_rank: int,
+    trial_id: int,
+    seed: int,
+    rank: int,
+    snr: float,
 ):
     """Evaluate a single rank for a single trial - this will be parallelized"""
 
@@ -43,7 +43,11 @@ def evaluate_rank_for_trial(
     rsm = simulate_rsm_data(n_objects, true_rank, snr=snr, seed=seed)
 
     val_mask = mask_missing_entries(rsm, observed_fraction, rng=rng)
-    estimator = ADMM(random_state=seed, init="random")
+    estimator = ADMM(
+        random_state=seed,
+        init="random",
+        rho=1.0,
+    )
     params = {"rank": rank}
     result = fit_and_score(estimator, rsm, val_mask, params, split_idx=0)
     mse = result["score"]
@@ -56,6 +60,7 @@ def evaluate_rank_for_trial(
         "true_rank": true_rank,
         "mse": mse,
         "seed": seed,
+        "snr": snr,
     }
 
 
@@ -151,7 +156,7 @@ def main():
     parser.add_argument(
         "--jobs",
         type=int,
-        default=-1,
+        default=140,
         help="Number of parallel jobs (-1 for all cores)",
     )
     parser.add_argument(
