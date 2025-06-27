@@ -13,37 +13,12 @@ from collections import defaultdict
 import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.utils.validation import check_is_fitted, check_symmetric, validate_data
-from .utils import init_factor
+
+from .utils import init_factor, validate_missing_values, get_missing_mask
 
 NDArray = np.ndarray
 OptionalFloat = float | None
 OptionalArray = NDArray | None
-
-
-def _get_missing_mask(x: NDArray, missing_values) -> NDArray:
-    """
-    Create a boolean mask indicating missing values.
-
-    Similar to sklearn's _get_mask but adapted for our use case.
-    """
-    if missing_values is np.nan:
-        return np.isnan(x)
-    elif missing_values is None:
-        # Handle None as missing value
-        return pd.isna(x) if hasattr(x, "isna") else np.isnan(x)
-    else:
-        # Handle specific values (like 0.0, -999, etc.)
-        return x == missing_values
-
-
-def _validate_missing_values(missing_values: float | None):
-    """Validate the missing_values parameter."""
-    if missing_values is not np.nan and missing_values is not None:
-        if not isinstance(missing_values, (int, float)):
-            raise ValueError(
-                f"missing_values must be np.nan, None, or a numeric value, "
-                f"got {type(missing_values)}"
-            )
 
 
 def _quartic_root(a: float, b: float, c: float, d: float) -> float:
@@ -264,8 +239,8 @@ class ADMM(TransformerMixin, BaseEstimator):
         self.random_state = random_state
         self.missing_values = missing_values
 
-    def _validate_parameters(self):
-        """Validate input parameters."""
+    def _validate_input_arguments(self):
+        """Validate input arguments."""
         if self.rank <= 0:
             raise ValueError(f"rank must be positive, got {self.rank}")
         if self.rho <= 0:
@@ -276,7 +251,7 @@ class ADMM(TransformerMixin, BaseEstimator):
             raise ValueError(f"max_inner must be positive, got {self.max_inner}")
         if self.tol < 0:
             raise ValueError(f"tol must be non-negative, got {self.tol}")
-        _validate_missing_values(self.missing_values)
+        validate_missing_values(self.missing_values)
 
     def _compute_metrics(
         self, x: NDArray, v: NDArray, w: NDArray, lam: NDArray
@@ -415,20 +390,18 @@ class ADMM(TransformerMixin, BaseEstimator):
         self : object
             Fitted estimator.
         """
-        self._validate_parameters()
+        self._validate_input_arguments()
 
         x = validate_data(
             self,
             x,
             reset=True,
             ensure_all_finite="allow-nan" if self.missing_values is np.nan else True,
+            check_params={"ensure_2d": True},
+            dtype=np.float64,
         )
 
-        # ensure x is float64 for Cython compatibility
-        if x.dtype != np.float64:
-            x = x.astype(np.float64)
-
-        missing_mask = _get_missing_mask(x, self.missing_values)
+        missing_mask = get_missing_mask(x, self.missing_values)
         if np.all(missing_mask):
             raise ValueError(
                 "No observed entries found in the data. All values are missing."
