@@ -21,6 +21,9 @@ OptionalFloat = float | None
 OptionalArray = NDArray | None
 
 
+# TODO Change the verbose flag to an integer
+
+
 def _quartic_root(a: float, b: float, c: float, d: float) -> float:
     """
     Solve min_{x >= 0} g(x) = a/4 x^4 + b/3 x^3 + c/2 x^2 + d x (a == 4),
@@ -198,6 +201,11 @@ class ADMM(TransformerMixin, BaseEstimator):
         init: Method for factor initialization ('random', 'random_sqrt', 'nndsvd', 'nndsvdar')
         random_state: Random seed for reproducible initialization
         missing_values: values to be treated as missing to mask the matrix (default: np.nan)
+        bounds: Tuple of (lower, upper) bounds for the auxiliary variable v
+            (default: None). If None, the bounds are inferred from the data.
+            In practice, one can also pass the expected bounds of the matrix
+            (eg (0, 1) for cosine similarity)
+
 
     Attributes:
         w_: Learned factor matrix w of shape (n_samples, rank)
@@ -221,13 +229,14 @@ class ADMM(TransformerMixin, BaseEstimator):
         self,
         rank: int = 10,
         rho: float = 1.0,
-        max_outer: int = 30,
-        max_inner: int = 10,
+        max_outer: int = 10,
+        max_inner: int = 30,
         tol: float = 1e-4,
         verbose: bool = False,
         init: str = "random_sqrt",
         random_state: int | None = None,
         missing_values: float | None = np.nan,
+        bounds: tuple[float, float] | None = None,
     ) -> None:
         self.rank = rank
         self.rho = rho
@@ -238,6 +247,7 @@ class ADMM(TransformerMixin, BaseEstimator):
         self.init = init
         self.random_state = random_state
         self.missing_values = missing_values
+        self.bounds = bounds
 
     def _validate_input_arguments(self):
         """Validate input arguments."""
@@ -252,6 +262,21 @@ class ADMM(TransformerMixin, BaseEstimator):
         if self.tol < 0:
             raise ValueError(f"tol must be non-negative, got {self.tol}")
         validate_missing_values(self.missing_values)
+        if self.bounds is not None:
+            if (
+                not isinstance(self.bounds, tuple)
+                or len(self.bounds) != 2
+                or not all(
+                    (b is None or isinstance(b, (int, float))) for b in self.bounds
+                )
+            ):
+                raise ValueError(
+                    "bounds must be a tuple (lower, upper) of floats or None, "
+                    f"got {self.bounds!r}"
+                )
+            lower, upper = self.bounds
+            if lower is not None and upper is not None and lower > upper:
+                raise ValueError(f"bounds lower must be ≤ upper, got {self.bounds!r}")
 
     def _compute_metrics(
         self, x: NDArray, v: NDArray, w: NDArray, lam: NDArray
@@ -262,9 +287,9 @@ class ADMM(TransformerMixin, BaseEstimator):
 
         data_fit = np.sum((observed_mask * (x - v)) ** 2)
 
-        constraint_violation = v - w @ w.T
-        penalty = (self.rho / 2.0) * np.linalg.norm(constraint_violation, "fro") ** 2
-        lagrangian = np.sum(lam * constraint_violation)
+        primal_residual = v - w @ w.T
+        penalty = (self.rho / 2.0) * np.linalg.norm(primal_residual, "fro") ** 2
+        lagrangian = np.sum(lam * primal_residual)
         total_obj = data_fit + penalty + lagrangian
         rec_error = np.sqrt(np.sum((observed_mask * (x - w @ w.T)) ** 2))
 
@@ -290,8 +315,6 @@ class ADMM(TransformerMixin, BaseEstimator):
             "lagrangian": lagrangian,
             "rec_error": rec_error,
             "evar": evar,
-            "n_observed": observed_mask.sum(),
-            "n_missing": (~observed_mask).sum(),
         }
 
     def _fit_complete_data(self, x: NDArray):
@@ -329,10 +352,20 @@ class ADMM(TransformerMixin, BaseEstimator):
         """ADMM fitting for data with missing entries."""
         w = init_factor(x, self.rank, self.init, self.random_state)
         lam = np.zeros_like(x)
-        bound_min, bound_max = (
-            x[self._observation_mask].min(),
-            x[self._observation_mask].max(),
-        )
+        if self.bounds is None:
+            bound_min, bound_max = (
+                x[self._observation_mask].min(),
+                x[self._observation_mask].max(),
+            )
+        else:
+            # v_bounds may contain None; fall back to data-driven extrema
+            lower, upper = self.bounds
+            if lower is None:
+                lower = x[self._observation_mask].min()
+            if upper is None:
+                upper = x[self._observation_mask].max()
+            bound_min, bound_max = lower, upper
+
         history = defaultdict(list)
 
         update_w_func = _get_update_w_function()
@@ -354,6 +387,7 @@ class ADMM(TransformerMixin, BaseEstimator):
             for key, value in metrics.items():
                 history[key].append(value)
 
+            # TODO this is not a good stopping criterion
             if self.tol > 0.0 and np.linalg.norm(v - w @ w.T, "fro") < self.tol:
                 break
 
@@ -363,7 +397,6 @@ class ADMM(TransformerMixin, BaseEstimator):
                     f"Objective: {metrics['total_objective']:.3f}, "
                     f"Rec Error: {metrics['rec_error']:.3f}, "
                     f"Evar: {metrics['evar']:.3f}, "
-                    f"Observed: {metrics['n_observed']}/{metrics['n_observed'] + metrics['n_missing']}"
                 )
 
         self.w_ = w
@@ -397,25 +430,22 @@ class ADMM(TransformerMixin, BaseEstimator):
             x,
             reset=True,
             ensure_all_finite="allow-nan" if self.missing_values is np.nan else True,
-            check_params={"ensure_2d": True},
+            ensure_2d=True,
             dtype=np.float64,
         )
 
-        missing_mask = get_missing_mask(x, self.missing_values)
-        if np.all(missing_mask):
+        self._missing_mask = get_missing_mask(x, self.missing_values)
+        if np.all(self._missing_mask):
             raise ValueError(
                 "No observed entries found in the data. All values are missing."
             )
 
-        check_symmetric(missing_mask, raise_exception=True)
-        observed_mask = ~missing_mask
-        x[missing_mask] = 0.0  # cannot handle nan values
-
+        check_symmetric(self._missing_mask, raise_exception=True)
+        self._observation_mask = ~self._missing_mask
+        x[self._missing_mask] = 0.0  # cannot handle nan values
         x = check_symmetric(x, raise_exception=True)
-        self._observation_mask = observed_mask
-        self._missing_mask = missing_mask
 
-        if np.all(observed_mask):
+        if np.all(self._observation_mask):
             return self._fit_complete_data(x)
         else:
             return self._fit_missing_data(x)

@@ -14,10 +14,26 @@ def mask_missing_entries(
     rng: np.random.RandomState,
     missing_values: float | None = np.nan,
 ) -> np.ndarray:
-    """Mask exactly observed_fraction of the observed (non-NaN) entries symmetrically."""
+    """Mask exactly observed_fraction of the observed (non-NaN) entries symmetrically.
+    Parameters
+    ----------
+    x : np.ndarray
+        Symmetric similarity matrix to mask.
+    observed_fraction : float
+        Fraction of the observed entries to mask.
+    rng : np.random.RandomState
+        Random number generator.
+    missing_values : float | None, optional
+        Value to consider as missing. Default is np.nan.
+
+    Returns
+    -------
+    missing_mask : np.ndarray
+        Boolean mask of the missing entries. True means missing, False means observed.
+    """
     observed_mask = ~np.isnan(x) if missing_values is np.nan else x != missing_values
 
-    triu_i, triu_j = np.triu_indices_from(x)
+    triu_i, triu_j = np.triu_indices_from(x, k=1)
     triu_observed = observed_mask[triu_i, triu_j]
     valid_positions = np.where(triu_observed)[0]
 
@@ -25,30 +41,38 @@ def mask_missing_entries(
     if n_to_keep == 0:
         return np.ones_like(x, dtype=bool)
 
-    # Subsample from valid upper triangular positions
+    # Subsample from valid upper triangular positions to keep as observed
     keep_positions = rng.choice(valid_positions, size=n_to_keep, replace=False)
 
-    observation_mask = np.zeros_like(x, dtype=bool)
+    # Create missing mask directly - start with all missing
+    missing_mask = np.ones_like(x, dtype=bool)
+
+    # Set kept positions as observed (False = not missing)
     keep_i = triu_i[keep_positions]
     keep_j = triu_j[keep_positions]
-    observation_mask[keep_i, keep_j] = True
-    observation_mask[keep_j, keep_i] = True
+    missing_mask[keep_i, keep_j] = False
+    missing_mask[keep_j, keep_i] = False
 
-    return ~observation_mask
+    # Diagonal is always observed
+    np.fill_diagonal(missing_mask, False)
+    return missing_mask
 
 
 def fit_and_score(estimator, x, val_mask, fit_params, split_idx):
     """Fit estimator with parameters and return validation score."""
     est = clone(estimator).set_params(**fit_params)
-    # Ensure missing_values is exactly np.nan so that identity checks using "is" succeed after pickling
-    if hasattr(est, "missing_values"):
-        est.set_params(missing_values=np.nan)
+    est.set_params(missing_values=np.nan)
+
+    # we consider true nan entries as missing, so we need to mask them out in the
+    # reconstruction entirely, not bein able to treat them as artificial missing values.
+    already_nan = np.isnan(x)
+
     x_copy = np.copy(x)
     x_copy[val_mask] = np.nan
 
     reconstruction = est.fit(x_copy).reconstruct()
-
-    mse = np.mean((val_mask * (x - reconstruction)) ** 2)
+    valid_mask = val_mask & ~already_nan
+    mse = np.mean(((x[valid_mask] - reconstruction[valid_mask]) ** 2))
     result = {
         "score": mse,
         "split": split_idx,
@@ -99,12 +123,14 @@ class ADMMGridSearchCV:
         cv: EntryMaskSplit,
         n_jobs: int = -1,
         verbose: int = 0,
+        fit_final_estimator: bool = False,
     ):
         self.estimator = estimator
         self.param_grid = param_grid
         self.cv = cv
         self.n_jobs = n_jobs
         self.verbose = verbose
+        self.fit_final_estimator = fit_final_estimator
 
     def fit(self, x: np.ndarray) -> "ADMMGridSearchCV":
         """Fit grid search with simple results DataFrame."""
@@ -152,8 +178,9 @@ class ADMMGridSearchCV:
             ]
         )
 
-        self.best_estimator_ = clone(self.estimator).set_params(**self.best_params_)
-        self.best_estimator_.fit(x)
+        if self.fit_final_estimator:
+            self.best_estimator_ = clone(self.estimator).set_params(**self.best_params_)
+            self.best_estimator_.fit(x)
 
         return self
 
@@ -168,6 +195,7 @@ def cross_val_score(
     verbose: int = 1,
     n_jobs: int = -1,
     missing_values: float | None = np.nan,
+    fit_final_estimator: bool = False,
 ) -> ADMMGridSearchCV:
     """Cross-validate ADMM parameters for matrix completion.
 
@@ -191,6 +219,8 @@ def cross_val_score(
         Number of jobs to run in parallel.
     missing_values : np.nan | float | None, optional
         Value to consider as missing.
+    fit_final_estimator : bool, optional. Default is False.
+        Whether to fit the final estimator on the best parameters.
 
     Returns
     -------
@@ -212,5 +242,6 @@ def cross_val_score(
         cv=cv,
         n_jobs=n_jobs,
         verbose=verbose,
+        fit_final_estimator=fit_final_estimator,
     )
     return grid.fit(similarity_matrix)

@@ -33,18 +33,24 @@ def main():
     spose_embedding, indices_48, rsm_48_true = load_shared_data(
         THINGS_DATASET_PATH,
         THINGS_IMAGES_PATH,
-        MAX_DIM,
+        max_dim=49,
     )
 
     train_triplets, validation_triplets = load_triplets(THINGS_DATASET_PATH)
 
-    estimator = ADMM()
-    estimator.set_params(**ADMM_PARAMS)
+    admm_params = {
+        "rank": 49,
+        "max_outer": 20,
+        "max_inner": 50,
+        "rho": 1.0,
+        "tol": 0.0,
+    }
+    estimator = ADMM(**admm_params)
 
     df = pairwise_reconstruction_experiment(
         estimator,
         spose_embedding,
-        seeds=range(N_SEEDS),
+        seeds=range(10),
         snr_values=[1.0],
         similarity_measures=["cosine"],
     )
@@ -56,19 +62,19 @@ def main():
         rsm_48_true,
         train_triplets,
         validation_triplets,
-        N_ITEMS,
-        ADMM_PARAMS,
-        seeds=range(N_SEEDS),
+        n_items=1854,
+        admm_params=admm_params,
+        seeds=range(10),
     )
     df.to_csv(RESULTS_DIR / "spose_comparison.csv", index=False)
 
     df = low_data_experiment(
         train_triplets,
         validation_triplets,
-        N_ITEMS,
-        ADMM_PARAMS,
-        data_percentages=DATA_PERCENTAGES,
-        seeds=range(N_SEEDS),
+        n_items=1854,
+        admm_params=admm_params,
+        data_percentages=[0.05, 0.10, 0.20, 0.50, 1.0],
+        seeds=range(10),
     )
     df.to_csv(RESULTS_DIR / "low_data.csv", index=False)
 

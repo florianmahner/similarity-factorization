@@ -11,10 +11,10 @@ from sklearn.metrics import pairwise_distances
 from scipy.stats import entropy
 
 SPOSE_66_PATH = (
-    "/LOCAL/fmahner/similarity-factorization/data/misc/spose_embedding_66d.txt"
+    "/LOCAL/fmahner/similarity-factorization/data/things/spose_embedding_66d.txt"
 )
 SPOSE_49_PATH = (
-    "/LOCAL/fmahner/similarity-factorization/data/misc/spose_embedding_49d.txt"
+    "/LOCAL/fmahner/similarity-factorization/data/things/spose_embedding_49d.txt"
 )
 
 

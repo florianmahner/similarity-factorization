@@ -6,6 +6,32 @@ from sklearn.utils.validation import check_random_state
 Array = np.ndarray
 
 
+def get_missing_mask(x: Array, missing_values: float | None) -> Array:
+    """
+    Create a boolean mask indicating missing values.
+
+    Similar to sklearn's _get_mask but adapted for our use case.
+    """
+    if missing_values is np.nan:
+        return np.isnan(x)
+    elif missing_values is None:
+        # Handle None as missing value
+        return pd.isna(x) if hasattr(x, "isna") else np.isnan(x)
+    else:
+        # Handle specific values (like 0.0, -999, etc.)
+        return x == missing_values
+
+
+def validate_missing_values(missing_values: float | None):
+    """Validate the missing_values parameter."""
+    if missing_values is not np.nan and missing_values is not None:
+        if not isinstance(missing_values, (int, float)):
+            raise ValueError(
+                f"missing_values must be np.nan, None, or a numeric value, "
+                f"got {type(missing_values)}"
+            )
+
+
 def init_factor(s, rank, init, random_state=None, eps=np.finfo(float).eps):
     """Keep the exact same function from base.py."""
     rng = check_random_state(random_state)

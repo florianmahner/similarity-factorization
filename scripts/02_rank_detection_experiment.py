@@ -43,10 +43,14 @@ def evaluate_rank_for_trial(
     rsm = simulate_rsm_data(n_objects, true_rank, snr=snr, seed=seed)
 
     val_mask = mask_missing_entries(rsm, observed_fraction, rng=rng)
+
     estimator = ADMM(
         random_state=seed,
-        init="random",
+        init="random_sqrt",
         rho=1.0,
+        max_outer=100,
+        max_inner=10,
+        tol=0.0,
     )
     params = {"rank": rank}
     result = fit_and_score(estimator, rsm, val_mask, params, split_idx=0)
@@ -85,7 +89,6 @@ def run_experiment(
     seed_counter = 0
 
     # TODO Maybe also check rho range in the analysis!
-
     for true_rank in true_ranks:
         for n_obj in n_objects_list:
             for frac in observed_fractions:
@@ -125,7 +128,7 @@ def run_experiment(
     runtime_minutes = (end_time - start_time) / 60
 
     eval_df = pd.DataFrame(evaluation_results)
-    results_output_file = output_dir / "rank_detection_results.csv"
+    results_output_file = output_dir / "rank_detection_results_test.csv"
     eval_df.to_csv(results_output_file, index=False)
 
     if verbose:
@@ -147,11 +150,11 @@ def main():
         "--ranks",
         nargs="+",
         type=int,
-        default=[5, 10, 20],
+        default=[10],
         help="True ranks for synthetic data",
     )
     parser.add_argument(
-        "--trials", type=int, default=5, help="Number of trials per condition"
+        "--trials", type=int, default=10, help="Number of trials per condition"
     )
     parser.add_argument(
         "--jobs",
@@ -167,7 +170,9 @@ def main():
     args = parser.parse_args()
 
     observed_fractions = np.arange(0.2, 0.9, 0.1).round(2)
-    snrs = np.arange(0.0, 1.0, 0.1)
+    # snrs = np.array([0.3, 0.7, 1.0]).round(2)
+    observed_fractions = np.array([0.8]).round(2)
+    snrs = np.array([1.0])
 
     run_experiment(
         n_objects_list=args.objects,
