@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-from pathlib import Path
 from joblib import Parallel, delayed
 from sklearn.base import clone
 from sklearn.model_selection import ParameterGrid
@@ -8,11 +7,15 @@ from models.admm import ADMM
 from tools.rsa import correlate_rsms, reconstruct_rsm_batched, compute_similarity
 from utils.simulation import add_noise_with_snr
 from utils.helpers import best_pairwise_match
-from utils.io import load_spose_embedding, load_concept_mappings, load_words48
+
 from tqdm import tqdm
 import itertools
 
-CATEGORY_REPLACEMENTS = {"camera": "camera1", "file": "file1"}
+from experiments.things.common import (
+    compute_similarity_matrix_from_triplets,
+    compute_triplet_prediction_accuracy,
+)
+from cross_validation import cross_val_score
 
 
 def run_experiment(trial_func, param_grid, n_jobs=-1, verbose=True):
@@ -30,47 +33,6 @@ def run_experiment(trial_func, param_grid, n_jobs=-1, verbose=True):
     return pd.DataFrame(itertools.chain(*results))
 
 
-# Helper functions for data processing
-def subsample_triplets(
-    triplets: np.ndarray, percentage: float, seed: int
-) -> np.ndarray:
-    """Subsample triplets by percentage."""
-    if percentage >= 1.0:
-        return triplets
-    np.random.seed(seed)
-    n_samples = int(len(triplets) * percentage)
-    indices = np.random.choice(len(triplets), size=n_samples, replace=False)
-    return triplets[indices]
-
-
-def compute_similarity_matrix_from_triplets(n: int, triplets: np.ndarray) -> np.ndarray:
-    """Compute similarity matrix from triplet data."""
-    counts = np.zeros((n, n))
-    shown = np.zeros((n, n))
-
-    for i, j, k in triplets:
-        for a, b in [(i, j), (i, k), (j, k)]:
-            if a != b:
-                shown[a, b] += 1
-                shown[b, a] += 1
-
-        if i != j:
-            counts[i, j] += 1
-            counts[j, i] += 1
-
-    similarity = np.divide(
-        counts,
-        shown,
-        out=np.nan * np.ones_like(counts),
-        where=shown != 0,
-        # This below is another way, but more conservative. We place NaN and not zeors!!
-        # where=(shown != 0) & (counts > 0),  # Only where actually chosen
-    )
-
-    np.fill_diagonal(similarity, 1.0)
-    return similarity
-
-
 def fit_admm_model(
     similarity: np.ndarray, params: dict, seed: int = None
 ) -> np.ndarray:
@@ -81,21 +43,9 @@ def fit_admm_model(
     return model.fit_transform(similarity)
 
 
-def softmax_triplet_choice(w_i: np.ndarray, w_j: np.ndarray, w_k: np.ndarray) -> bool:
-    """Determine if triplet choice is correct using softmax."""
-    similarities = np.array([w_i @ w_j, w_i @ w_k, w_j @ w_k])
-    probas = np.exp(similarities) / np.sum(np.exp(similarities))
-    return np.argmax(probas) == 0
-
-
-def compute_triplet_prediction_accuracy(
-    embedding: np.ndarray, triplets: np.ndarray
-) -> float:
-    """Compute accuracy of triplet predictions."""
-    acc = 0
-    for i, j, k in triplets:
-        acc += softmax_triplet_choice(embedding[i], embedding[j], embedding[k])
-    return acc / len(triplets)
+# --------------------------------------------------------------------------------------------
+# Pairwise reconstruction of SPoSE dimensions from the similarity matrix at various SNRs
+# --------------------------------------------------------------------------------------------
 
 
 def reconstruct_admm_rsm(w: np.ndarray) -> np.ndarray:
@@ -137,7 +87,32 @@ def pairwise_reconstruction_trial(
     ]
 
 
-def spose_comparison_trial(
+# Convenience functions for common experiment patterns
+def pairwise_reconstruction_experiment(
+    estimator,
+    spose_embedding,
+    snr_values=[1.0],
+    similarity_measures=["cosine"],
+    seeds=range(5),
+    **kwargs,
+):
+    """Run pairwise reconstruction experiment with parameter grid."""
+    param_grid = {
+        "estimator": [estimator],
+        "spose_embedding": [spose_embedding],
+        "snr": snr_values,
+        "similarity_measure": similarity_measures,
+        "seed": seeds,
+    }
+    return run_experiment(pairwise_reconstruction_trial, param_grid, **kwargs)
+
+
+# --------------------------------------------------------------------------------------------
+# SPoSE vs ADMM comparison in terms of performance on the triplet data and 48-word RDM
+# --------------------------------------------------------------------------------------------
+
+
+def spose_performance_trial(
     spose_embedding,
     indices_48,
     rsm_48_true,
@@ -174,48 +149,7 @@ def spose_comparison_trial(
     ]
 
 
-def low_data_trial(
-    triplets, validation_triplets, n_items, admm_params, data_percentage=1.0, seed=0
-):
-    """Single trial of low data experiment."""
-    subsampled_triplets = subsample_triplets(triplets, data_percentage, seed)
-    similarity = compute_similarity_matrix_from_triplets(n_items, subsampled_triplets)
-
-    admm_embedding = fit_admm_model(similarity, admm_params, seed=seed)
-    acc_admm = compute_triplet_prediction_accuracy(admm_embedding, validation_triplets)
-
-    return [
-        {
-            "model": "ADMM",
-            "data_percentage": data_percentage,
-            "n_triplets": len(subsampled_triplets),
-            "accuracy": acc_admm,
-            "seed": seed,
-        }
-    ]
-
-
-# Convenience functions for common experiment patterns
-def pairwise_reconstruction_experiment(
-    estimator,
-    spose_embedding,
-    snr_values=[1.0],
-    similarity_measures=["cosine"],
-    seeds=range(5),
-    **kwargs,
-):
-    """Run pairwise reconstruction experiment with parameter grid."""
-    param_grid = {
-        "estimator": [estimator],
-        "spose_embedding": [spose_embedding],
-        "snr": snr_values,
-        "similarity_measure": similarity_measures,
-        "seed": seeds,
-    }
-    return run_experiment(pairwise_reconstruction_trial, param_grid, **kwargs)
-
-
-def spose_comparison_experiment(
+def spose_performance_experiment(
     spose_embedding,
     indices_48,
     rsm_48_true,
@@ -235,7 +169,40 @@ def spose_comparison_experiment(
         "admm_params": [admm_params],
         "seed": seeds,
     }
-    return run_experiment(spose_comparison_trial, param_grid, **kwargs)
+    return run_experiment(spose_performance_trial, param_grid, **kwargs)
+
+
+def subsample_triplets(
+    triplets: np.ndarray, percentage: float, seed: int
+) -> np.ndarray:
+    """Subsample triplets by percentage."""
+    if percentage >= 1.0:
+        return triplets
+    np.random.seed(seed)
+    n_samples = int(len(triplets) * percentage)
+    indices = np.random.choice(len(triplets), size=n_samples, replace=False)
+    return triplets[indices]
+
+
+def low_data_trial(
+    triplets, validation_triplets, n_items, admm_params, data_percentage=1.0, seed=0
+):
+    """Single trial of low data experiment."""
+    subsampled_triplets = subsample_triplets(triplets, data_percentage, seed)
+    similarity = compute_similarity_matrix_from_triplets(n_items, subsampled_triplets)
+
+    admm_embedding = fit_admm_model(similarity, admm_params, seed=seed)
+    acc_admm = compute_triplet_prediction_accuracy(admm_embedding, validation_triplets)
+
+    return [
+        {
+            "model": "ADMM",
+            "data_percentage": data_percentage,
+            "n_triplets": len(subsampled_triplets),
+            "accuracy": acc_admm,
+            "seed": seed,
+        }
+    ]
 
 
 def low_data_experiment(
@@ -259,29 +226,147 @@ def low_data_experiment(
     return run_experiment(low_data_trial, param_grid, **kwargs)
 
 
-def load_shared_data(
-    things_data: Path | str,
-    things_images_path: Path,
-    max_dim: int,
-) -> tuple:
-    """Load all shared data for experiments."""
+# --------------------------------------------------------------------------------------------
+# Dimension reliability analysis (reproducibility across model runs)
+# --------------------------------------------------------------------------------------------
 
-    things_data = Path(things_data)
 
-    spose_embedding = load_spose_embedding(
-        things_data / f"spose_embedding_{max_dim}d.txt"
+def fisher_z_transform(r: float) -> float:
+    r = np.clip(r, -0.999, 0.999)
+    return 0.5 * np.log((1 + r) / (1 - r))
+
+
+def inverse_fisher_z(z: float) -> float:
+    return (np.exp(2 * z) - 1) / (np.exp(2 * z) + 1)
+
+
+def find_best_matching_dimension(
+    original_dim: np.ndarray, reference_embedding: np.ndarray
+) -> float:
+    correlations = []
+    for dim_idx in range(reference_embedding.shape[1]):
+        ref_dim = reference_embedding[:, dim_idx]
+        corr = np.corrcoef(original_dim, ref_dim)[0, 1]
+        if not np.isnan(corr):
+            correlations.append(abs(corr))
+    return max(correlations) if correlations else 0.0
+
+
+def compute_dimension_reliability(
+    similarity_matrix: np.ndarray,
+    admm_params: dict,
+    n_runs: int = 20,
+    n_jobs: int = -1,
+) -> tuple[np.ndarray, list[np.ndarray]]:
+
+    # Run all fits (original + references) in parallel
+    all_embeddings = Parallel(n_jobs=n_jobs)(
+        delayed(fit_admm_model)(
+            similarity_matrix=similarity_matrix,
+            admm_params=admm_params,
+            seed=seed,
+        )
+        for seed in range(0, n_runs + 1)
     )
-    indices_48 = load_concept_mappings(
-        things_data / "words48.csv", things_images_path, CATEGORY_REPLACEMENTS
+    original_embedding = all_embeddings[0]
+    reference_embeddings = all_embeddings[1:]
+    if original_embedding is None:
+        raise RuntimeError("Failed to fit original embedding")
+
+    reference_embeddings = [emb for emb in reference_embeddings if emb is not None]
+    if len(reference_embeddings) == 0:
+        raise RuntimeError("No reference embeddings succeeded")
+
+    n_dims = original_embedding.shape[1]
+    dimension_reliabilities = np.zeros(n_dims)
+
+    for dim_idx in range(n_dims):
+        original_dim = original_embedding[:, dim_idx]
+        best_correlations = []
+
+        for ref_embedding in reference_embeddings:
+            best_corr = find_best_matching_dimension(original_dim, ref_embedding)
+            best_correlations.append(best_corr)
+
+        if best_correlations:
+            fisher_z_values = [fisher_z_transform(corr) for corr in best_correlations]
+            mean_fisher_z = np.mean(fisher_z_values)
+            dimension_reliabilities[dim_idx] = inverse_fisher_z(mean_fisher_z)
+        else:
+            dimension_reliabilities[dim_idx] = 0.0
+
+    return dimension_reliabilities
+
+
+def run_dimension_reliability_analysis(
+    spose_triplets: np.ndarray,
+    admm_params: dict,
+    n_runs: int = 20,
+    n_jobs: int = -1,
+    output_path: str = None,
+) -> pd.DataFrame:
+
+    similarity_matrix = compute_similarity_matrix_from_triplets(1854, spose_triplets)
+
+    dimension_reliabilities = compute_dimension_reliability(
+        similarity_matrix, admm_params, n_runs=n_runs, n_jobs=n_jobs
     )
-    rsm_48_true = load_words48(things_data / "rdm48_human.mat")
-    return spose_embedding, indices_48, rsm_48_true
+
+    n_dims = len(dimension_reliabilities)
+    results_data = []
+    for dim_idx in range(n_dims):
+        results_data.append(
+            {
+                "Dimension": dim_idx,
+                "Reliability": dimension_reliabilities[dim_idx],
+            }
+        )
+
+    results_df = pd.DataFrame(results_data)
+
+    if output_path:
+        results_df.to_csv(output_path, index=False)
+
+    return results_df
 
 
-def load_triplets(things_data: Path | str) -> np.ndarray:
-    things_data = Path(things_data)
-    train_triplets = np.loadtxt(things_data / "triplets" / "trainset.txt").astype(int)
-    validation_triplets = np.loadtxt(
-        things_data / "triplets" / "validationset.txt"
-    ).astype(int)
-    return train_triplets, validation_triplets
+# --------------------------------------------------------------------------------------------
+# Dimension estimation experiment - cross-validation of SPoSE dimensions
+# --------------------------------------------------------------------------------------------
+
+
+def run_spose_dimensionality_analysis(
+    train_triplets: np.ndarray,
+    rank_range: range = range(5, 90, 5),
+    n_repeats: int = 5,
+    observed_fractions: list[float] = [0.8],
+    n_jobs: int = -1,
+):
+    """Run SPoSE dimension estimation analysis on the training dataset only."""
+
+    similarity = compute_similarity_matrix_from_triplets(1854, train_triplets)
+
+    param_grid = {
+        "rank": list(rank_range),
+        "max_outer": [10],
+        "max_inner": [50],
+        "tol": [0.0],
+        "rho": [1.0],
+    }
+    all_cv_results = []
+    for observed_fraction in observed_fractions:
+        scorer = cross_val_score(
+            similarity,
+            param_grid=param_grid,
+            n_repeats=n_repeats,
+            observed_fraction=observed_fraction,
+            random_state=0,
+            verbose=0,
+            n_jobs=n_jobs,
+            fit_final_estimator=False,
+        )
+        cv_results = pd.DataFrame(scorer.cv_results_)
+        cv_results["observed_fraction"] = observed_fraction
+        all_cv_results.append(cv_results)
+
+    return pd.concat(all_cv_results)

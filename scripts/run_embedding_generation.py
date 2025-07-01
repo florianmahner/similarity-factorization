@@ -1,5 +1,8 @@
 """ Here we want to actually find the optimal dimensionality for the embeddings.
 We will use the cross validation score to find the optimal dimensionality.
+
+This is a place where i can actually do it all at once. Factorization, clsutering and dimensionalty estimation.
+I just need a single embedding in the end that i can then use.
 """
 
 import numpy as np

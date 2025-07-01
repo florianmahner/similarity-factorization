@@ -3,10 +3,54 @@ import os
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
+from scipy.io import loadmat
+
+CATEGORY_REPLACEMENTS = {"camera": "camera1", "file": "file1"}
 
 
-def load_spose_embedding(path: str) -> np.ndarray:
-    return np.maximum(np.loadtxt(path), 0)
+def load_shared_data(
+    things_data: Path | str,
+    things_images_path: Path,
+    num_dims: int,
+) -> tuple:
+    """Load all shared data for experiments."""
+
+    things_data = Path(things_data)
+
+    spose_embedding = load_spose_embedding(num_dims=num_dims)
+    indices_48 = load_concept_mappings(
+        things_data / "words48.csv", things_images_path, CATEGORY_REPLACEMENTS
+    )
+    rsm_48_true = load_words48(things_data / "rdm48_human.mat")
+    return spose_embedding, indices_48, rsm_48_true
+
+
+def load_triplets(things_data: Path | str) -> np.ndarray:
+    things_data = Path(things_data)
+    train_triplets = np.loadtxt(things_data / "triplets" / "trainset.txt").astype(int)
+    validation_triplets = np.loadtxt(
+        things_data / "triplets" / "validationset.txt"
+    ).astype(int)
+    return train_triplets, validation_triplets
+
+
+def load_spose_embedding(max_objects=None, max_dims=None, num_dims=66):
+    if num_dims == 66:
+        path = Path("data/things/spose_embedding_66d.txt")
+    elif num_dims == 49:
+        path = Path("data/things/spose_embedding_49d.txt")
+    else:
+        raise ValueError(f"Invalid number of dimensions: {num_dims}")
+    x = np.maximum(np.loadtxt(path), 0)
+
+    if max_objects:
+        objects = np.arange(x.shape[0])
+        random_objects = np.random.choice(objects, size=max_objects, replace=False)
+        x = x[random_objects]
+    if max_dims:
+        x = x[:, :max_dims]
+    return x
 
 
 def load_concept_mappings(
@@ -17,6 +61,7 @@ def load_concept_mappings(
 
     images = load_things_image_data(things_image_path, filter_behavior=True)
     categories = [" ".join(Path(f).stem.split("_")[0:-1]) for f in images]
+
     return [categories.index(c) for c in cls_names]
 
 

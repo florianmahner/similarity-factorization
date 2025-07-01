@@ -58,7 +58,7 @@ def mask_missing_entries(
     return missing_mask
 
 
-def fit_and_score(estimator, x, val_mask, fit_params, split_idx):
+def fit_and_score(estimator, x, val_mask, fit_params, split_idx=None):
     """Fit estimator with parameters and return validation score."""
     est = clone(estimator).set_params(**fit_params)
     est.set_params(missing_values=np.nan)
@@ -75,7 +75,7 @@ def fit_and_score(estimator, x, val_mask, fit_params, split_idx):
     mse = np.mean(((x[valid_mask] - reconstruction[valid_mask]) ** 2))
     result = {
         "score": mse,
-        "split": split_idx,
+        "split": split_idx if split_idx is not None else 0,
         "estimator": est,
         "params": fit_params,
     }
@@ -185,7 +185,6 @@ class ADMMGridSearchCV:
         return self
 
 
-# TODO Think about if we actually want to fit the final estimator here on the best parameters
 def cross_val_score(
     similarity_matrix: np.ndarray,
     param_grid: dict[str, list] | None = None,

@@ -22,6 +22,7 @@ OptionalArray = NDArray | None
 
 
 # TODO Change the verbose flag to an integer
+# TODO Maybe early stopping for the w-subproblem is important to get convergence!
 
 
 def _quartic_root(a: float, b: float, c: float, d: float) -> float:

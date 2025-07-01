@@ -207,23 +207,6 @@ def add_noise_with_snr_db(
     return signal + noise
 
 
-def load_spose_embedding(max_objects=None, max_dims=None, num_dims=66):
-    if num_dims == 66:
-        path = SPOSE_66_PATH
-    elif num_dims == 49:
-        path = SPOSE_49_PATH
-    else:
-        raise ValueError(f"Invalid number of dimensions: {num_dims}")
-    x = np.maximum(np.loadtxt(path), 0)
-    objects = np.arange(x.shape[0])
-    random_objects = np.random.choice(objects, size=max_objects, replace=False)
-    if max_objects:
-        x = x[random_objects]
-    if max_dims:
-        x = x[:, :max_dims]
-    return x
-
-
 # Clustering and Evaluation Functions
 def map_labels_with_hungarian(true_labels, cluster_labels):
     """Use Hungarian assignment to map cluster labels to true labels."""
