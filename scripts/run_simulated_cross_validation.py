@@ -59,7 +59,7 @@ def evaluate_single_rank(
         "max_outer": max_outer,
         "max_inner": max_inner,
         "rho": rho,
-        "tol": 0.0,
+        "tol": 1e-6,
     }
 
     # Fit and score
@@ -129,12 +129,19 @@ def run_rank_experiment(
                                     seed_counter += 1
 
     print(f"Running {len(jobs)} individual rank evaluations in parallel")
+
     all_results = Parallel(n_jobs=n_jobs, verbose=1)(
         delayed(evaluate_single_rank)(*job) for job in jobs
     )
 
     # Group by condition and find best rank
     results_df = pd.DataFrame(all_results)
+
+    results_df.to_csv(
+        Path(output_dir) / "cross_validation" / "rank_experiment_simulation_raw.csv",
+        index=False,
+    )
+
     condition_cols = [
         "n_objects",
         "true_rank",
@@ -143,31 +150,32 @@ def run_rank_experiment(
         "rho",
         "max_outer",
         "max_inner",
-        "trial_id",
     ]
 
     final_results = []
     for condition_values, group in results_df.groupby(condition_cols):
         condition_dict = dict(zip(condition_cols, condition_values))
-        best_row = group.loc[group["score"].idxmin()]
+
+        # Compute mean score for each rank across trials
+        rank_scores = group.groupby("rank")["score"].mean()
+        best_rank = rank_scores.idxmin()
+        best_score = rank_scores.min()
 
         final_results.append(
             {
                 **condition_dict,
-                "best_rank": int(best_row["rank"]),
-                "best_score": best_row["score"],
-                "rank_correct": best_row["rank"] == condition_dict["true_rank"],
-                "rank_error": abs(best_row["rank"] - condition_dict["true_rank"]),
-                "seed": best_row["seed"],
+                "best_rank": int(best_rank),
+                "best_score": best_score,
+                "rank_correct": best_rank == condition_dict["true_rank"],
+                "rank_error": abs(best_rank - condition_dict["true_rank"]),
                 "similarity_measure": similarity_measure,
             }
         )
 
-    final_df = pd.DataFrame(final_results)
-
     output_path = (
         Path(output_dir) / "cross_validation" / "rank_experiment_simulation.csv"
     )
+    final_df = pd.DataFrame(final_results)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     final_df.to_csv(output_path, index=False)
 
@@ -181,7 +189,7 @@ def main():
         "--objects",
         nargs="+",
         type=int,
-        default=np.logspace(np.log10(100), np.log10(1000), 10).astype(int).tolist(),
+        default=np.logspace(np.log10(50), np.log10(300), 10).astype(int).tolist(),
     )
     parser.add_argument("--ranks", nargs="+", type=int, default=[5, 10, 20])
     parser.add_argument(
@@ -190,11 +198,11 @@ def main():
         type=float,
         default=np.arange(0.2, 1.0, 0.2).round(2),
     )
-    parser.add_argument("--snr", nargs="+", type=float, default=[0.3, 0.7, 1.0])
-    parser.add_argument("--rho", nargs="+", type=float, default=[0.5, 1.0, 2.0])
-    parser.add_argument("--max-outer", nargs="+", type=int, default=[10, 20, 50])
-    parser.add_argument("--max-inner", nargs="+", type=int, default=[10, 20, 50])
-    parser.add_argument("--trials", type=int, default=3)
+    parser.add_argument("--snr", nargs="+", type=float, default=[0.5, 1.0])
+    parser.add_argument("--rho", nargs="+", type=float, default=[1.0])
+    parser.add_argument("--max-outer", nargs="+", type=int, default=[10, 20, 50, 100])
+    parser.add_argument("--max-inner", nargs="+", type=int, default=[100])
+    parser.add_argument("--trials", type=int, default=20)
     parser.add_argument("--jobs", type=int, default=-1)
     parser.add_argument("--similarity", type=str, default="cosine")
     parser.add_argument("--output", type=str, default="results")

@@ -1,75 +1,87 @@
-# distutils: language = c++, define_macros=[('NPY_NO_DEPRECATED_API', 'NPY_1_7_API_VERSION')]
-# cython: boundscheck=False, wraparound=False, cdivision=True, nonecheck=False
+# distutils: language = c++
+# cython: boundscheck=False, wraparound=False, cdivision=True, nonecheck=False, language_level=3
 
 import numpy as np
-import cython
 cimport numpy as np
-from libc.math cimport sqrt, cbrt
-from cython cimport floating
+from libc.math cimport sqrt, pow, fabs, cbrt
 
 ctypedef np.float64_t DTYPE_t
 
-cdef double _cubic_root(double a, double b, double c, double d):
-    cdef double p, q, delta, x_new, stmp
-    p = (3.0 * a * c - b * b) / (3.0 * a * a)
-    q = (9.0 * a * b * c - 27.0 * a * a * d - 2.0 * b * b * b) / (27.0 * a * a * a)
 
-    if c > b * b / (3.0 * a):  # three real roots
-        delta = sqrt(q * q / 4.0 + p * p * p / 27.0)
-        x_new = cbrt(q / 2.0 - delta) + cbrt(q / 2.0 + delta)
-    else:  # one real root
-        stmp = b * b * b / (27.0 * a * a * a) - d / a
-        x_new = cbrt(stmp)
+cpdef double _quartic_root(double a, double b, double c, double d) nogil:
+    cdef double bb  = b * b
+    cdef double a2  = a * a
+    cdef double p   = (3.0 * a * c - bb) / (3.0 * a2)
+    cdef double q   = (9.0 * a * b * c - 27.0 * a2 * d - 2.0 * b * bb) / (27.0 * a2 * a)
+    cdef double root, delta, tmp
 
-    if x_new < 0.0:
-        x_new = 0.0
+    if c > bb / (3.0 * a):
+        delta = sqrt(q * q * 0.25 + p * p * p / 27.0)
+        root  = cbrt(q * 0.5 - delta) + cbrt(q * 0.5 + delta)
+    else:
+        tmp   = b * bb / (27.0 * a2 * a) - d / a
+        root  = cbrt(tmp)
 
-    return x_new
+    return 0.0 if root < 0.0 else root
 
 
-def update_w(np.ndarray[DTYPE_t, ndim=2] m,
-                np.ndarray[DTYPE_t, ndim=2] x0,
-                int max_iter=100,
-                double tol=1e-6,
-                bint verbose=False):
+cdef inline double _dot_product(double[:] a, double[:] b) nogil:
+    cdef int n = a.shape[0]
+    cdef int i
+    cdef double result = 0.0
+    
+    for i in range(n):
+        result += a[i] * b[i]
+    return result
+
+
+cpdef np.ndarray[DTYPE_t, ndim=2] update_w(np.ndarray[DTYPE_t, ndim=2] m,
+                                                np.ndarray[DTYPE_t, ndim=2] x0,
+                                                int max_iter=100,
+                                                double tol=1e-6,
+                                                bint verbose=False):
     cdef int n = x0.shape[0]
     cdef int r = x0.shape[1]
     cdef np.ndarray[DTYPE_t, ndim=2] x = x0.copy()
     cdef np.ndarray[DTYPE_t, ndim=2] xtx = np.dot(x.T, x)
     cdef np.ndarray[DTYPE_t, ndim=1] diag = np.einsum("ij,ij->i", x, x)
-
+    
+    cdef double[:, :] x_view = x
+    cdef double[:, :] m_view = m
+    cdef double[:, :] xtx_view = xtx
+    cdef double[:] diag_view = diag
+    
     cdef double a = 4.0
-    cdef int it, i, j
-    cdef double max_delta, old, b, c, d, new, delta
-    cdef np.ndarray[DTYPE_t, ndim=1] update_row
-
+    cdef int it, i, j, k
+    cdef double max_delta, old, b, c, d, new, delta, update_val
+    
     for it in range(max_iter):
         max_delta = 0.0
         for i in range(n):
             for j in range(r):
-                old = x[i, j]
+                old = x_view[i, j]
                 b = 12.0 * old
-                c = 4.0 * ((diag[i] - m[i, i]) + xtx[j, j] + old * old)
-                d = 4.0 * np.dot(x[i], xtx[:, j]) - 4.0 * np.dot(m[i], x[:, j])
-
-                new = _cubic_root(a, b, c, d)
+                c = 4.0 * ((diag_view[i] - m_view[i, i]) + xtx_view[j, j] + old * old)
                 
+                d = 4.0 * _dot_product(x_view[i, :], xtx_view[:, j]) - 4.0 * _dot_product(m_view[i, :], x_view[:, j])
+                new = _quartic_root(a, b, c, d)
                 delta = new - old
+                
                 if abs(delta) > max_delta:
                     max_delta = abs(delta)
+                
+                diag_view[i] += new * new - old * old
 
-                diag[i] += new * new - old * old
-                update_row = delta * x[i]
-                xtx[j, :] += update_row
-                xtx[:, j] += update_row
-                xtx[j, j] += delta * delta
-                x[i, j] = new
-
-        if verbose:
-            evar = 1 - (np.linalg.norm(m - np.dot(x, x.T), "fro") / np.linalg.norm(m, "fro"))
-            print(f"it {it:3d}  evar {evar:.6f}")
-
+                for k in range(r):
+                    update_val = delta * x_view[i, k]
+                    xtx_view[j, k] += update_val
+                    xtx_view[k, j] += update_val
+                
+                xtx_view[j, j] += delta * delta
+                
+                x_view[i, j] = new
+        
         if max_delta < tol and tol > 0.0:
             break
-
+    
     return x

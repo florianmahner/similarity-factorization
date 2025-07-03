@@ -4,8 +4,10 @@ ADMM-based Symmetric Non-negative Matrix Factorization
 This module implements the Alternating Direction Method of Multipliers (ADMM)
 for symmetric non-negative matrix factorization, with support for missing entries
 and optional bounded constraints.
-
 """
+
+# TODO Change the verbose flag to an integer
+# TODO Maybe early stopping for the w-subproblem is important to get convergence!
 
 import math
 from collections import defaultdict
@@ -21,10 +23,6 @@ OptionalFloat = float | None
 OptionalArray = NDArray | None
 
 
-# TODO Change the verbose flag to an integer
-# TODO Maybe early stopping for the w-subproblem is important to get convergence!
-
-
 def _quartic_root(a: float, b: float, c: float, d: float) -> float:
     """
     Solve min_{x >= 0} g(x) = a/4 x^4 + b/3 x^3 + c/2 x^2 + d x (a == 4),
@@ -36,24 +34,33 @@ def _quartic_root(a: float, b: float, c: float, d: float) -> float:
     Returns:
         Non-negative minimizer of the quartic polynomial
     """
-    p = (3.0 * a * c - b**2) / (3.0 * a**2)
-    q = (9.0 * a * b * c - 27.0 * a**2 * d - 2.0 * b**3) / (27.0 * a**3)
+    # exact casts
+    a = float(a)
+    b = float(b)
+    c = float(c)
+    d = float(d)
 
-    # closed‑form minimiser of the 1‑D quartic upper‑bound
-    if c > b**2 / (3.0 * a):  # three real roots, pick the one in (0, inf)
-        delta = math.sqrt(q**2 / 4.0 + p**3 / 27.0)
-        x_new = np.cbrt(q / 2.0 - delta) + np.cbrt(q / 2.0 + delta)
-    else:  # one real root
-        stmp = b**3 / (27.0 * a**3) - d / a
-        x_new = np.cbrt(stmp)
+    bb = b * b
+    a2 = a * a
+    p = (3.0 * a * c - bb) / (3.0 * a2)
 
-    if x_new < 0.0:  # non neg constraint
-        x_new = 0.0
+    q = (9.0 * a * b * c - 27.0 * a2 * d - 2.0 * b * bb) / (27.0 * a2 * a)
 
-    return x_new
+    if c > bb / (3.0 * a):
+        delta = math.sqrt(q * q * 0.25 + p * p * p / 27.0)
+        root = math.cbrt(q * 0.5 - delta) + math.cbrt(q * 0.5 + delta)
+    else:
+        tmp = b * bb / (27.0 * a2 * a) - d / a
+        root = math.cbrt(tmp)
+
+    return 0.0 if root < 0.0 else root
 
 
-def update_w(
+def _dot(a, b):
+    return sum(x * y for x, y in zip(a, b))
+
+
+def update_w_python(
     m: NDArray,
     x0: NDArray,
     max_iter: int = 100,
@@ -86,11 +93,11 @@ def update_w(
         for i in range(n):
             for j in range(r):
                 old = x[i, j]
-                b = 12 * old
-                c = 4 * ((diag[i] - m[i, i]) + xtx[j, j] + old * old)
-                d = 4 * (x[i] @ xtx[:, j]) - 4 * (m[i] @ x[:, j])
-
+                b = 12.0 * old
+                c = 4.0 * ((diag[i] - m[i, i]) + xtx[j, j] + old * old)
+                d = 4.0 * _dot(x[i], xtx[:, j]) - 4.0 * _dot(m[i], x[:, j])
                 new = _quartic_root(a, b, c, d)
+
                 delta = new - old
                 if abs(delta) > max_delta:
                     max_delta = abs(delta)
@@ -103,30 +110,45 @@ def update_w(
                 xtx[j, j] += delta * delta
                 x[i, j] = new
 
-        if verbose:
-            evar = 1 - (np.linalg.norm(m - x @ x.T, "fro") / np.linalg.norm(m, "fro"))
-            print(f"it {it:3d}  evar {evar:.6f}", end="\r")
-
         if max_delta < tol and tol > 0.0:
             break
 
     return x
 
 
+_cached_update_w_function = None
+
+
 def _get_update_w_function():
     """Return the appropriate update_w function (Cython or Python fallback)."""
     try:
-        import pyximport
-
-        pyximport.install(
-            language_level=3, setup_args={"include_dirs": np.get_include()}
-        )
+        # Try to import pre-compiled Cython module first
         from .bsum import update_w
 
         return update_w
     except ImportError:
-        # Silently fall back to Python implementation for multiprocessing compatibility
-        return update_w
+        try:
+            # Fall back to pyximport (not multiprocessing-safe)
+            import pyximport
+            import os
+
+            os.environ["CPPFLAGS"] = (
+                f"-I{np.get_include()} -DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION"
+            )
+
+            pyximport.install(
+                setup_args={
+                    "include_dirs": [np.get_include()],
+                    "script_args": ["--quiet"],
+                },
+                language_level=3,
+            )
+            from .bsum import update_w
+
+            return update_w
+        except (ImportError, SystemExit, Exception):
+            # Silently fall back to Python implementation for multiprocessing compatibility
+            return update_w_python
 
 
 def update_v(
@@ -388,9 +410,9 @@ class ADMM(TransformerMixin, BaseEstimator):
             for key, value in metrics.items():
                 history[key].append(value)
 
-            # TODO this is not a good stopping criterion
-            if self.tol > 0.0 and np.linalg.norm(v - w @ w.T, "fro") < self.tol:
-                break
+            # TODO this is not a good stopping criterion -change this one please
+            # if self.tol > 0.0 and np.linalg.norm(v - w @ w.T, "fro") < self.tol:
+            #     break
 
             if self.verbose:
                 print(
