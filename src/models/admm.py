@@ -6,9 +6,6 @@ for symmetric non-negative matrix factorization, with support for missing entrie
 and optional bounded constraints.
 """
 
-# TODO Change the verbose flag to an integer
-# TODO Maybe early stopping for the w-subproblem is important to get convergence!
-
 import math
 from collections import defaultdict
 
@@ -75,7 +72,6 @@ def update_w_python(
         x0: Initial factor matrix
         max_iter: Maximum number of iterations
         tol: Convergence tolerance
-        verbose: Whether to print progress
 
     Returns:
         Optimized factor matrix
@@ -130,7 +126,7 @@ def _get_update_w_function():
 def update_v_(
     observed_mask: NDArray,
     x: NDArray,
-    w: NDArray,
+    x_hat: NDArray,
     lam: NDArray,
     rho: float,
     bound_min: float,
@@ -228,7 +224,7 @@ class ADMM(TransformerMixin, BaseEstimator):
         max_outer: int = 50,
         max_inner: int = 30,
         tol: float = 1e-3,
-        verbose: bool = False,
+        verbose: int = 0,
         init: str = "random_sqrt",
         random_state: int | None = None,
         missing_values: float | None = np.nan,
@@ -257,6 +253,9 @@ class ADMM(TransformerMixin, BaseEstimator):
             raise ValueError(f"max_inner must be positive, got {self.max_inner}")
         if self.tol < 0:
             raise ValueError(f"tol must be non-negative, got {self.tol}")
+        if self.verbose not in [0, 1]:
+            raise ValueError(f"verbose must be 0 or 1, got {self.verbose}")
+
         validate_missing_values(self.missing_values)
         if self.bounds is not None:
             if (
@@ -321,12 +320,14 @@ class ADMM(TransformerMixin, BaseEstimator):
         history = defaultdict(list)
 
         update_w_func = _get_update_w_function()
+        x_hat = np.empty_like(x)
+        x_norm = np.linalg.norm(x, "fro")
 
         for i in range(1, self.max_outer + 1):
             w = update_w_func(x, w, max_iter=self.max_inner, tol=self.tol)
-
-            rec_error = np.linalg.norm(x - w @ w.T, "fro")
-            evar = 1 - rec_error / np.linalg.norm(x, "fro")
+            x_hat[:] = w @ w.T
+            rec_error = np.linalg.norm(x - x_hat, "fro")
+            evar = 1.0 - rec_error / x_norm if x_norm > 0 else 0.0
 
             history["rec_error"].append(rec_error)
             history["total_objective"].append(rec_error)
@@ -334,7 +335,7 @@ class ADMM(TransformerMixin, BaseEstimator):
             history["lagrangian"].append(0.0)
             history["evar"].append(evar)
 
-            if self.verbose:
+            if self.verbose > 0:
                 print(
                     f"Iteration {i}/{self.max_outer}, "
                     f"Rec Error: {rec_error:.3f}, "
@@ -398,11 +399,11 @@ class ADMM(TransformerMixin, BaseEstimator):
             # Update Lagrange multipliers
             update_lambda_(lam, v, x_hat, self.rho)
 
-            metrics = self._compute_metrics(x, v, w, lam)
+            metrics = self._compute_metrics(x, v, x_hat, lam)
             for key, value in metrics.items():
                 history[key].append(value)
 
-            if self.verbose:
+            if self.verbose > 0:
                 print(
                     f"Iteration {i}/{self.max_outer}, "
                     f"Objective: {metrics['total_objective']:.3f}, "
