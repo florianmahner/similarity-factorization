@@ -29,8 +29,8 @@ This project uses [Poetry](https://python-poetry.org/) for dependency management
 4.  **Install dependencies:**
     This command installs the main project dependencies and the ml-toolkit package:
     ```bash
-    pyenv install 3.11.9
-    pyenv local 3.11.9
+    pyenv install 3.12.4
+    pyenv local 3.12.4
     poetry env use $(pyenv which python)
     poetry install
     ```

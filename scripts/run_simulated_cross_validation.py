@@ -13,53 +13,74 @@ from cross_validation import mask_missing_entries, fit_and_score
 from models.admm import ADMM
 from utils.helpers import add_noise_with_snr
 from tools.rsa import compute_similarity
+from utils.simulation import SimulationParams, generate_simulation_data
+
+
+SEEDS = iter(range(10_000_000))
 
 
 def simulate_similarity_matrix(
-    n_objects, true_rank, snr=1.0, seed=42, similarity_measure="cosine"
+    n_objects: int,
+    true_rank: int,
+    snr: float = 1.0,
+    rng: np.random.Generator = np.random.default_rng(),
+    similarity_measure: str = "cosine",
 ):
     """Generate similarity matrix with optional noise and masking."""
-    rng = np.random.default_rng(seed)
 
-    w_true = rng.random((n_objects, true_rank))
-    w_true = add_noise_with_snr(w_true, snr)
-    s_matrix = compute_similarity(w_true, w_true, similarity_measure)
+    # w_true = rng.random((n_objects, true_rank))
+    # w_true = add_noise_with_snr(w_true, snr)
+    # s_matrix = compute_similarity(w_true, w_true, similarity_measure)
 
-    return s_matrix
+    simulation_params = SimulationParams(
+        n=n_objects,
+        k=true_rank,
+        p=100,  # changing this here for now.
+        snr=snr,
+        rng_state=rng.integers(0, 1000000),
+        primary_concentration=5.0,
+        base_concentration=0.1,
+        sparsity=0.8,
+    )
+    X = generate_simulation_data(simulation_params)[0]
+    s = compute_similarity(X, X, similarity_measure)
+
+    return s
 
 
 def evaluate_single_rank(
-    n_objects,
-    true_rank,
-    observed_fraction,
-    snr,
-    rho,
-    max_outer,
-    max_inner,
-    trial_id,
-    seed,
-    similarity_measure,
-    rank,
+    n_objects: int,
+    true_rank: int,
+    observed_fraction: float,
+    snr: float,
+    rho: float,
+    max_outer: int,
+    max_inner: int,
+    trial_id: int,
+    seed: int,
+    similarity_measure: str,
+    rank: int,
 ):
     """Evaluate a single rank for a single condition - fully parallelizable."""
 
+    rng = np.random.default_rng(seed)
+
     # Generate similarity matrix
     s_matrix = simulate_similarity_matrix(
-        n_objects, true_rank, snr, seed, similarity_measure
+        n_objects, true_rank, snr, rng, similarity_measure
     )
 
     # Generate validation mask
-    rng = np.random.default_rng(seed)
+    rng = np.random.default_rng(seed + 1000)
     val_mask = mask_missing_entries(s_matrix, observed_fraction, rng)
 
-    # Create estimator and parameters
-    estimator = ADMM(random_state=seed)
+    estimator = ADMM(random_state=seed + 2000)
     params = {
         "rank": rank,
         "max_outer": max_outer,
         "max_inner": max_inner,
         "rho": rho,
-        "tol": 1e-6,
+        "tol": 1e-3,
     }
 
     # Fit and score
@@ -96,7 +117,6 @@ def run_rank_experiment(
 ):
     """Main experiment orchestrator."""
     jobs = []
-    seed_counter = 0
 
     for n_objects in n_objects_list:
         for true_rank in true_ranks:
@@ -108,7 +128,7 @@ def run_rank_experiment(
                                 for trial_id in range(n_trials):
                                     # Create jobs for each rank
                                     rank_range = list(
-                                        range(max(1, true_rank - 2), true_rank + 3)
+                                        range(max(1, true_rank - 3), true_rank + 4)
                                     )
                                     for rank in rank_range:
                                         jobs.append(
@@ -121,12 +141,11 @@ def run_rank_experiment(
                                                 max_outer,
                                                 max_inner,
                                                 trial_id,
-                                                seed_counter,
+                                                next(SEEDS),
                                                 similarity_measure,
                                                 rank,
                                             )
                                         )
-                                    seed_counter += 1
 
     print(f"Running {len(jobs)} individual rank evaluations in parallel")
 
@@ -138,7 +157,9 @@ def run_rank_experiment(
     results_df = pd.DataFrame(all_results)
 
     results_df.to_csv(
-        Path(output_dir) / "cross_validation" / "rank_experiment_simulation_raw.csv",
+        Path(output_dir)
+        / "cross_validation"
+        / "rank_experiment_simulation_raw_test.csv",
         index=False,
     )
 
@@ -173,7 +194,7 @@ def run_rank_experiment(
         )
 
     output_path = (
-        Path(output_dir) / "cross_validation" / "rank_experiment_simulation.csv"
+        Path(output_dir) / "cross_validation" / "rank_experiment_simulation_test.csv"
     )
     final_df = pd.DataFrame(final_results)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -189,23 +210,33 @@ def main():
         "--objects",
         nargs="+",
         type=int,
-        default=np.logspace(np.log10(50), np.log10(300), 10).astype(int).tolist(),
+        default=np.logspace(np.log10(100), np.log10(10_000), 5).astype(int).tolist(),
     )
     parser.add_argument("--ranks", nargs="+", type=int, default=[5, 10, 20])
     parser.add_argument(
         "--fractions",
         nargs="+",
         type=float,
-        default=np.arange(0.2, 1.0, 0.2).round(2),
+        default=np.arange(0.3, 0.9, 0.1).round(1).tolist(),
     )
-    parser.add_argument("--snr", nargs="+", type=float, default=[0.5, 1.0])
-    parser.add_argument("--rho", nargs="+", type=float, default=[1.0])
-    parser.add_argument("--max-outer", nargs="+", type=int, default=[10, 20, 50, 100])
-    parser.add_argument("--max-inner", nargs="+", type=int, default=[100])
-    parser.add_argument("--trials", type=int, default=20)
+    parser.add_argument(
+        "--snr",
+        nargs="+",
+        type=float,
+        default=[1.0],
+    )
+    parser.add_argument("--rho", nargs="+", type=float, default=[1.0, 2.0, 5.0])
+    parser.add_argument("--max-outer", nargs="+", type=int, default=[20])
+    parser.add_argument("--max-inner", nargs="+", type=int, default=[10])
+    parser.add_argument("--trials", type=int, default=5)
     parser.add_argument("--jobs", type=int, default=-1)
-    parser.add_argument("--similarity", type=str, default="cosine")
-    parser.add_argument("--output", type=str, default="results")
+    parser.add_argument(
+        "--similarity",
+        type=str,
+        default="linear",
+        choices=["cosine", "linear"],
+    )
+    parser.add_argument("--output", type=str, default="./results")
 
     args = parser.parse_args()
 

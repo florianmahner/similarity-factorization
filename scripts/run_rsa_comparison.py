@@ -12,7 +12,7 @@ from joblib import Parallel, delayed
 from scipy.stats import pearsonr
 from statsmodels.stats.multitest import multipletests
 
-from utils.helpers import add_noise_with_snr, align_latent_dimensions
+from utils.helpers import add_positive_noise_with_snr, align_latent_dimensions
 from utils.io import load_spose_embedding
 from models.admm import ADMM
 from tools.rsa import compute_similarity
@@ -79,11 +79,10 @@ def evaluate_condition(
 ):
     """Process a single experimental run."""
     seed = int(n_objects * 1000 + snr * 100 + repeat)
-    noisy_data = add_noise_with_snr(data, snr, rng=seed)
+    noisy_data = add_positive_noise_with_snr(data, snr, rng=seed)
 
     measured_similarity = compute_similarity(noisy_data, noisy_data, similarity_metric)
     w = model.fit_transform(measured_similarity)
-    denoised_similarity = model.reconstruct()
 
     rank = data.shape[1]
     w_aligned = align_latent_dimensions(data, w)
@@ -176,7 +175,7 @@ def run_experiment(
     ]
 
     print(f"Running {len(all_tasks)} conditions in parallel")
-    results = Parallel(n_jobs=max_jobs)(
+    results = Parallel(n_jobs=max_jobs, verbose=1)(
         delayed(process_single_condition)(
             full_data, dims, n_objects, snr, repeat, n_permutations, similarity_metric
         )

@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import pairwise_distances
 from scipy.stats import entropy
+from joblib import Parallel, delayed
 
 SPOSE_66_PATH = (
     "/LOCAL/fmahner/similarity-factorization/data/things/spose_embedding_66d.txt"
@@ -171,40 +172,74 @@ def add_noise_with_snr(
     return np.sqrt(snr) * x + np.sqrt(1 - snr) * noise
 
 
-def add_noise_with_snr_db(
+def compute_snr(signal: np.ndarray, noise: np.ndarray) -> float:
+    """
+    Compute the SNR of a signal and noise.
+    """
+    if np.var(noise) == 0:
+        return np.inf
+    return np.var(signal) / np.var(noise)
+
+
+def add_positive_noise_with_snr(
     signal: np.ndarray,
-    snr_db: float,
-    rng: int | np.random.Generator | None = None,
-    centre: bool = True,
+    ratio: float,
+    rng: np.random.Generator | int | None = None,
+    tol: float = 1e-4,
+    max_iter: int = 100,
 ) -> np.ndarray:
+    """Add gaussian noise to signal while maintaining positivity.
+
+    Adds gaussian noise to the input signal and clips the result to ensure
+    non-negative values. Uses binary search to achieve the target signal-to-noise
+    ratio after clipping.
+
+    Parameters
+    ----------
+    signal : np.ndarray
+        Input signal to add noise to.
+    ratio : float
+        Target ratio of signal variance to total variance after noise addition.
+        Must be between 0 and 1. Higher values mean less noise relative to signal.
+    rng : np.random.Generator | int | None, default=None
+        Random number generator or seed for reproducibility.
+    tol : float, default=1e-3
+        Tolerance for binary search convergence.
+    max_iter : int, default=50
+        Maximum iterations for binary search.
+
+    Returns
+    -------
+    np.ndarray
+        Noisy signal clipped to non-negative values.
     """
-    Add zero-mean Gaussian noise to *signal* to achieve a target SNR.
-    """
-    rng_gen: np.random.Generator
-    if rng is None:
-        rng_gen = np.random.default_rng()
-    elif isinstance(rng, np.random.Generator):
-        rng_gen = rng
-    else:
-        rng_gen = np.random.default_rng(rng)
+    rng = rng if isinstance(rng, np.random.Generator) else np.random.default_rng(rng)
+    if ratio >= 1:
+        return signal
+    if ratio <= 0:
+        return np.clip(rng.normal(0.0, 1.0, size=signal.shape), 0.0, None)
+    snr_target = ratio / (1.0 - ratio)
+    base_noise = rng.normal(0.0, 1.0, size=signal.shape)
+    var_signal = np.var(signal, dtype=float)
 
-    sig = signal.astype(float)  # ensure float64
-    if centre:
-        sig_mean = sig.mean(axis=-1, keepdims=True)
-        sig = sig - sig_mean
+    def snr_after_clipping(noise_scale: float) -> float:
+        noisy = np.clip(signal + base_noise * noise_scale, 0.0, None)
+        var_noise = np.var(noisy - signal, dtype=float)
+        return np.inf if var_noise == 0 else var_signal / var_noise
 
-    # power = variance for zero-mean signals
-    power_signal = np.mean(sig**2, axis=-1, keepdims=True)
-
-    if power_signal == 0:
-        raise ValueError("Signal power is zero; SNR is undefined.")
-
-    snr_linear = 10 ** (snr_db / 10.0)
-    power_noise = power_signal / snr_linear
-    std_noise = np.sqrt(power_noise)
-
-    noise = rng_gen.standard_normal(size=sig.shape) * std_noise
-    return signal + noise
+    scale_min, scale_max = 0.0, 1.0
+    while snr_after_clipping(scale_max) > snr_target:
+        scale_min, scale_max = scale_max, scale_max * 2.0
+    for _ in range(max_iter):
+        scale_mid = 0.5 * (scale_min + scale_max)
+        snr_current = snr_after_clipping(scale_mid)
+        if abs(snr_current - snr_target) / snr_target < tol:
+            break
+        if snr_current > snr_target:
+            scale_min = scale_mid
+        else:
+            scale_max = scale_mid
+    return np.clip(signal + base_noise * scale_mid, 0.0, None)
 
 
 # Clustering and Evaluation Functions
@@ -220,6 +255,10 @@ def purity_score(y_true, y_pred):
     """Compute clustering purity score."""
     cm = contingency_matrix(y_true, y_pred)
     return np.sum(np.amax(cm, axis=0)) / np.sum(cm)
+
+
+def accuracy_score(y_true, y_pred):
+    return np.sum(y_true == y_pred) / len(y_true)
 
 
 def compute_entropy(y, y_hat):
@@ -314,34 +353,65 @@ def rbf_entropy_heuristic(
     n_bins: int = 100,
     return_entropy: bool = False,
 ):
-    """
-    Automatically select RBF sigma by maximizing Shannon entropy of off-diagonal kernel entries.
-    Parameters:
-        x: np.ndarray, shape (n_samples, n_features)
-            Input data.
-        sigma_values: np.ndarray
-            Candidate sigma values to try.
-        n_bins: int
-            Number of bins to use for entropy histogram.
-    """
-
     x = StandardScaler().fit_transform(x)
     d = pairwise_distances(x, metric="euclidean") ** 2
     n = d.shape[0]
 
-    entropy_values = []
-    for sigma in sigma_values:
+    def compute_entropy(sigma: float) -> float:
         k = np.exp(-d / (2 * sigma**2))
-
         k_offdiag = k[~np.eye(n, dtype=bool)]
-
-        # Histogram to estimate empirical distribution
         hist, _ = np.histogram(k_offdiag, bins=n_bins, range=(0, 1), density=True)
-        hist = hist[hist > 0]  # Avoid log(0)
-
-        # Shannon entropy
+        hist = hist[hist > 0]
         h = entropy(hist, base=np.e)
-        entropy_values.append(h)
+        return h
+
+    print(f"Computing {len(sigma_values)} entropy values")
+    entropy_values = Parallel(n_jobs=-1, verbose=1)(
+        delayed(compute_entropy)(sigma) for sigma in sigma_values
+    )
+
+    best_idx = np.argmax(entropy_values)
+    best_sigma = sigma_values[best_idx]
+
+    if return_entropy:
+        return best_sigma, entropy_values
+    return best_sigma
+
+
+def rbf_entropy_heuristic_subsampled(
+    x: np.ndarray,
+    sigma_values: np.ndarray,
+    n_bins: int = 100,
+    return_entropy: bool = False,
+    max_samples: int = 2000,  # New parameter
+    random_state: int = 42,
+):
+    # Subsample if dataset is too large
+    n = x.shape[0]
+    if n > max_samples:
+        rng = np.random.default_rng(random_state)
+        indices = rng.choice(n, size=max_samples, replace=False)
+        x_sample = x[indices]
+        print(f"Subsampled {max_samples} from {n} samples")
+    else:
+        x_sample = x
+
+    x_sample = StandardScaler().fit_transform(x_sample)
+    d = pairwise_distances(x_sample, metric="euclidean") ** 2
+    n_sample = d.shape[0]
+
+    def compute_entropy(sigma: float) -> float:
+        k = np.exp(-d / (2 * sigma**2))
+        k_offdiag = k[~np.eye(n_sample, dtype=bool)]
+        hist, _ = np.histogram(k_offdiag, bins=n_bins, range=(0, 1), density=True)
+        hist = hist[hist > 0]
+        h = entropy(hist, base=np.e)
+        return h
+
+    print(f"Computing {len(sigma_values)} entropy values")
+    entropy_values = Parallel(n_jobs=-1, verbose=1)(
+        delayed(compute_entropy)(sigma) for sigma in sigma_values
+    )
 
     best_idx = np.argmax(entropy_values)
     best_sigma = sigma_values[best_idx]

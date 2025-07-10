@@ -9,8 +9,7 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.12"
-tomlparse = "1.1.2"
+python = ">3.12"
 numpy = "^2.2.4"
 matplotlib = "^3.10.1"
 seaborn = "^0.13.2"
@@ -29,14 +28,15 @@ mantel = "^2.2.2"
 umap = "^0.1.1"
 torch = "^2.7.1"
 torchvision = "^0.22.1"
+cython = "^3.1.1"
+
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.29.5"
 notebook = "^7.3.2"
-jupyterlab = "^4.0.0"  # Added based on earlier recommendation
-cython = "^3.1.1"
+jupyterlab = "^4.0.0"
 black = "^25.1.0"
 autopep8 = "^2.3.2"
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"   
+requires = ["setuptools", "wheel", "cython", "numpy"]
+build-backend = "setuptools.build_meta"

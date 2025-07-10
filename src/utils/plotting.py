@@ -36,7 +36,7 @@ def plot_simulation(x: Array, m: Array, f: Array, s: Array):
     im3 = axes[3].imshow(s, aspect="auto", cmap=cmaps[3])
     axes[3].set_xlabel("Image", fontsize=10)
     axes[3].set_ylabel("Image", fontsize=10)
-    axes[3].set_title("Correlation Matrix (s)", fontsize=10)
+    axes[3].set_title("Similarity Matrix (s)", fontsize=10)
     plt.colorbar(im3, ax=axes[3], fraction=0.046, pad=0.04)
     plt.tight_layout()
     plt.show()

@@ -204,7 +204,6 @@ def load_features(
 class DNN(BaseDatasetLoader):
     def __init__(self, root: str = None, **kwargs):
         super().__init__("dnn", root, **kwargs)
-        breakpoint()
         self.kwargs = kwargs
 
     def load(self) -> BaseDataset:

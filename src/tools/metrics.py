@@ -4,7 +4,7 @@
 """Utilities for distance and similarity metrics"""
 
 import numpy as np
-from sklearn.metrics.pairwise import pairwise_distances, pairwise_kernels
+from sklearn.metrics.pairwise import pairwise_distances
 
 Array = np.ndarray
 
@@ -134,6 +134,33 @@ def manhattan_distance(x: Array, y: Array) -> float | Array:
     return distance
 
 
+def median_sigma_heuristic(x: Array, y: Array = None) -> float:
+    """
+    Return sigma (bandwidth) for RBF kernel using the median heuristic.
+
+    This computes the median of pairwise distances between x and y,
+    then returns sigma = median (direct bandwidth parameter).
+    """
+    if y is None:
+        d = pairwise_distances(x)
+        d = d[np.triu_indices_from(d, k=1)]
+    else:
+        d = pairwise_distances(x, y)
+        d = d.flatten()
+
+    d = d[d > 0]
+    if len(d) == 0:
+        raise ValueError("All pairwise distances are zero")
+
+    return np.median(d)
+
+
+def rbf_kernel(x: Array, y: Array, sigma: float) -> Array:
+    """RBF kernel between two matrices."""
+    distances_squared = pairwise_distances(x, y, metric="euclidean") ** 2
+    return np.exp(-distances_squared / (2 * sigma**2))
+
+
 def gaussian_kernel_similarity(
     x: Array, y: Array, sigma: float | None = None
 ) -> float | Array:
@@ -143,17 +170,12 @@ def gaussian_kernel_similarity(
         x: Array, First input array.
         y: Array, Second input array.
         sigma: float, Controls the width of the kernel. Higher values lead to more
-            smooth similarity functions. If not provided, it is estimated from the data.
+            smooth similarity functions. If not provided, median distance is used.
     """
     if sigma is None:
-        print("Sigma not provided, estimating from data using median distance")
-        dist = pairwise_distances(x, metric="euclidean")
-        median_dist = np.median(dist)
-        sigma = median_dist
+        sigma = median_sigma_heuristic(x, y)
 
-    # convert sigma to sklearn kernel parameter
-    gamma = 1 / (2 * sigma**2)
-    similarity = pairwise_kernels(x, y, metric="rbf", gamma=gamma)
+    similarity = rbf_kernel(x, y, sigma)
     return similarity
 
 

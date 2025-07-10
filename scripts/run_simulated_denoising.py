@@ -1,134 +1,151 @@
-#! /usr/bin/env python3
+#!/usr/bin/env python3
 """This is for thw simulation to check howe well we can clustering in high and low noise regimes!"""
 
 import pandas as pd
 import numpy as np
 import itertools
 from sklearn.decomposition import NMF
-from utils.helpers import map_labels_with_hungarian, compute_metrics
+import argparse
+from pathlib import Path
+from utils.helpers import map_labels_with_hungarian, compute_metrics, accuracy_score
 from models.admm import ADMM
-from utils.metrics import compute_similarity
+from tools.rsa import compute_similarity
 from utils.simulation import generate_simulation_data, SimulationParams
 from joblib import Parallel, delayed
 
 
-def _prepare_nmf_model(x, simulation_params, seed):
-    """Prepares the NMF model configuration."""
-    X_shifted = x - x.min() if x.min() < 0 else x
-    nmf_model = NMF(
-        n_components=simulation_params.k,
+def process_combination(
+    n_observations, n_features, sparsity, rank, snr, seed, similarity_measure
+):
+    """Process a single SNR/seed combination."""
+    # Generate simulation data
+    sim_params = SimulationParams(
+        n=n_observations,
+        p=n_features,
+        k=rank,
+        snr=snr,
+        rng_state=seed,
+        sparsity=sparsity,
+        primary_concentration=5.0,
+        base_concentration=0.1,
+    )
+    data, membership, _, _ = generate_simulation_data(sim_params)
+    true_labels = np.argmax(membership, axis=1)
+
+    results = []
+
+    # NMF clustering
+    w_nmf = NMF(
+        n_components=rank,
         init="random",
-        solver="mu",
+        solver="cd",
         random_state=seed,
         max_iter=1000,
         tol=0.0,
+    ).fit_transform(data)
+
+    labels_nmf = np.argmax(w_nmf, axis=1)
+    mapped_nmf = map_labels_with_hungarian(true_labels, labels_nmf)
+    ari, nmi, purity, entropy = compute_metrics(true_labels, mapped_nmf)
+
+    results.append(
+        {
+            "SNR": snr,
+            "Seed": seed,
+            "Model": "NMF",
+            "ARI": ari,
+            "NMI": nmi,
+            "Purity": purity,
+            "Entropy": entropy,
+            "Accuracy": accuracy_score(true_labels, mapped_nmf),
+        }
     )
-    return {"data": X_shifted, "model": nmf_model}
 
-
-def _prepare_symnmf_model(x, simulation_params, similarity_measure, seed):
-    """Prepares the SymNMF model configuration using the provided instance."""
-    S = compute_similarity(x, x, similarity_measure)
-    model = ADMM(
-        rank=simulation_params.k,
+    # SNMF clustering
+    similarity_matrix = compute_similarity(data, data, similarity_measure)
+    w_snmf = ADMM(
+        rank=rank,
         random_state=seed,
-        max_outer=10,
-        max_inner=100,
-        tol=1e-4,
+        max_outer=1000,
+        max_inner=1,
+        tol=0.0,
         verbose=False,
         init="random_sqrt",
+    ).fit_transform(similarity_matrix)
+
+    labels_snmf = np.argmax(w_snmf, axis=1)
+    mapped_snmf = map_labels_with_hungarian(true_labels, labels_snmf)
+    ari, nmi, purity, entropy = compute_metrics(true_labels, mapped_snmf)
+
+    results.append(
+        {
+            "SNR": snr,
+            "Seed": seed,
+            "Model": "SNMF",
+            "ARI": ari,
+            "NMI": nmi,
+            "Purity": purity,
+            "Entropy": entropy,
+            "Accuracy": accuracy_score(true_labels, mapped_snmf),
+        }
     )
-    return {"data": S, "model": model}
+
+    return results
 
 
-def _evaluate_model(true_labels, model_info):
-    """Fits a model, predicts labels, computes, and returns metrics."""
-    W = model_info["model"].fit_transform(model_info["data"])
-    labels = np.argmax(W, axis=1)
-    mapped_labels = map_labels_with_hungarian(true_labels, labels)
-    return compute_metrics(true_labels, mapped_labels)  # ARI, NMI, Purity, Entropy
-
-
-def _process_single_combination(
-    noise,
-    seed,
-    simulation_params,
-    similarity_measure,
-    metric_names,
-):
-    """Processes a single combination of noise and seed."""
-    # Generate data
-    current_sim_params = simulation_params.copy()
-    current_sim_params.snr = noise
-    current_sim_params.rng_state = seed
-    X, M = generate_simulation_data(current_sim_params)
-    true_labels = np.argmax(M, axis=1)
-
-    local_results = []
-
-    nmf = _prepare_nmf_model(X, current_sim_params, seed)
-
-    # --- Evaluate NMF X ---
-    nmf_metrics = _evaluate_model(true_labels, nmf)
-    for name, value in zip(metric_names, nmf_metrics):
-        local_results.append(
-            {
-                "SNR": noise,
-                "Seed": seed,
-                "Model": "NMF X",
-                "Metric": name,
-                "Value": value,
-            }
-        )
-
-    symnmf_config = _prepare_symnmf_model(
-        X, current_sim_params, similarity_measure, seed
-    )
-    symnmf_metrics = _evaluate_model(true_labels, symnmf_config)
-    for name, value in zip(metric_names, symnmf_metrics):
-        local_results.append(
-            {
-                "SNR": noise,
-                "Seed": seed,
-                "Model": "SymNMF",
-                "Metric": name,
-                "Value": value,
-            }
-        )
-
-    return local_results
-
-
-def run_model_comparison_simulation(
-    simulation_params,
+def run_simulation(
+    n_observations,
+    n_features,
+    sparsity,
+    rank,
+    snr_levels=np.arange(0.0, 1.0, 0.1),
     seeds=range(10),
-    noise_levels=np.linspace(0.0, 1.0, 10),
-    similarity_measure="cosine",
+    similarity_measure="linear",
+    n_jobs=-1,
 ):
-    """Runs model comparison simulation across noise levels and seeds."""
-    metric_names = ["ARI", "NMI", "Accuracy", "Entropy"]
+    """Run clustering simulation across SNR levels and seeds."""
+    combinations = list(itertools.product(snr_levels, seeds))
 
-    # Generate all combinations of noise and seed
-    combinations = list(itertools.product(noise_levels, seeds))
-
-    # Run combinations in parallel
-    # Pass fixed arguments needed by _process_single_combination
-    results_list = Parallel(n_jobs=-1)(
-        delayed(_process_single_combination)(
-            noise, seed, simulation_params, similarity_measure, metric_names
+    results_list = Parallel(n_jobs=n_jobs)(
+        delayed(process_combination)(
+            n_observations, n_features, sparsity, rank, snr, seed, similarity_measure
         )
-        for noise, seed in combinations
+        for snr, seed in combinations
     )
 
-    # Flatten the list of results and convert to DataFrame
     flat_results = [item for sublist in results_list for item in sublist]
     return pd.DataFrame(flat_results)
 
 
-if __name__ == "__main__":
-    simulation_params = SimulationParams(
-        n=100,
-        k=5,
-        snr=1.0,
+def main():
+    parser = argparse.ArgumentParser(description="Run clustering simulation")
+    parser.add_argument("--n-observations", type=int, default=200)
+    parser.add_argument("--n-features", type=int, default=200)
+    parser.add_argument("--rank", type=int, default=10)
+    parser.add_argument("--sparsity", type=float, default=0.8)
+    parser.add_argument("--n-seeds", type=int, default=10)
+    parser.add_argument(
+        "--output", type=str, default="results/simulated_clustering.csv"
     )
-    run_model_comparison_simulation(simulation_params)
+    parser.add_argument("--n-jobs", type=int, default=-1)
+    parser.add_argument("--similarity", type=str, default="linear")
+
+    args = parser.parse_args()
+
+    df = run_simulation(
+        n_observations=args.n_observations,
+        n_features=args.n_features,
+        rank=args.rank,
+        sparsity=args.sparsity,
+        seeds=list(range(args.n_seeds)),
+        n_jobs=args.n_jobs,
+        similarity_measure=args.similarity,
+    )
+
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(output_path, index=False)
+
+
+if __name__ == "__main__":
+    main()

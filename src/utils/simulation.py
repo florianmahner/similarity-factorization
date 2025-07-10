@@ -1,7 +1,8 @@
 import numpy as np
 from dataclasses import dataclass
 from numpy.random import Generator
-from utils.helpers import add_noise_with_snr
+from utils.helpers import add_noise_with_snr, add_positive_noise_with_snr
+from tools.rsa import compute_similarity
 
 RNG = np.random.default_rng(0)
 
@@ -19,11 +20,14 @@ class SimulationParams:
 
     # Dirichlet concentration parameter for the primary cluster.
     # Higher values make the primary membership stronger.
-    primary_concentration: float = 10.0
+    primary_concentration: float = 5.0
 
     # Dirichlet concentration parameter for non-primary clusters.
     # Lower values keep these memberships small.
     base_concentration: float = 1.0
+
+    # Sparsity of the feature matrix.
+    sparsity: float | None = None
 
 
 def generate_hard_membership_loadings(n_samples: int, n_clusters: int) -> np.ndarray:
@@ -76,8 +80,23 @@ def generate_dirichlet_membership_loadings(
     return soft_m
 
 
-def generate_feature_matrix(p: int, k: int, rng: Generator = RNG) -> np.ndarray:
-    f = rng.normal(size=(k, p))
+def generate_feature_matrix(
+    p: int,
+    k: int,
+    rng: Generator,
+    low: float = 0.0,
+    high: float = 1.0,
+    sparsity: float | None = None,
+) -> np.ndarray:
+    """
+    Sample a positive, potentially sparse feature matrix F (k x p) with uniform distribution.
+    """
+    if sparsity is None:
+        f = rng.uniform(low, high, size=(k, p))
+    else:
+        mask = rng.random((k, p)) < (1 - sparsity)  # 1-sparsity for density
+        f = rng.uniform(low, high, size=(k, p)) * mask
+
     return f
 
 
@@ -86,7 +105,8 @@ def generate_data_matrix(
 ) -> Array:
     """Generate noisy data matrix with a given SNR between 0 and 1."""
     x = m @ f  # Compute the clean signal
-    return add_noise_with_snr(x, snr, rng)
+    noisy_x = add_positive_noise_with_snr(x, snr, rng)
+    return noisy_x
 
 
 def generate_simulation_data(
@@ -101,7 +121,9 @@ def generate_simulation_data(
         rng,
     )
 
-    f = generate_feature_matrix(params.p, params.k, rng)
+    f = generate_feature_matrix(params.p, params.k, rng, sparsity=params.sparsity)
     x = generate_data_matrix(m, f, params.snr, rng)
+
     s = x @ x.T
+
     return x, m, f, s
