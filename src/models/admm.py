@@ -373,11 +373,19 @@ class ADMM(TransformerMixin, BaseEstimator):
         update_w_func = _get_update_w_function()
 
         x_hat = w @ w.T
-        v = np.empty_like(x)
+        v = x.copy()
         t = np.empty_like(x)
 
         for i in range(1, self.max_outer + 1):
-            # Update auxiliary variable v
+            # 1. Update factor matrix w FIRST (using previous v + λ/ρ)
+            t[:] = v
+            t -= lam / self.rho
+            w = update_w_func(t, w, max_iter=self.max_inner, tol=self.tol)
+
+            # 2. Compute reconstruction
+            x_hat[:] = w @ w.T
+
+            # 3. Update auxiliary variable v (using new x_hat)
             update_v_(
                 self._observation_mask,
                 x,
@@ -389,14 +397,10 @@ class ADMM(TransformerMixin, BaseEstimator):
                 v,
             )
 
-            # Update factor matrix w
-            t[:] = v
-            t += lam / self.rho
-            w = update_w_func(t, w, max_iter=self.max_inner, tol=self.tol)
+            # symmetrize v
+            v[:] = 0.5 * (v + v.T)
 
-            x_hat[:] = w @ w.T
-
-            # Update Lagrange multipliers
+            # 5. Update Lagrange multipliers (using new v and x_hat)
             update_lambda_(lam, v, x_hat, self.rho)
 
             metrics = self._compute_metrics(x, v, x_hat, lam)
