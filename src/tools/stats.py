@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 
-""" Statistical utilities"""
+"""Statistical utilities"""
 
-import torch
 import numpy as np
 from scipy.stats import pearsonr, spearmanr
 
 Array = np.ndarray
-Tensor = torch.Tensor
 
 
 # ------- Helper Functions for Array Transformations ------- #
@@ -226,6 +224,7 @@ def fisher_z_transform(pearson_r: Array) -> Array:
 
     return np.arctanh(pearson_r)
 
+
 def average_pearson_r(pearson_r: Array, axis: int = 0) -> Array:
     """Compute the average Pearson r after Fisher Z-transform and inverse transformation."""
     fisher_z = fisher_z_transform(pearson_r)
@@ -234,22 +233,7 @@ def average_pearson_r(pearson_r: Array, axis: int = 0) -> Array:
     return np.tanh(mean_z)
 
 
-# ------- Helper Functions for Probability Densities  ------- #
-
-
-def _normal_pdf_numpy(x: Array, mean: Array, std: Array) -> Array:
-    """Compute the probability density function of a normal distribution."""
-    return np.exp(-0.5 * ((x - mean) / std) ** 2) / (std * np.sqrt(2 * np.pi))
-
-
-def _normal_pdf_tensor(x: Tensor, mean: Tensor, std: Tensor) -> Tensor:
-    """Compute the probability density function of a normal distribution."""
-    return torch.exp(-0.5 * ((x - mean) / std) ** 2) / (std * torch.sqrt(2 * torch.pi))
-
-
-def normal_pdf(
-    x: Array | Tensor, mean: Array | Tensor, std: Array | Tensor
-) -> Array | Tensor:
+def normal_pdf(x: Array, mean: Array, std: Array) -> Array:
     """
     Compute the probability density function of a normal distribution.
     Args:
@@ -269,7 +253,4 @@ def normal_pdf(
     if not all(isinstance(arr, type(x)) for arr in (mean, std)):
         raise TypeError("All inputs must be of the same type (Array or Tensor).")
 
-    if isinstance(x, Array):
-        return _normal_pdf_numpy(x, mean, std)
-    else:
-        return _normal_pdf_tensor(x, mean, std)
+    return np.exp(-0.5 * ((x - mean) / std) ** 2) / (std * np.sqrt(2 * np.pi))

@@ -4,6 +4,7 @@ Unified rank detection experiment combining hyperparameter sensitivity and robus
 """
 
 import argparse
+import json
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -28,22 +29,22 @@ def simulate_similarity_matrix(
 ):
     """Generate similarity matrix with optional noise and masking."""
 
-    # w_true = rng.random((n_objects, true_rank))
-    # w_true = add_noise_with_snr(w_true, snr)
-    # s_matrix = compute_similarity(w_true, w_true, similarity_measure)
+    w_true = rng.random((n_objects, true_rank))
+    w_true = add_noise_with_snr(w_true, snr)
+    s = compute_similarity(w_true, w_true, similarity_measure)
 
-    simulation_params = SimulationParams(
-        n=n_objects,
-        k=true_rank,
-        p=100,  # changing this here for now.
-        snr=snr,
-        rng_state=rng.integers(0, 1000000),
-        primary_concentration=5.0,
-        base_concentration=0.1,
-        sparsity=0.8,
-    )
-    X = generate_simulation_data(simulation_params)[0]
-    s = compute_similarity(X, X, similarity_measure)
+    # simulation_params = SimulationParams(
+    #     n=n_objects,
+    #     k=true_rank,
+    #     p=100,  # changing this here for now.
+    #     snr=snr,
+    #     rng_state=rng.integers(0, 1000000),
+    #     primary_concentration=5.0,
+    #     base_concentration=0.1,
+    #     sparsity=0.8,
+    # )
+    # X = generate_simulation_data(simulation_params)[0]
+    # s = compute_similarity(X, X, similarity_measure)
 
     return s
 
@@ -80,7 +81,7 @@ def evaluate_single_rank(
         "max_outer": max_outer,
         "max_inner": max_inner,
         "rho": rho,
-        "tol": 1e-3,
+        "tol": 1e-4,
     }
 
     # Fit and score
@@ -99,6 +100,7 @@ def evaluate_single_rank(
         "score": result["score"],
         "seed": seed,
         "similarity_measure": similarity_measure,
+        "history": result.get("history", {}),  # Include history data
     }
 
 
@@ -153,15 +155,45 @@ def run_rank_experiment(
         delayed(evaluate_single_rank)(*job) for job in jobs
     )
 
-    # Group by condition and find best rank
-    results_df = pd.DataFrame(all_results)
+    # Separate results and histories
+    results_data = []
+    all_histories = []
 
+    for result in all_results:
+        # Extract history and convert to DataFrame with metadata
+        history = result.pop("history", {})
+        if history:
+            history_df = pd.DataFrame(history)
+            history_df["iteration"] = range(len(history_df))
+
+            # Add all experimental parameters
+            for key, value in result.items():
+                history_df[key] = value
+
+            all_histories.append(history_df)
+
+        results_data.append(result)
+
+    # Save main results
+    results_df = pd.DataFrame(results_data)
     results_df.to_csv(
         Path(output_dir)
         / "cross_validation"
         / "rank_experiment_simulation_raw_test.csv",
         index=False,
     )
+
+    # Save consolidated convergence histories
+    if all_histories:
+        convergence_df = pd.concat(all_histories, ignore_index=True)
+        convergence_path = (
+            Path(output_dir)
+            / "cross_validation"
+            / "parameter_convergence_histories.csv"
+        )
+        convergence_path.parent.mkdir(parents=True, exist_ok=True)
+        convergence_df.to_csv(convergence_path, index=False)
+        print(f"Saved convergence histories to {convergence_path}")
 
     condition_cols = [
         "n_objects",
@@ -210,7 +242,7 @@ def main():
         "--objects",
         nargs="+",
         type=int,
-        default=np.logspace(np.log10(100), np.log10(10_000), 5).astype(int).tolist(),
+        default=np.logspace(np.log10(100), np.log10(600), 5).astype(int).tolist(),
     )
     parser.add_argument("--ranks", nargs="+", type=int, default=[5, 10, 20])
     parser.add_argument(
@@ -226,8 +258,8 @@ def main():
         default=[1.0],
     )
     parser.add_argument("--rho", nargs="+", type=float, default=[1.0, 2.0, 5.0])
-    parser.add_argument("--max-outer", nargs="+", type=int, default=[20])
-    parser.add_argument("--max-inner", nargs="+", type=int, default=[10])
+    parser.add_argument("--max-outer", nargs="+", type=int, default=[100])
+    parser.add_argument("--max-inner", nargs="+", type=int, default=[50])
     parser.add_argument("--trials", type=int, default=5)
     parser.add_argument("--jobs", type=int, default=-1)
     parser.add_argument(

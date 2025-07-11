@@ -14,23 +14,6 @@ def mask_missing_entries(
     rng: np.random.RandomState,
     missing_values: float | None = np.nan,
 ) -> np.ndarray:
-    """Mask exactly observed_fraction of the observed (non-NaN) entries symmetrically.
-    Parameters
-    ----------
-    x : np.ndarray
-        Symmetric similarity matrix to mask.
-    observed_fraction : float
-        Fraction of the observed entries to mask.
-    rng : np.random.RandomState
-        Random number generator.
-    missing_values : float | None, optional
-        Value to consider as missing. Default is np.nan.
-
-    Returns
-    -------
-    missing_mask : np.ndarray
-        Boolean mask of the missing entries. True means missing, False means observed.
-    """
     observed_mask = ~np.isnan(x) if missing_values is np.nan else x != missing_values
 
     triu_i, triu_j = np.triu_indices_from(x, k=1)
@@ -54,14 +37,92 @@ def mask_missing_entries(
     missing_mask[keep_j, keep_i] = False
 
     # Diagonal is always observed
-    np.fill_diagonal(missing_mask, False)
+    # NOTE changed this, not sure if it is the problem
+    # np.fill_diagonal(missing_mask, False)
+
     return missing_mask
+
+
+# def mask_missing_entries(
+#     x: np.ndarray,
+#     observed_fraction: float,
+#     rng: np.random.RandomState,
+#     missing_values: float | None = np.nan,
+# ) -> np.ndarray:
+#     """Randomly mask entries while keeping row/col coverage roughly even. We mask the upper triangular part of the matrix.
+#     and ensure that the lower triangular part is also masked and that objects are evenly masked.
+#     Parameters
+#     ----------
+#     x : np.ndarray
+#         Symmetric similarity matrix to mask.
+#     observed_fraction : float
+#         Fraction of the observed entries to mask.
+#     rng : np.random.RandomState
+#         Random number generator.
+#     missing_values : float | None, optional
+#         Value to consider as missing. Default is np.nan.
+
+#     Returns
+#     -------
+#     missing_mask : np.ndarray
+#         Boolean mask of the missing entries. True means missing, False means observed.
+#     """
+#     if not (0 < observed_fraction <= 1):
+#         raise ValueError("`observed_fraction` must lie in (0, 1].")
+#     n = x.shape[0]
+#     if x.shape[1] != n:
+#         raise ValueError("`x` must be square.")
+
+#     observed = ~np.isnan(x) if missing_values is np.nan else x != missing_values
+#     i, j = np.triu_indices(n, 1)
+#     valid = observed[i, j]
+#     if not np.any(valid):
+#         return np.ones_like(x, bool)
+
+#     i, j = i[valid], j[valid]
+#     target_pairs = max(1, int(round(observed_fraction * len(i))))
+#     target_per_row = 2 * target_pairs / n
+
+#     mask = np.ones_like(x, bool)
+#     np.fill_diagonal(mask, False)
+#     row_count = np.zeros(n, dtype=int)
+
+#     order = rng.permutation(len(i))
+#     max_allowed = target_per_row + 2  # small slack avoids stalling
+#     selected = 0
+
+#     for idx in order:
+#         if selected == target_pairs:
+#             break
+#         a, b = i[idx], j[idx]
+#         if row_count[a] < max_allowed and row_count[b] < max_allowed:
+#             mask[a, b] = mask[b, a] = False
+#             row_count[a] += 1
+#             row_count[b] += 1
+#             selected += 1
+
+#     if selected < target_pairs:  # finish with most under-represented rows
+#         remaining = np.argsort(row_count[i] + row_count[j])
+#         for idx in remaining:
+#             if mask[i[idx], j[idx]]:
+#                 mask[i[idx], j[idx]] = mask[j[idx], i[idx]] = False
+#                 selected += 1
+#                 if selected == target_pairs:
+#                     break
+#     return mask
 
 
 def fit_and_score(estimator, x, val_mask, fit_params, split_idx=None):
     """Fit estimator with parameters and return validation score."""
+
     est = clone(estimator).set_params(**fit_params)
     est.set_params(missing_values=np.nan)
+
+    # CRITICAL FIX: If bounds not explicitly provided, compute from original data
+    if "bounds" not in fit_params or fit_params["bounds"] is None:
+        # Compute bounds from full original data, not just training portion
+        original_bounds = (np.nanmin(x), np.nanmax(x))
+        est.set_params(bounds=original_bounds)
 
     # we consider true nan entries as missing, so we need to mask them out in the
     # reconstruction entirely, not bein able to treat them as artificial missing values.
@@ -72,12 +133,14 @@ def fit_and_score(estimator, x, val_mask, fit_params, split_idx=None):
 
     reconstruction = est.fit(x_copy).reconstruct()
     valid_mask = val_mask & ~already_nan
-    mse = np.mean(((x[valid_mask] - reconstruction[valid_mask]) ** 2))
+    mse = np.mean((x[valid_mask] - reconstruction[valid_mask]) ** 2)
+
     result = {
         "score": mse,
         "split": split_idx if split_idx is not None else 0,
         "estimator": est,
         "params": fit_params,
+        "history": est.history_,
     }
     return result
 

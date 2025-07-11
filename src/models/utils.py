@@ -48,8 +48,20 @@ def init_factor(s, rank, init, random_state=None, eps=np.finfo(float).eps):
         factor[factor == 0] = abs(
             avg * rng.standard_normal(size=len(factor[factor == 0])) / 100
         )
+    elif init == "eigenspectrum":
+        factor = eigenspectrum_initialization(s, rank, random_state)
     else:
         raise ValueError(f"Invalid initialization method: {init}")
+    return factor
+
+
+def eigenspectrum_initialization(x: Array, rank: int, random_state=None):
+    eigvals, eigvecs = np.linalg.eigh(x)
+    idx = np.argsort(np.abs(eigvals))[::-1][:rank]
+    eigenvalues_sorted = eigvals[idx]
+    eigenvectors_sorted = eigvecs[:, idx]
+    factor = eigenvectors_sorted @ np.diag(np.sqrt(np.abs(eigenvalues_sorted)))
+    factor[factor < 0] = 0
     return factor
 
 
