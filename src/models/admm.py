@@ -6,6 +6,9 @@ for symmetric non-negative matrix factorization, with support for missing entrie
 and optional bounded constraints.
 """
 
+# TODO Change the verbose flag to an integer
+# TODO Maybe early stopping for the w-subproblem is important to get convergence!
+
 import math
 from collections import defaultdict
 
@@ -15,7 +18,9 @@ from sklearn.utils.validation import check_is_fitted, check_symmetric, validate_
 
 from .utils import init_factor, validate_missing_values, get_missing_mask
 
-type NDArray = np.ndarray
+NDArray = np.ndarray
+OptionalFloat = float | None
+OptionalArray = NDArray | None
 
 
 def _quartic_root(a: float, b: float, c: float, d: float) -> float:
@@ -52,7 +57,6 @@ def _quartic_root(a: float, b: float, c: float, d: float) -> float:
 
 
 def _dot(a, b):
-    """Define this for numerical compatibility with Cython implementation."""
     return sum(x * y for x, y in zip(a, b))
 
 
@@ -61,6 +65,7 @@ def update_w_python(
     x0: NDArray,
     max_iter: int = 100,
     tol: float = 1e-6,
+    verbose: bool = False,
 ) -> NDArray:
     """
     Block successive upper bound minimization (Shi et al., 2016).
@@ -72,6 +77,7 @@ def update_w_python(
         x0: Initial factor matrix
         max_iter: Maximum number of iterations
         tol: Convergence tolerance
+        verbose: Whether to print progress
 
     Returns:
         Optimized factor matrix
@@ -82,7 +88,7 @@ def update_w_python(
     diag = np.einsum("ij,ij->i", x, x)
     a = 4.0
 
-    for _ in range(max_iter):
+    for it in range(max_iter):
         max_delta = 0.0
         for i in range(n):
             for j in range(r):
@@ -104,23 +110,45 @@ def update_w_python(
                 xtx[j, j] += delta * delta
                 x[i, j] = new
 
-        # break if the maximum per entry change is less than the tolerance
         if max_delta < tol and tol > 0.0:
             break
 
     return x
 
 
+_cached_update_w_function = None
+
+
 def _get_update_w_function():
     """Return the appropriate update_w function (Cython or Python fallback)."""
     try:
-        # Import pre-compiled Cython module
+        # Try to import pre-compiled Cython module first
         from .bsum import update_w
 
         return update_w
     except ImportError:
-        # Fall back to Python implementation if compiled module not available
-        return update_w_python
+        try:
+            # Fall back to pyximport (not multiprocessing-safe)
+            import pyximport
+            import os
+
+            os.environ["CPPFLAGS"] = (
+                f"-I{np.get_include()} -DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION"
+            )
+
+            pyximport.install(
+                setup_args={
+                    "include_dirs": [np.get_include()],
+                    "script_args": ["--quiet"],
+                },
+                language_level=3,
+            )
+            from .bsum import update_w
+
+            return update_w
+        except (ImportError, SystemExit, Exception):
+            # Silently fall back to Python implementation for multiprocessing compatibility
+            return update_w_python
 
 
 def update_v_(
@@ -156,6 +184,7 @@ def update_v_(
 
     # since this optimization problem is linear we can do a projection step here to respect the bounds
     np.clip(v, bound_min, bound_max, out=v)
+    v[:] = 0.5 * (v + v.T)
 
 
 def update_lambda_(lam: NDArray, v: NDArray, x_hat: NDArray, rho: float) -> NDArray:
@@ -188,7 +217,7 @@ class ADMM(TransformerMixin, BaseEstimator):
         rho: ADMM penalty parameter controlling constraint enforcement
         max_outer: Maximum number of ADMM outer iterations
         max_inner: Maximum iterations for w-subproblem per outer iteration
-        tol: Convergence tolerance for the BSUM algorithm (maximum per entry change)
+        tol: Convergence tolerance for constraint violation
         verbose: Whether to print optimization progress
         init: Method for factor initialization ('random', 'random_sqrt', 'nndsvd', 'nndsvdar')
         random_state: Random seed for reproducible initialization
@@ -221,10 +250,10 @@ class ADMM(TransformerMixin, BaseEstimator):
         self,
         rank: int = 10,
         rho: float = 1.0,
-        max_outer: int = 50,
+        max_outer: int = 10,
         max_inner: int = 30,
-        tol: float = 1e-3,
-        verbose: int = 0,
+        tol: float = 1e-4,
+        verbose: bool = False,
         init: str = "random_sqrt",
         random_state: int | None = None,
         missing_values: float | None = np.nan,
@@ -253,8 +282,15 @@ class ADMM(TransformerMixin, BaseEstimator):
             raise ValueError(f"max_inner must be positive, got {self.max_inner}")
         if self.tol < 0:
             raise ValueError(f"tol must be non-negative, got {self.tol}")
-        if self.verbose not in [0, 1]:
-            raise ValueError(f"verbose must be 0 or 1, got {self.verbose}")
+        if self.bounds is not None:
+            if not isinstance(self.bounds, tuple) or len(self.bounds) != 2:
+                raise ValueError(
+                    "bounds must be a tuple (lower, upper) of floats or None, "
+                    f"got {self.bounds!r}"
+                )
+            lower, upper = self.bounds
+            if lower is not None and upper is not None and lower > upper:
+                raise ValueError(f"bounds lower must be <= upper, got {self.bounds!r}")
 
         validate_missing_values(self.missing_values)
         if self.bounds is not None:
@@ -320,22 +356,17 @@ class ADMM(TransformerMixin, BaseEstimator):
         history = defaultdict(list)
 
         update_w_func = _get_update_w_function()
-        x_hat = np.empty_like(x)
-        x_norm = np.linalg.norm(x, "fro")
 
         for i in range(1, self.max_outer + 1):
             w = update_w_func(x, w, max_iter=self.max_inner, tol=self.tol)
-            x_hat[:] = w @ w.T
-            rec_error = np.linalg.norm(x - x_hat, "fro")
-            evar = 1.0 - rec_error / x_norm if x_norm > 0 else 0.0
+
+            rec_error = np.linalg.norm(x - w @ w.T, "fro")
+            evar = 1 - rec_error / np.linalg.norm(x, "fro")
 
             history["rec_error"].append(rec_error)
-            history["total_objective"].append(rec_error)
-            history["penalty"].append(0.0)
-            history["lagrangian"].append(0.0)
             history["evar"].append(evar)
 
-            if self.verbose > 0:
+            if self.verbose:
                 print(
                     f"Iteration {i}/{self.max_outer}, "
                     f"Rec Error: {rec_error:.3f}, "
@@ -352,62 +383,46 @@ class ADMM(TransformerMixin, BaseEstimator):
 
     def _fit_missing_data(self, x: NDArray):
         """ADMM fitting for data with missing entries."""
+
+        bound_min, bound_max = self.bounds
+        history = defaultdict(list)
+        self.params = defaultdict(list)
+
         w = init_factor(x, self.rank, self.init, self.random_state)
         lam = np.zeros_like(x)
-        if self.bounds is None:
-            bound_min, bound_max = (
-                x[self._observation_mask].min(),
-                x[self._observation_mask].max(),
-            )
-        else:
-            # v_bounds may contain None; fall back to data-driven extrema
-            lower, upper = self.bounds
-            if lower is None:
-                lower = x[self._observation_mask].min()
-            if upper is None:
-                upper = x[self._observation_mask].max()
-            bound_min, bound_max = lower, upper
-
-        history = defaultdict(list)
 
         update_w_func = _get_update_w_function()
 
-        x_hat = w @ w.T
         v = x.copy()
+        x_hat = w @ w.T
         t = np.empty_like(x)
 
         for i in range(1, self.max_outer + 1):
-            # 1. Update factor matrix w FIRST (using previous v + λ/ρ)
-            t[:] = v
-            t -= lam / self.rho
-            w = update_w_func(t, w, max_iter=self.max_inner, tol=self.tol)
+            t[:] = v + lam / self.rho
 
-            # 2. Compute reconstruction
+            w = update_w_func(t, w, max_iter=self.max_inner, tol=self.tol)
             x_hat[:] = w @ w.T
 
-            # 3. Update auxiliary variable v (using new x_hat)
             update_v_(
-                self._observation_mask,
-                x,
-                x_hat,
-                lam,
-                self.rho,
-                bound_min,
-                bound_max,
-                v,
+                self._observation_mask, x, x_hat, lam, self.rho, bound_min, bound_max, v
             )
-
-            # symmetrize v
-            v[:] = 0.5 * (v + v.T)
-
-            # 5. Update Lagrange multipliers (using new v and x_hat)
             update_lambda_(lam, v, x_hat, self.rho)
+
+            # back compatbility for book keeping
+            self.params["W"].append(w.min())
+            self.params["W_max"].append(w.max())
+            self.params["W_sum"].append(w.sum())
+            self.params["V"].append(v.min())
+            self.params["V_sum"].append(v.sum())
+
+            self.params["lam"].append(lam.min())
+            self.params["lam_sum"].append(lam.sum())
 
             metrics = self._compute_metrics(x, v, x_hat, lam)
             for key, value in metrics.items():
                 history[key].append(value)
 
-            if self.verbose > 0:
+            if self.verbose:
                 print(
                     f"Iteration {i}/{self.max_outer}, "
                     f"Objective: {metrics['total_objective']:.3f}, "
@@ -440,6 +455,7 @@ class ADMM(TransformerMixin, BaseEstimator):
             Fitted estimator.
         """
         self._validate_input_arguments()
+        x = x.copy()
 
         x = validate_data(
             self,
