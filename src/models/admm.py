@@ -6,8 +6,8 @@ for symmetric non-negative matrix factorization, with support for missing entrie
 and optional bounded constraints.
 """
 
-# TODO Change the verbose flag to an integer
 # TODO Maybe early stopping for the w-subproblem is important to get convergence!
+# TODO add convergence criteria for the outer loop based on relative recon error.
 
 import math
 from collections import defaultdict
@@ -65,7 +65,6 @@ def update_w_python(
     x0: NDArray,
     max_iter: int = 100,
     tol: float = 1e-6,
-    verbose: bool = False,
 ) -> NDArray:
     """
     Block successive upper bound minimization (Shi et al., 2016).
@@ -249,7 +248,7 @@ class ADMM(TransformerMixin, BaseEstimator):
     def __init__(
         self,
         rank: int = 10,
-        rho: float = 1.0,
+        rho: float = 3.0,
         max_outer: int = 10,
         max_inner: int = 30,
         tol: float = 1e-4,
@@ -282,16 +281,6 @@ class ADMM(TransformerMixin, BaseEstimator):
             raise ValueError(f"max_inner must be positive, got {self.max_inner}")
         if self.tol < 0:
             raise ValueError(f"tol must be non-negative, got {self.tol}")
-        if self.bounds is not None:
-            if not isinstance(self.bounds, tuple) or len(self.bounds) != 2:
-                raise ValueError(
-                    "bounds must be a tuple (lower, upper) of floats or None, "
-                    f"got {self.bounds!r}"
-                )
-            lower, upper = self.bounds
-            if lower is not None and upper is not None and lower > upper:
-                raise ValueError(f"bounds lower must be <= upper, got {self.bounds!r}")
-
         validate_missing_values(self.missing_values)
         if self.bounds is not None:
             if (
@@ -383,7 +372,6 @@ class ADMM(TransformerMixin, BaseEstimator):
 
     def _fit_missing_data(self, x: NDArray):
         """ADMM fitting for data with missing entries."""
-
         bound_min, bound_max = self.bounds
         history = defaultdict(list)
         self.params = defaultdict(list)
@@ -427,7 +415,8 @@ class ADMM(TransformerMixin, BaseEstimator):
                     f"Iteration {i}/{self.max_outer}, "
                     f"Objective: {metrics['total_objective']:.3f}, "
                     f"Rec Error: {metrics['rec_error']:.3f}, "
-                    f"Evar: {metrics['evar']:.3f}, "
+                    f"Evar: {metrics['evar']:.3f}, ",
+                    end="\r",
                 )
 
         self.w_ = w
