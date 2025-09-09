@@ -146,7 +146,13 @@ def _get_update_w_function():
 
             return update_w
         except (ImportError, SystemExit, Exception):
-            # Silently fall back to Python implementation for multiprocessing compatibility
+            # Fall back to Python implementation for multiprocessing compatibility
+            import warnings
+
+            warnings.warn(
+                "Cython module not available. Falling back to Python implementation, which may be slower.",
+                RuntimeWarning,
+            )
             return update_w_python
 
 
