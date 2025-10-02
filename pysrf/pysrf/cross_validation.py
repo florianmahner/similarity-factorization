@@ -410,6 +410,10 @@ def cross_val_score(
     )
     grid.fit(similarity_matrix)
 
+    grid.p_min_ = pmin
+    grid.p_max_ = pmax
+    grid.sampling_fraction_ = sampling_fraction
+
     if fit_final_estimator and n_stable_runs > 1:
         from .stability import fit_stable, cluster_stable
 

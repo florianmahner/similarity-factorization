@@ -46,6 +46,16 @@ def load_spose_embedding(
     num_dims=66,
 ):
     embedding_path = Path(embedding_path)
+    
+    # If path is relative, resolve from repository root
+    if not embedding_path.is_absolute():
+        # Find repository root by looking for pyproject.toml
+        current = Path(__file__).resolve()
+        for parent in [current] + list(current.parents):
+            if (parent / "pyproject.toml").exists():
+                embedding_path = parent / embedding_path
+                break
+    
     if num_dims == 66:
         path = Path(embedding_path / "spose_embedding_66d.txt")
     elif num_dims == 49:
