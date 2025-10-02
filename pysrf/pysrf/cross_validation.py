@@ -289,6 +289,8 @@ def cross_val_score(
     n_jobs: int = -1,
     missing_values: float | None = np.nan,
     fit_final_estimator: bool = False,
+    n_stable_runs: int = 1,
+    cluster_stable: bool | dict = False,
 ) -> ADMMGridSearchCV:
     """
     Cross-validate SRF parameters for matrix completion.
@@ -322,11 +324,23 @@ def cross_val_score(
         Value to consider as missing
     fit_final_estimator : bool, default=False
         Whether to fit the final estimator on the best parameters
+    n_stable_runs : int, default=1
+        Number of independent runs with different initializations for stable embeddings.
+        Only used if fit_final_estimator=True and n_stable_runs > 1.
+    cluster_stable : bool or dict, default=False
+        Whether to cluster the stable embeddings. Only used if fit_final_estimator=True
+        and n_stable_runs > 1. If dict, passed as kwargs to cluster_stable().
+        Common kwargs: min_clusters, max_clusters, step, n_init
 
     Returns
     -------
     grid : ADMMGridSearchCV
-        Fitted ADMMGridSearchCV object with best parameters and scores
+        Fitted ADMMGridSearchCV object with best parameters and scores.
+        If n_stable_runs > 1, additional attributes:
+            - stable_embeddings_ : stacked embeddings (n_samples, rank * n_runs)
+            - clustered_embedding_ : clustered embedding (n_samples, best_k) if cluster_stable=True
+            - cluster_results_ : DataFrame with clustering results if cluster_stable=True
+            - best_k_ : optimal number of clusters if cluster_stable=True
 
     Examples
     --------
@@ -342,6 +356,18 @@ def cross_val_score(
     ...     param_grid={'rank': [5, 10, 15]},
     ...     estimate_sampling_fraction=True
     ... )
+
+    >>> # Complete pipeline: CV + stable ensemble + clustering
+    >>> result = cross_val_score(
+    ...     similarity_matrix,
+    ...     param_grid={'rank': list(range(5, 50))},
+    ...     estimate_sampling_fraction=True,
+    ...     fit_final_estimator=True,
+    ...     n_stable_runs=50,
+    ...     cluster_stable=True
+    ... )
+    >>> final_embedding = result.clustered_embedding_
+    >>> print(f"Best rank: {result.best_params_['rank']}, Best k: {result.best_k_}")
     """
     if param_grid is None:
         param_grid = {"rank": [5, 10, 15, 20]}
@@ -382,4 +408,44 @@ def cross_val_score(
         verbose=verbose,
         fit_final_estimator=fit_final_estimator,
     )
-    return grid.fit(similarity_matrix)
+    grid.fit(similarity_matrix)
+
+    if fit_final_estimator and n_stable_runs > 1:
+        from .stability import fit_stable, cluster_stable
+
+        if verbose:
+            print(
+                f"Fitting {n_stable_runs} stable runs with rank={grid.best_params_['rank']}"
+            )
+
+        srf_params = {k: v for k, v in grid.best_params_.items() if k != "rank"}
+
+        grid.stable_embeddings_ = fit_stable(
+            similarity_matrix,
+            rank=grid.best_params_["rank"],
+            n_runs=n_stable_runs,
+            random_state=random_state,
+            n_jobs=n_jobs,
+            verbose=verbose,
+            **srf_params,
+        )
+
+        if cluster_stable:
+            if verbose:
+                print("Clustering stable embeddings")
+
+            cluster_kwargs = cluster_stable if isinstance(cluster_stable, dict) else {}
+            if "random_state" not in cluster_kwargs:
+                cluster_kwargs["random_state"] = random_state
+            if "n_jobs" not in cluster_kwargs:
+                cluster_kwargs["n_jobs"] = n_jobs
+            if "verbose" not in cluster_kwargs:
+                cluster_kwargs["verbose"] = verbose
+
+            (
+                grid.clustered_embedding_,
+                grid.best_k_,
+                grid.cluster_results_,
+            ) = cluster_stable(grid.stable_embeddings_, **cluster_kwargs)
+
+    return grid

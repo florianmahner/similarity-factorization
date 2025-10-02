@@ -6,31 +6,11 @@ repo_url: https://github.com/florianmahner/pysrf
 repo_name: florianmahner/pysrf
 
 theme:
-  name: material
-  palette:
-    - scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-    - scheme: slate
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
-  features:
-    - navigation.instant
-    - navigation.tracking
-    - navigation.tabs
-    - navigation.sections
-    - navigation.expand
-    - navigation.top
-    - search.suggest
-    - search.highlight
-    - content.code.copy
-    - content.code.annotate
+  name: readthedocs
+  highlightjs: true
+  hljs_languages:
+    - python
+    - bash
 
 plugins:
   - search
