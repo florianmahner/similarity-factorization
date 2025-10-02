@@ -20,14 +20,7 @@ def fit_stable(
     random_state: int = 0,
     n_jobs: int = -1,
     stack: bool = True,
-    rho: float = 3.0,
-    max_outer: int = 15,
-    max_inner: int = 40,
-    tol: float = 1e-4,
-    init: str = "random_sqrt",
-    missing_values: float | None = np.nan,
-    bounds: tuple[float | None, float | None] | None = None,
-    verbose: int = 0,
+    srf_kwargs: dict | None = None,
 ) -> ndarray | list[ndarray]:
     """
     Fit multiple SRF models with different initializations for stable embeddings.
@@ -51,22 +44,8 @@ def fit_stable(
     stack : bool, default=True
         If True, stack embeddings horizontally (n_samples, rank * n_runs).
         If False, return list of (n_samples, rank) arrays.
-    rho : float, default=3.0
-        ADMM penalty parameter
-    max_outer : int, default=15
-        Maximum outer ADMM iterations
-    max_inner : int, default=40
-        Maximum inner iterations per ADMM update
-    tol : float, default=1e-4
-        Convergence tolerance
-    init : str, default='random_sqrt'
-        Initialization method
-    missing_values : float or None, default=np.nan
-        Value indicating missing entries
-    bounds : tuple of (float or None, float or None), optional
-        Data bounds (vmin, vmax) for constrained factorization
-    verbose : int, default=0
-        Verbosity level
+    srf_kwargs : dict, optional
+        Additional keyword arguments for SRF.
 
     Returns
     -------
@@ -81,24 +60,12 @@ def fit_stable(
     >>> embeddings.shape
     (1000, 1000)  # 20 * 50
     """
-    vmin, vmax = float(np.nanmin(similarity_matrix)), float(
-        np.nanmax(similarity_matrix)
-    )
-    if bounds is None:
-        bounds = (vmin, vmax)
 
     def _fit(seed: int) -> ndarray:
         model = SRF(
             rank=rank,
-            rho=rho,
-            max_outer=max_outer,
-            max_inner=max_inner,
-            tol=tol,
-            init=init,
             random_state=seed,
-            missing_values=missing_values,
-            bounds=bounds,
-            verbose=False,
+            **srf_kwargs,
         )
         return model.fit_transform(similarity_matrix)
 
