@@ -6,7 +6,7 @@ LOG_DIR="$SCRIPT_DIR/logs"
 
 mkdir -p "$LOG_DIR"
 
-DATASET="${1:-peterson-animals}"
+DATASET="${1:-peterson-various}"
 
 JOB_NAME="debug_${DATASET}"
 WORK_DIR="$REPO_ROOT"
