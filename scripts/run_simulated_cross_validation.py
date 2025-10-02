@@ -10,8 +10,8 @@ import pandas as pd
 from pathlib import Path
 from joblib import Parallel, delayed
 
-from cross_validation import mask_missing_entries, fit_and_score
-from models.admm import ADMM
+from pysrf import mask_missing_entries, fit_and_score
+from pysrf import SRF
 from utils.helpers import add_noise_with_snr
 from tools.rsa import compute_similarity
 from utils.simulation import SimulationParams, generate_simulation_data
@@ -29,22 +29,22 @@ def simulate_similarity_matrix(
 ):
     """Generate similarity matrix with optional noise and masking."""
 
-    w_true = rng.random((n_objects, true_rank))
-    w_true = add_noise_with_snr(w_true, snr)
-    s = compute_similarity(w_true, w_true, similarity_measure)
+    # w_true = rng.random((n_objects, true_rank))
+    # w_true = add_noise_with_snr(w_true, snr)
+    # s = compute_similarity(w_true, w_true, similarity_measure)
 
-    # simulation_params = SimulationParams(
-    #     n=n_objects,
-    #     k=true_rank,
-    #     p=100,  # changing this here for now.
-    #     snr=snr,
-    #     rng_state=rng.integers(0, 1000000),
-    #     primary_concentration=5.0,
-    #     base_concentration=0.1,
-    #     sparsity=0.8,
-    # )
-    # X = generate_simulation_data(simulation_params)[0]
-    # s = compute_similarity(X, X, similarity_measure)
+    simulation_params = SimulationParams(
+        n=n_objects,
+        k=true_rank,
+        p=100,  # changing this here for now.
+        snr=snr,
+        rng_state=rng.integers(0, 1000000),
+        primary_concentration=5.0,
+        base_concentration=0.1,
+        sparsity=0.8,
+    )
+    X = generate_simulation_data(simulation_params)[0]
+    s = compute_similarity(X, X, similarity_measure)
 
     return s
 
@@ -52,7 +52,7 @@ def simulate_similarity_matrix(
 def evaluate_single_rank(
     n_objects: int,
     true_rank: int,
-    observed_fraction: float,
+    sampling_fraction: float,
     snr: float,
     rho: float,
     max_outer: int,
@@ -75,7 +75,7 @@ def evaluate_single_rank(
     rng = np.random.default_rng(seed + 1000)
     val_mask = mask_missing_entries(s_matrix, observed_fraction, rng)
 
-    estimator = ADMM(random_state=seed + 2000)
+    estimator = SRF(random_state=seed + 2000)
     params = {
         "rank": rank,
         "max_outer": max_outer,
@@ -90,7 +90,7 @@ def evaluate_single_rank(
     return {
         "n_objects": n_objects,
         "true_rank": true_rank,
-        "observed_fraction": observed_fraction,
+        "sampling_fraction": observed_fraction,
         "snr": snr,
         "rho": rho,
         "max_outer": max_outer,
@@ -129,9 +129,7 @@ def run_rank_experiment(
                             for max_inner in max_inner_values:
                                 for trial_id in range(n_trials):
                                     # Create jobs for each rank
-                                    rank_range = list(
-                                        range(max(1, true_rank - 3), true_rank + 4)
-                                    )
+                                    rank_range = list(range(max(1, 1), 50))
                                     for rank in rank_range:
                                         jobs.append(
                                             (
@@ -198,7 +196,7 @@ def run_rank_experiment(
     condition_cols = [
         "n_objects",
         "true_rank",
-        "observed_fraction",
+        "sampling_fraction",
         "snr",
         "rho",
         "max_outer",
@@ -242,14 +240,14 @@ def main():
         "--objects",
         nargs="+",
         type=int,
-        default=np.logspace(np.log10(100), np.log10(600), 5).astype(int).tolist(),
+        default=np.logspace(np.log10(200), np.log10(1000), 5).astype(int).tolist(),
     )
     parser.add_argument("--ranks", nargs="+", type=int, default=[5, 10, 20])
     parser.add_argument(
         "--fractions",
         nargs="+",
         type=float,
-        default=np.arange(0.3, 0.9, 0.1).round(1).tolist(),
+        default=list(np.linspace(0.01, 1.0, 50).round(3)),
     )
     parser.add_argument(
         "--snr",
@@ -257,9 +255,14 @@ def main():
         type=float,
         default=[1.0],
     )
-    parser.add_argument("--rho", nargs="+", type=float, default=[1.0, 2.0, 5.0])
-    parser.add_argument("--max-outer", nargs="+", type=int, default=[100])
-    parser.add_argument("--max-inner", nargs="+", type=int, default=[50])
+    parser.add_argument(
+        "--rho",
+        nargs="+",
+        type=float,
+        default=list(np.linspace(0.1, 2.0, 4).round(2)),
+    )
+    parser.add_argument("--max-outer", nargs="+", type=int, default=[50])
+    parser.add_argument("--max-inner", nargs="+", type=int, default=[20])
     parser.add_argument("--trials", type=int, default=5)
     parser.add_argument("--jobs", type=int, default=-1)
     parser.add_argument(

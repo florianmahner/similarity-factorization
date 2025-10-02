@@ -3,7 +3,7 @@ import pandas as pd
 from joblib import Parallel, delayed
 from sklearn.base import clone
 from sklearn.model_selection import ParameterGrid
-from models.admm import ADMM
+from pysrf import SRF
 from tools.rsa import correlate_rsms, reconstruct_rsm_batched, compute_similarity
 from utils.simulation import add_noise_with_snr
 from utils.helpers import best_pairwise_match
@@ -15,7 +15,7 @@ from experiments.things.common import (
     compute_similarity_matrix_from_triplets,
     compute_triplet_prediction_accuracy,
 )
-from cross_validation import cross_val_score
+from pysrf import cross_val_score
 
 
 def run_experiment(trial_func, param_grid, n_jobs=-1, verbose=True):
@@ -39,7 +39,7 @@ def fit_admm_model(
     """Fit ADMM model with given parameters."""
     local_params = params.copy()
     local_params["random_state"] = seed
-    model = ADMM(**local_params)
+    model = SRF(**local_params)
     return model.fit_transform(similarity)
 
 
@@ -153,13 +153,15 @@ def spose_performance_experiment(
     spose_embedding,
     indices_48,
     rsm_48_true,
-    similarity,
+    train_triplets,
     validation_triplets,
+    n_items,
     admm_params,
     seeds=range(5),
     **kwargs,
 ):
     """Run SPoSE vs ADMM comparison experiment."""
+    similarity = compute_similarity_matrix_from_triplets(n_items, train_triplets)
     param_grid = {
         "spose_embedding": [spose_embedding],
         "indices_48": [indices_48],
@@ -170,6 +172,74 @@ def spose_performance_experiment(
         "seed": seeds,
     }
     return run_experiment(spose_performance_trial, param_grid, **kwargs)
+
+
+def spose_48_prediction_trial(
+    spose_embedding,
+    indices_48,
+    rsm_48_true,
+    similarity,
+    admm_params,
+    seed=0,
+):
+    """Single trial of SPoSE vs ADMM comparison."""
+    # Fit ADMM
+    admm_embedding = fit_admm_model(similarity, admm_params, seed=seed)
+
+    # Compute correlations and accuracies
+    rsm_48_spose = reconstruct_rsm_batched(spose_embedding[indices_48])
+    rsm_admm = reconstruct_admm_rsm(admm_embedding)
+    rsm_48_admm = rsm_admm[np.ix_(indices_48, indices_48)]
+
+    n = rsm_48_true.shape[0]
+    rows = []
+    pair_idx = 0
+    for i in range(n):
+        for j in range(i + 1, n):
+            rows.append(
+                {
+                    "true_similarity": float(rsm_48_true[i, j]),
+                    "predicted_similarity": float(rsm_48_admm[i, j]),
+                    "model": "ADMM",
+                    "seed": seed,
+                    "pair_idx": pair_idx,
+                }
+            )
+            rows.append(
+                {
+                    "true_similarity": float(rsm_48_true[i, j]),
+                    "predicted_similarity": float(rsm_48_spose[i, j]),
+                    "model": "SPoSE",
+                    "seed": seed,
+                    "pair_idx": pair_idx,
+                }
+            )
+            pair_idx += 1
+
+    return rows
+
+
+def spose_48_performance_experiment(
+    spose_embedding,
+    indices_48,
+    rsm_48_true,
+    train_triplets,
+    n_items,
+    admm_params,
+    seeds=range(5),
+    **kwargs,
+):
+    """Run SPoSE vs ADMM comparison experiment."""
+    similarity = compute_similarity_matrix_from_triplets(n_items, train_triplets)
+    param_grid = {
+        "spose_embedding": [spose_embedding],
+        "indices_48": [indices_48],
+        "rsm_48_true": [rsm_48_true],
+        "similarity": [similarity],
+        "admm_params": [admm_params],
+        "seed": seeds,
+    }
+    return run_experiment(spose_48_prediction_trial, param_grid, **kwargs)
 
 
 def subsample_triplets(
@@ -185,10 +255,15 @@ def subsample_triplets(
 
 
 def low_data_trial(
-    triplets, validation_triplets, n_items, admm_params, data_percentage=1.0, seed=0
+    train_triplets,
+    validation_triplets,
+    n_items,
+    admm_params,
+    data_percentage=1.0,
+    seed=0,
 ):
     """Single trial of low data experiment."""
-    subsampled_triplets = subsample_triplets(triplets, data_percentage, seed)
+    subsampled_triplets = subsample_triplets(train_triplets, data_percentage, seed)
     similarity = compute_similarity_matrix_from_triplets(n_items, subsampled_triplets)
 
     admm_embedding = fit_admm_model(similarity, admm_params, seed=seed)
@@ -206,7 +281,7 @@ def low_data_trial(
 
 
 def low_data_experiment(
-    triplets,
+    train_triplets,
     validation_triplets,
     n_items,
     admm_params,
@@ -216,7 +291,7 @@ def low_data_experiment(
 ):
     """Run low data experiment."""
     param_grid = {
-        "triplets": [triplets],
+        "train_triplets": [train_triplets],
         "validation_triplets": [validation_triplets],
         "n_items": [n_items],
         "admm_params": [admm_params],
@@ -262,8 +337,8 @@ def compute_dimension_reliability(
     # Run all fits (original + references) in parallel
     all_embeddings = Parallel(n_jobs=n_jobs)(
         delayed(fit_admm_model)(
-            similarity_matrix=similarity_matrix,
-            admm_params=admm_params,
+            similarity=similarity_matrix,
+            params=admm_params,
             seed=seed,
         )
         for seed in range(0, n_runs + 1)
@@ -359,14 +434,14 @@ def run_spose_dimensionality_analysis(
             similarity,
             param_grid=param_grid,
             n_repeats=n_repeats,
-            observed_fraction=observed_fraction,
+            sampling_fraction=observed_fraction,
             random_state=0,
             verbose=0,
             n_jobs=n_jobs,
             fit_final_estimator=False,
         )
         cv_results = pd.DataFrame(scorer.cv_results_)
-        cv_results["observed_fraction"] = observed_fraction
+        cv_results["sampling_fraction"] = observed_fraction
         all_cv_results.append(cv_results)
 
     return pd.concat(all_cv_results)

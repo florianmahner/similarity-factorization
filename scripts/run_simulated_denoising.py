@@ -8,7 +8,7 @@ from sklearn.decomposition import NMF
 import argparse
 from pathlib import Path
 from utils.helpers import map_labels_with_hungarian, compute_metrics, accuracy_score
-from models.admm import ADMM
+from pysrf import SRF
 from tools.rsa import compute_similarity
 from utils.simulation import generate_simulation_data, SimulationParams
 from joblib import Parallel, delayed
@@ -63,7 +63,9 @@ def process_combination(
 
     # SNMF clustering
     similarity_matrix = compute_similarity(data, data, similarity_measure)
-    w_snmf = ADMM(
+    # similarity_matrix = data @ data.T
+    # np.fill_diagonal(similarity_matrix, 0.0)
+    w_snmf = SRF(
         rank=rank,
         random_state=seed,
         max_outer=1000,

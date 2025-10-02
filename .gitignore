@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# Poetry
+poetry.lock
+
+# IDEs
+.vscode/
+.cursor/
+.idea/
+
+# Data and results (keep local only)
+data/
+results/
+embeddings/
+_trash/
+
+# Large binary files
+*.npy
+*.mat
+*.h5
+*.hdf5
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+

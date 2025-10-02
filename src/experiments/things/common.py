@@ -1,5 +1,5 @@
 import numpy as np
-from models.admm import ADMM
+from pysrf import SRF
 
 
 CATEGORY_REPLACEMENTS = {"camera": "camera1", "file": "file1"}
@@ -56,5 +56,5 @@ def fit_admm_model(
     """Fit ADMM model with given parameters."""
     local_params = params.copy()
     local_params["random_state"] = seed
-    model = ADMM(**local_params)
+    model = SRF(**local_params)
     return model.fit_transform(similarity)

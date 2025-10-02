@@ -272,4 +272,3 @@ def load_nsd_data(
 
 if __name__ == "__main__":
     betas = load_nsd_data(subject_id=1, roi_name="floc-faces", return_images=True)
-    breakpoint()

@@ -9,7 +9,7 @@ from sklearn.decomposition import NMF
 from sklearn.cluster import SpectralClustering
 
 from datasets import load_dataset
-from models.admm import ADMM
+from pysrf import SRF
 from utils.helpers import (
     map_labels_with_hungarian,
     purity_score,
@@ -163,8 +163,8 @@ def create_models(rank, seed, max_outer, max_inner, verbose):
     }
 
     register_model(
-        "SyNMF",
-        ADMM(
+        "SNMF",
+        SRF(
             init="random_sqrt",
             rank=rank,
             max_outer=max_outer,

@@ -16,6 +16,7 @@ AVAILABLE_METRICS = (
     "linear",
     "manhattan",
     "gaussian_kernel",
+    "rbf",
 )
 
 
@@ -34,6 +35,7 @@ def compute_similarity(x: Array, y: Array, metric: str, **kwargs) -> float | Arr
         "linear": dot_similarity,
         "manhattan": manhattan_similarity,
         "gaussian_kernel": gaussian_kernel_similarity,
+        "rbf": rbf_kernel_similarity,
     }
     return similarity_functions[metric](x, y, **kwargs)
 
@@ -48,6 +50,7 @@ def compute_distance(x: Array, y: Array, metric: str, **kwargs) -> float | Array
         "linear": dot_distance,
         "manhattan": manhattan_distance,
         "gaussian_kernel": gaussian_kernel_distance,
+        "rbf": rbf_kernel_distance,
     }
     return distance_functions[metric](x, y, **kwargs)
 
@@ -159,6 +162,14 @@ def rbf_kernel(x: Array, y: Array, sigma: float) -> Array:
     """RBF kernel between two matrices."""
     distances_squared = pairwise_distances(x, y, metric="euclidean") ** 2
     return np.exp(-distances_squared / (2 * sigma**2))
+
+
+def rbf_kernel_distance(x: Array, y: Array, sigma: float) -> Array:
+    return gaussian_kernel_distance(x, y, sigma)
+
+
+def rbf_kernel_similarity(x: Array, y: Array, sigma: float) -> Array:
+    return gaussian_kernel_similarity(x, y, sigma)
 
 
 def gaussian_kernel_similarity(

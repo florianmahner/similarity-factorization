@@ -6,8 +6,8 @@ import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from cross_validation import cross_val_score
-from _compute_prange import estimate_p_bound_fast
+from pysrf import cross_val_score
+from pysrf.bounds import estimate_p_bound_fast
 from matplotlib.colors import LogNorm
 
 
@@ -41,7 +41,7 @@ def main(
             "init": ["random_sqrt"],
         },
         n_repeats=10,
-        observed_fraction=0.5 * (p_min + p_max),
+        sampling_fraction=0.5 * (p_min + p_max),
         n_jobs=-1,
         random_state=seed,
         verbose=0,

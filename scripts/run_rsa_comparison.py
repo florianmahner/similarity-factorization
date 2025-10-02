@@ -14,10 +14,7 @@ from statsmodels.stats.multitest import multipletests
 
 from utils.helpers import add_positive_noise_with_snr, align_latent_dimensions
 from utils.io import load_spose_embedding
-from models.admm import ADMM
-from tools.rsa import compute_similarity
-
-# TODO make condition class probably.
+from pysrf import SRF
 
 
 def mantel_test(A, B, permutations=10000, random_state=None, two_sided=False):
@@ -40,10 +37,11 @@ def mantel_test(A, B, permutations=10000, random_state=None, two_sided=False):
         sc = pearsonr(sim1, Bp[idx_upper]).statistic
         nulls[i] = np.abs(sc) if two_sided else sc
 
-    return (np.sum(nulls >= obs) + 1) / (permutations + 1), nulls, obs
+    p_value = (np.sum(nulls >= obs) + 1) / (permutations + 1)
+    return p_value, nulls, obs
 
 
-def permutation_test(A, B, permutations=10000, random_state=None, two_sided=False):
+def permutation_test(A, B, permutations=10000, random_state=None, two_sided=True):
     """Permutation test for correlation between two vectors."""
     if random_state is not None:
         np.random.seed(random_state)
@@ -63,7 +61,8 @@ def permutation_test(A, B, permutations=10000, random_state=None, two_sided=Fals
             greater += 1
         null_corrs[i] = perm_corr
 
-    return (greater + 1) / (permutations + 1), null_corrs, observed_corr
+    p_value = (greater + 1) / (permutations + 1)
+    return p_value, null_corrs, observed_corr
 
 
 def evaluate_condition(
@@ -75,23 +74,34 @@ def evaluate_condition(
     repeat,
     n_permutations,
     alpha=0.05,
-    similarity_metric="linear",
 ):
     """Process a single experimental run."""
-    seed = int(n_objects * 1000 + snr * 100 + repeat)
-    noisy_data = add_positive_noise_with_snr(data, snr, rng=seed)
+    seed_base = 10000 + 97 * (repeat + 1)
+    noisy_data = add_positive_noise_with_snr(data, snr, rng=seed_base)
 
-    measured_similarity = compute_similarity(noisy_data, noisy_data, similarity_metric)
+    measured_similarity = noisy_data @ noisy_data.T
     w = model.fit_transform(measured_similarity)
 
     rank = data.shape[1]
     w_aligned = align_latent_dimensions(data, w)
     rsa_tests = [
-        mantel_test(h, measured_similarity, permutations=n_permutations)
-        for h in hypotheses
+        mantel_test(
+            h,
+            measured_similarity,
+            permutations=n_permutations,
+            random_state=seed_base + 100 * i,
+            two_sided=True,
+        )
+        for i, h in enumerate(hypotheses)
     ]
     latent_tests = [
-        permutation_test(data[:, i], w_aligned[:, i], permutations=n_permutations)
+        permutation_test(
+            data[:, i],
+            w_aligned[:, i],
+            permutations=n_permutations,
+            random_state=seed_base + 200 * i,
+            two_sided=True,
+        )
         for i in range(rank)
     ]
 
@@ -113,41 +123,41 @@ def evaluate_condition(
                     "raw_p": test[0],
                     "corrected_p": corrected_p,
                     "significant": bool(rej),
+                    "n_objects": measured_similarity.shape[0],
                 }
             )
 
     return results
 
 
-# TODO merge this into one function.
 def process_single_condition(
     full_data,
     dims,
-    n_objects,
+    selected_objects,
     snr,
     repeat,
     n_permutations,
-    similarity_metric="linear",
 ):
     """Process a single experimental condition."""
-    seed = int(n_objects * 10000 + snr * 100 + repeat)
-    np.random.seed(seed)
-
-    selected_objects = np.random.choice(
-        full_data.shape[0], size=n_objects, replace=False
-    )
     data = full_data[selected_objects][:, dims]
 
     hypotheses = []
     rank = len(dims)
     for i in range(rank):
         x_i = data[:, [i]]
-        s_i = compute_similarity(x_i, x_i, similarity_metric)
+        s_i = x_i @ x_i.T
         hypotheses.append(s_i)
 
-    model = ADMM(rank=rank, verbose=False, tol=0.0)
+    seed_base = 10000 + 97 * (repeat + 1)
+    model = SRF(rank=rank, verbose=False, tol=0.0, random_state=seed_base)
     return evaluate_condition(
-        model, data, hypotheses, n_objects, snr, repeat, n_permutations
+        model,
+        data,
+        hypotheses,
+        len(selected_objects),
+        snr,
+        repeat,
+        n_permutations,
     )
 
 
@@ -157,15 +167,19 @@ def run_experiment(
     snrs,
     n_repeats,
     n_permutations,
-    similarity_metric,
     max_jobs,
     output_path,
 ):
-    """Main experiment orchestrator."""
-
     full_data = load_spose_embedding(max_objects=None, num_dims=49)
-    np.random.seed(42)
-    dims = np.random.choice(full_data.shape[1], size=num_dims, replace=False)
+    rng = np.random.default_rng(0)
+    dims = rng.choice(full_data.shape[1], size=num_dims, replace=False)
+
+    # Pre-select objects for each object count
+    selected_objects_dict = {}
+    for n_objects in object_counts:
+        selected_objects_dict[n_objects] = rng.choice(
+            full_data.shape[0], size=n_objects, replace=False
+        )
 
     all_tasks = [
         (n_objects, snr, repeat)
@@ -177,7 +191,12 @@ def run_experiment(
     print(f"Running {len(all_tasks)} conditions in parallel")
     results = Parallel(n_jobs=max_jobs, verbose=1)(
         delayed(process_single_condition)(
-            full_data, dims, n_objects, snr, repeat, n_permutations, similarity_metric
+            full_data,
+            dims,
+            selected_objects_dict[n_objects],
+            snr,
+            repeat,
+            n_permutations,
         )
         for n_objects, snr, repeat in all_tasks
     )
@@ -204,12 +223,6 @@ def main():
     )
     parser.add_argument("--n-repeats", type=int, default=500)
     parser.add_argument("--n-permutations", type=int, default=5_000)
-    parser.add_argument(
-        "--similarity-metric",
-        type=str,
-        default="linear",
-        choices=["linear", "cosine", "euclidean"],
-    )
     parser.add_argument("--max-jobs", type=int, default=140)
     parser.add_argument(
         "--output-path",
@@ -225,7 +238,6 @@ def main():
         args.snrs,
         args.n_repeats,
         args.n_permutations,
-        args.similarity_metric,
         args.max_jobs,
         args.output_path,
     )

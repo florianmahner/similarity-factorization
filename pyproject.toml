@@ -10,6 +10,7 @@ packages = [
 
 [tool.poetry.dependencies]
 python = ">3.12"
+pysrf = {path = "pysrf", develop = true, python = ">3.12"}
 numpy = "^2.2.4"
 matplotlib = "^3.10.1"
 seaborn = "^0.13.2"
@@ -30,6 +31,8 @@ torch = "^2.7.1"
 torchvision = "^0.22.1"
 cython = "^3.1.1"
 pytest = "^8.4.1"
+kneed = "^0.8.5"
+pyclustering = "^0.10.1.2"
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.29.5"

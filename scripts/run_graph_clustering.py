@@ -2,7 +2,7 @@ import joblib
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from experiments.clustering import (
+from experiments.clustering.graph import (
     load_all_datasets,
     create_models,
     evaluate_model_on_dataset,

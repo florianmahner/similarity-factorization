@@ -29,6 +29,9 @@ class SimulationParams:
     # Sparsity of the feature matrix.
     sparsity: float | None = None
 
+    # Type of membership to generate: 'dirichlet' or 'hard'
+    membership_type: str = "dirichlet"
+
 
 def generate_hard_membership_loadings(n_samples: int, n_clusters: int) -> np.ndarray:
     m = np.zeros((n_samples, n_clusters))
@@ -113,13 +116,16 @@ def generate_simulation_data(
     params: SimulationParams,
 ) -> tuple[Array, Array, Array]:
     rng = np.random.default_rng(params.rng_state)
-    m = generate_dirichlet_membership_loadings(
-        params.n,
-        params.k,
-        params.primary_concentration,
-        params.base_concentration,
-        rng,
-    )
+    if params.membership_type == "hard":
+        m = generate_hard_membership_loadings(params.n, params.k)
+    else:
+        m = generate_dirichlet_membership_loadings(
+            params.n,
+            params.k,
+            params.primary_concentration,
+            params.base_concentration,
+            rng,
+        )
 
     f = generate_feature_matrix(params.p, params.k, rng, sparsity=params.sparsity)
     x = generate_data_matrix(m, f, params.snr, rng)

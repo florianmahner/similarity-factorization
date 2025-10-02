@@ -82,5 +82,5 @@ class ThingsMonkey22k(BaseDatasetLoader):
             name="things-monkey-22k",
             it=data,
             filenames=filenames,
-            rsm=compute_similarity(data, data, "pearson"),
+            rsm=compute_similarity(data, data, "gaussian_kernel"),
         )

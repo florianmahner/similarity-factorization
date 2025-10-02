@@ -13,11 +13,12 @@ from experiments.things.things import (
     low_data_experiment,
     pairwise_reconstruction_experiment,
     spose_performance_experiment,
+    spose_48_performance_experiment,
     run_dimension_reliability_analysis,
     run_spose_dimensionality_analysis,
 )
 from utils.io import load_shared_data, load_triplets
-from models.admm import ADMM
+from pysrf import SRF
 
 
 def main():
@@ -31,6 +32,7 @@ def main():
             "low_data",
             "dimension_reliability",
             "spose_dimensionality",
+            "48_performance",
             "all",
         ],
         required=True,
@@ -61,12 +63,16 @@ def main():
         "rank": DIMS,
         "max_outer": 10,
         "max_inner": 50,
-        "rho": 1.0,
+        "rho": 3.0,
         "tol": 0.0,
     }
-    estimator = ADMM(**admm_params)
+    estimator = SRF(**admm_params)
 
-    # Run selected experiment
+    out_path = RESULTS_DIR / str(DIMS)
+    out_path.mkdir(parents=True, exist_ok=True)
+
+    # Here we do pairwise reconstruction, first creating an RSM from ground truth SPOSE embedding, then factorizing, then
+    # pairiwse match
     if args.experiment == "pairwise" or args.experiment == "all":
         print("Running pairwise reconstruction experiment...")
         df = pairwise_reconstruction_experiment(
@@ -74,9 +80,9 @@ def main():
             spose_embedding,
             seeds=range(10),
             snr_values=[1.0],
-            similarity_measures=["cosine"],
+            similarity_measures=["linear"],
         )
-        df.to_csv(RESULTS_DIR / DIMS / "pairwise_reconstruction.csv", index=False)
+        df.to_csv(out_path / "pairwise_reconstruction.csv", index=False)
 
     if args.experiment == "spose_performance" or args.experiment == "all":
         print("Running SPoSE performance experiment...")
@@ -90,7 +96,20 @@ def main():
             admm_params=admm_params,
             seeds=range(10),
         )
-        df.to_csv(RESULTS_DIR / DIMS / "spose_comparison.csv", index=False)
+        df.to_csv(out_path / "accuracy_comparison.csv", index=False)
+
+    if args.experiment == "48_performance" or args.experiment == "all":
+        print("Running 48 performance experiment...")
+        df = spose_48_performance_experiment(
+            spose_embedding,
+            indices_48,
+            rsm_48_true,
+            train_triplets,
+            n_items=1854,
+            admm_params=admm_params,
+            seeds=range(10),
+        )
+        df.to_csv(out_path / "48_performance.csv", index=False)
 
     if args.experiment == "low_data" or args.experiment == "all":
         print("Running low data experiment...")
@@ -102,7 +121,7 @@ def main():
             data_percentages=[0.05, 0.10, 0.20, 0.50, 1.0],
             seeds=range(10),
         )
-        df.to_csv(RESULTS_DIR / "low_data.csv", index=False)
+        df.to_csv(out_path / "low_data.csv", index=False)
 
     if args.experiment == "dimension_reliability" or args.experiment == "all":
         print("Running dimension reliability analysis...")
@@ -112,7 +131,7 @@ def main():
             n_runs=10,
             n_jobs=-1,
         )
-        df.to_csv(RESULTS_DIR / "dimension_reliability.csv", index=False)
+        df.to_csv(out_path / "dimension_reliability.csv", index=False)
 
     if args.experiment == "spose_dimensionality" or args.experiment == "all":
         print("Running SPoSE dimensionality analysis...")
@@ -123,7 +142,7 @@ def main():
             observed_fractions=np.arange(0.3, 0.9, 0.1),
             n_jobs=-1,
         )
-        df.to_csv(RESULTS_DIR / "spose_cross_validation.csv", index=False)
+        df.to_csv(out_path / "spose_cross_validation.csv", index=False)
 
     print(f"Results saved to {RESULTS_DIR}")
 
