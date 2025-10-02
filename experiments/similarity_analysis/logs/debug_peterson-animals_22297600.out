@@ -1,0 +1,177 @@
+Installing dependencies from lock file
+
+Package operations: 36 installs, 61 updates, 0 removals
+
+  - Updating rpds-py (0.25.1 -> 0.27.1)
+  - Updating typing-extensions (4.13.2 -> 4.15.0)
+  - Updating jsonschema-specifications (2025.4.1 -> 2025.9.1)
+  - Updating platformdirs (4.3.8 -> 4.4.0)
+  - Updating types-python-dateutil (2.9.0.20250516 -> 2.9.0.20250822)
+  - Updating fastjsonschema (2.21.1 -> 2.21.2)
+  - Updating jsonschema (4.24.0 -> 4.25.1)
+  - Installing lark (1.3.0)
+  - Updating pycparser (2.22 -> 2.23)
+  - Updating pyzmq (26.4.0 -> 27.1.0)
+  - Updating tornado (6.5.1 -> 6.5.2)
+  - Updating cffi (1.17.1 -> 2.0.0)
+  - Updating fqdn (1.4.0 -> 1.5.1)
+  - Updating markupsafe (3.0.2 -> 3.0.3)
+  - Installing frozenlist (1.7.0)
+  - Installing multidict (6.6.4)
+  - Installing propcache (0.3.2)
+  - Installing rfc3987-syntax (1.1.0)
+  - Updating soupsieve (2.7 -> 2.8)
+  - Installing aiohappyeyeballs (2.6.1)
+  - Installing aiosignal (1.4.0)
+  - Updating argon2-cffi-bindings (21.2.0 -> 25.1.0)
+  - Updating beautifulsoup4 (4.13.4 -> 4.14.2)
+  - Updating certifi (2025.4.26 -> 2025.8.3)
+  - Updating charset-normalizer (3.4.2 -> 3.4.3)
+  - Updating executing (2.2.0 -> 2.2.1)
+  - Updating filelock (3.18.0 -> 3.19.1)
+  - Updating fsspec (2025.5.1 -> 2025.9.0)
+  - Updating networkx (3.4.2 -> 3.5)
+  - Updating parso (0.8.4 -> 0.8.5)
+  - Updating mistune (3.1.3 -> 3.1.4)
+  - Updating pyyaml (6.0.2 -> 6.0.3)
+  - Updating pygments (2.19.1 -> 2.19.2)
+  - Updating wcwidth (0.2.13 -> 0.2.14)
+  - Updating urllib3 (2.4.0 -> 2.5.0)
+  - Installing yarl (1.20.1)
+  - Installing aiohttp (3.12.15)
+  - Updating anyio (4.9.0 -> 4.11.0)
+  - Updating argon2-cffi (23.1.0 -> 25.1.0)
+  - Installing hf-xet (1.1.10)
+  - Installing ipython-pygments-lexers (1.1.1)
+  - Updating pillow (11.2.1 -> 11.3.0)
+  - Updating prometheus-client (0.22.0 -> 0.23.1)
+  - Updating prompt-toolkit (3.0.51 -> 3.0.52)
+  - Installing lightning-utilities (0.15.2)
+  - Updating requests (2.32.3 -> 2.32.5)
+  - Installing absl-py (2.3.1)
+  - Updating comm (0.2.2 -> 0.2.3)
+  - Updating debugpy (1.8.14 -> 1.8.17)
+  - Installing grpcio (1.75.1)
+  - Installing huggingface-hub (0.35.3)
+  - Updating ipython (8.36.0 -> 9.6.0)
+  - Updating json5 (0.12.0 -> 0.12.1)
+  - Installing markdown (3.9)
+  - Installing protobuf (6.32.1)
+  - Installing safetensors (0.6.2)
+  - Updating scipy (1.15.3 -> 1.16.2)
+  - Updating joblib (1.5.1 -> 1.5.2)
+  - Installing werkzeug (3.1.3)
+  - Updating jupyter-server (2.16.0 -> 2.17.0)
+  - Installing torchmetrics (1.8.2)
+  - Installing tensorboard-data-server (0.7.2)
+  - Updating psutil (7.0.0 -> 7.1.0)
+  - Updating contourpy (1.3.2 -> 1.3.3)
+  - Updating fonttools (4.58.0 -> 4.60.1)
+  - Installing ftfy (6.3.1)
+  - Updating ipykernel (6.29.5 -> 6.30.1)
+  - Updating jupyter-lsp (2.2.5 -> 2.3.0)
+  - Updating kiwisolver (1.4.8 -> 1.4.9)
+  - Updating pyparsing (3.2.3 -> 3.2.5)
+  - Installing pytorch-lightning (1.9.5)
+  - Installing regex (2025.9.18)
+  - Updating scikit-learn (1.7.0 -> 1.7.2)
+  - Installing setuptools-scm (9.2.0)
+  - Installing tensorboard (2.20.0)
+  - Installing timm (1.0.20)
+  - Installing tokenizers (0.22.1)
+  - Updating click (8.2.1 -> 8.3.0)
+  - Installing fracridge (2.0)
+  - Updating jupyterlab (4.4.4 -> 4.4.9)
+  - Installing lightning-bolts (0.7.0)
+  - Updating lxml (5.4.0 -> 6.0.2)
+  - Updating matplotlib (3.10.3 -> 3.10.6)
+  - Installing open-clip-torch (2.32.0)
+  - Updating pandas (2.2.3 -> 2.3.3)
+  - Installing pytokens (0.1.10)
+  - Updating tifffile (2025.5.10 -> 2025.9.30)
+  - Installing transformers (4.56.2)
+  - Installing tomlparse (1.1.2)
+  - Updating black (25.1.0 -> 25.9.0)
+  - Updating cython (3.1.1 -> 3.1.4)
+  - Updating notebook (7.4.3 -> 7.4.7)
+  - Updating h5py (3.13.0 -> 3.14.0)
+  - Updating pytest (8.4.1 -> 8.4.2)
+  - Updating statsmodels (0.14.4 -> 0.14.5)
+  - Installing pysrf (0.1.0 /raven/u/fmahner/similarity-factorization/pysrf)
+  - Installing tools (0.0.1 /raven/u/fmahner/similarity-factorization/tools)
+
+  ChefBuildError
+
+  Backend subprocess exited when trying to invoke build_editable
+  
+  Traceback (most recent call last):
+    File "/raven/u/fmahner/.local/share/pypoetry/venv/lib/python3.10/site-packages/pyproject_hooks/_in_process/_in_process.py", line 373, in <module>
+      main()
+    File "/raven/u/fmahner/.local/share/pypoetry/venv/lib/python3.10/site-packages/pyproject_hooks/_in_process/_in_process.py", line 357, in main
+      json_out["return_val"] = hook(**hook_input["kwargs"])
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/raven/u/fmahner/.local/share/pypoetry/venv/lib/python3.10/site-packages/pyproject_hooks/_in_process/_in_process.py", line 294, in build_editable
+      return hook(wheel_directory, config_settings, metadata_directory)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/tmp/tmpios4yr3g/.venv/lib/python3.12/site-packages/poetry/core/masonry/api.py", line 87, in build_editable
+      return WheelBuilder.make_in(
+             ^^^^^^^^^^^^^^^^^^^^^
+    File "/tmp/tmpios4yr3g/.venv/lib/python3.12/site-packages/poetry/core/masonry/builders/wheel.py", line 95, in make_in
+      wb.build(target_dir=directory)
+    File "/tmp/tmpios4yr3g/.venv/lib/python3.12/site-packages/poetry/core/masonry/builders/wheel.py", line 129, in build
+      self._add_pth(zip_file)
+    File "/tmp/tmpios4yr3g/.venv/lib/python3.12/site-packages/poetry/core/masonry/builders/wheel.py", line 158, in _add_pth
+      for include in self._module.includes:
+                     ^^^^^^^^^^^^
+    File "/raven/u/system/soft/SLE_15/packages/x86_64/python-waterboa/2024.06/lib/python3.12/functools.py", line 995, in __get__
+      val = self.func(instance)
+            ^^^^^^^^^^^^^^^^^^^
+    File "/tmp/tmpios4yr3g/.venv/lib/python3.12/site-packages/poetry/core/masonry/builders/builder.py", line 70, in _module
+      return Module(
+             ^^^^^^^
+    File "/tmp/tmpios4yr3g/.venv/lib/python3.12/site-packages/poetry/core/masonry/utils/module.py", line 68, in __init__
+      raise ModuleOrPackageNotFoundError(
+  poetry.core.masonry.utils.module.ModuleOrPackageNotFoundError: No file/folder found for package tools
+  
+
+  at /raven~/.local/share/pypoetry/venv/lib/python3.10/site-packages/poetry/installation/chef.py:164 in _prepare
+      160│ 
+      161│                 error = ChefBuildError("\n\n".join(message_parts))
+      162│ 
+      163│             if error is not None:
+    → 164│                 raise error from None
+      165│ 
+      166│             return path
+      167│ 
+      168│     def _prepare_sdist(self, archive: Path, destination: Path | None = None) -> Path:
+
+Note: This error originates from the build backend, and is likely not a problem with poetry but with tools (0.0.1 /raven/u/fmahner/similarity-factorization/tools) not supporting PEP 517 builds. You can verify this by running 'pip wheel --no-cache-dir --use-pep517 --editable "/raven/u/fmahner/similarity-factorization/tools"'.
+
+                                  
+================================= 
+Global information about the job: 
+================================= 
+  
+Job owner: fmahner(50045)
+Job name:  debug_peterson-animals
+Node list: raven05
+Job start: Thu Oct  2 16:23:13 CEST 2025
+Job end:   Thu Oct  2 16:24:41 CEST 2025
+Work dir:  /u/fmahner/similarity-factorization
+Command:   /u/fmahner/similarity-factorization/experiments/similarity_analysis/logs/debug_peterson-animals.sbatch
+  
+  
+  
+==========================================================================================
+Information on jobsteps (Note: MaxRSS/AveRSS is the maximum/average over all 
+tasks of the per-task memory high-water marks; cf. "man sacct"): 
+==========================================================================================
+  
+JobID            JobName NNodes NTasks  NCPUS       MaxRSS       AveRSS    Elapsed ExitCode
+------------- ---------- ------ ------ ------ ------------ ------------ ---------- --------
+22297600      debug_pete      1             8                             00:01:28      1:0
+22297600.0        poetry      1      1      8      555.39M      555.39M   00:00:30      1:0
+  
+Maximum memory per node: 0.582370 GB (defined as MaxRSS*Ntasks/NNodes)
+CPU utilization: 6.8 %
+  

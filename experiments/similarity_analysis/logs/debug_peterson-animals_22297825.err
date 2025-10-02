@@ -1,0 +1,49 @@
+The currently activated Python version 3.10.14 is not supported by the project (>=3.12,<4.0).
+Trying to find and use a compatible version. 
+Using python3 (3.12.4)
+The lock file might not be compatible with the current version of Poetry.
+Upgrade Poetry to ensure the lock file is read properly or, alternatively, regenerate the lock file with the `poetry lock` command.
+The currently activated Python version 3.10.14 is not supported by the project (>=3.12,<4.0).
+Trying to find and use a compatible version. 
+Using python3 (3.12.4)
+Traceback (most recent call last):
+  File "/u/fmahner/.cache/pypoetry/virtualenvs/similarity-factorization-8QbpfJl5-py3.12/lib/python3.12/site-packages/scipy/io/matlab/_mio.py", line 39, in _open_file
+    return open(file_like, mode), True
+           ^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/ptmp/fmahner/similarity_datasets/peterson/animals/peterson_rdm_animals_all.mat'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/raven/u/fmahner/similarity-factorization/experiments/similarity_analysis/run.py", line 215, in <module>
+    main()
+  File "/raven/u/fmahner/similarity-factorization/experiments/similarity_analysis/run.py", line 203, in main
+    run_analysis(
+  File "/raven/u/fmahner/similarity-factorization/experiments/similarity_analysis/run.py", line 117, in run_analysis
+    similarity = build_similarity(dataset_slug, subject_id)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/raven/u/fmahner/similarity-factorization/experiments/similarity_analysis/run.py", line 50, in build_similarity
+    ds = load_dataset("peterson-animals")
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/raven/u/fmahner/similarity-factorization/src/datasets/loaders.py", line 475, in load_dataset
+    return DATASETS[name](**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/raven/u/fmahner/similarity-factorization/src/datasets/loaders.py", line 424, in <lambda>
+    "peterson-animals": lambda **kwargs: load_peterson(variant="animals", **kwargs),
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/raven/u/fmahner/similarity-factorization/src/datasets/loaders.py", line 165, in load_peterson
+    data = loadmat(mat_file)
+           ^^^^^^^^^^^^^^^^^
+  File "/u/fmahner/.cache/pypoetry/virtualenvs/similarity-factorization-8QbpfJl5-py3.12/lib/python3.12/site-packages/scipy/io/matlab/_mio.py", line 233, in loadmat
+    with _open_file_context(file_name, appendmat) as f:
+  File "/raven/u/system/soft/SLE_15/packages/x86_64/python-waterboa/2024.06/lib/python3.12/contextlib.py", line 137, in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+  File "/u/fmahner/.cache/pypoetry/virtualenvs/similarity-factorization-8QbpfJl5-py3.12/lib/python3.12/site-packages/scipy/io/matlab/_mio.py", line 17, in _open_file_context
+    f, opened = _open_file(file_like, appendmat, mode)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/u/fmahner/.cache/pypoetry/virtualenvs/similarity-factorization-8QbpfJl5-py3.12/lib/python3.12/site-packages/scipy/io/matlab/_mio.py", line 47, in _open_file
+    raise OSError(
+OSError: Reader needs file name or open file-like object
+srun: error: raven05: task 0: Exited with exit code 1
+srun: Terminating StepId=22297825.0

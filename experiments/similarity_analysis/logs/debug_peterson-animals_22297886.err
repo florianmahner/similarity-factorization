@@ -1,0 +1,14 @@
+The currently activated Python version 3.10.14 is not supported by the project (>=3.12,<4.0).
+Trying to find and use a compatible version. 
+Using python3 (3.12.4)
+The lock file might not be compatible with the current version of Poetry.
+Upgrade Poetry to ensure the lock file is read properly or, alternatively, regenerate the lock file with the `poetry lock` command.
+The currently activated Python version 3.10.14 is not supported by the project (>=3.12,<4.0).
+Trying to find and use a compatible version. 
+Using python3 (3.12.4)
+[Parallel(n_jobs=4)]: Using backend LokyBackend with 4 concurrent workers.
+[Parallel(n_jobs=4)]: Done  60 out of  60 | elapsed:    2.3s finished
+[Parallel(n_jobs=4)]: Using backend LokyBackend with 4 concurrent workers.
+[Parallel(n_jobs=4)]: Done   5 out of   5 | elapsed:    0.0s finished
+[Parallel(n_jobs=4)]: Using backend LokyBackend with 4 concurrent workers.
+[Parallel(n_jobs=4)]: Done   7 out of   7 | elapsed:    2.4s finished

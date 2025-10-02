@@ -1,0 +1,24 @@
+The currently activated Python version 3.10.14 is not supported by the project (>=3.12,<4.0).
+Trying to find and use a compatible version. 
+Using python3 (3.12.4)
+The lock file might not be compatible with the current version of Poetry.
+Upgrade Poetry to ensure the lock file is read properly or, alternatively, regenerate the lock file with the `poetry lock` command.
+The currently activated Python version 3.10.14 is not supported by the project (>=3.12,<4.0).
+Trying to find and use a compatible version. 
+Using python3 (3.12.4)
+[Parallel(n_jobs=4)]: Using backend LokyBackend with 4 concurrent workers.
+[Parallel(n_jobs=4)]: Done  60 out of  60 | elapsed:    2.4s finished
+Traceback (most recent call last):
+  File "/raven/u/fmahner/similarity-factorization/experiments/similarity_analysis/run.py", line 215, in <module>
+    main()
+  File "/raven/u/fmahner/similarity-factorization/experiments/similarity_analysis/run.py", line 203, in main
+    run_analysis(
+  File "/raven/u/fmahner/similarity-factorization/experiments/similarity_analysis/run.py", line 123, in run_analysis
+    cv_result = cross_val_score(
+                ^^^^^^^^^^^^^^^^
+  File "/raven/u/fmahner/similarity-factorization/pysrf/pysrf/cross_validation.py", line 423, in cross_val_score
+    grid.stable_embeddings_ = fit_stable(
+                              ^^^^^^^^^^^
+TypeError: fit_stable() got an unexpected keyword argument 'verbose'
+srun: error: raven05: task 0: Exited with exit code 1
+srun: Terminating StepId=22297851.0

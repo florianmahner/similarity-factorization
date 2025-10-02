@@ -20,7 +20,8 @@ def fit_stable(
     random_state: int = 0,
     n_jobs: int = -1,
     stack: bool = True,
-    srf_kwargs: dict | None = None,
+    verbose: int = 0,
+    **srf_kwargs,
 ) -> ndarray | list[ndarray]:
     """
     Fit multiple SRF models with different initializations for stable embeddings.
@@ -148,6 +149,9 @@ def cluster_stable(
     (1000, 30)  # selected 30 clusters
     """
     x = _norm_columns(stacked_embeddings).T
+    n_samples = x.shape[0]
+    max_clusters = min(max_clusters, n_samples - 1)
+    min_clusters = min(min_clusters, max_clusters)
     cluster_range = range(min_clusters, max_clusters + 1, step)
 
     kmeans_kwargs = {"random_state": random_state, "init": "k-means++", "n_init": 30}

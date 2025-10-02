@@ -1,0 +1,169 @@
+Installing dependencies from lock file
+
+No dependencies to install or update
+
+Installing the current project: similarity-factorization (0.0.1)
+running analysis for peterson-animals
+similarity matrix shape: (120, 120)
+rank grid: 1 to 30
+effective dimension :  1.6824699185057372
+1.9560732006291868 2.8939709504473936
+1.83826196620073 5.936928308208044
+1.9747232165124768 5.936928308208044
+110.38433488398526 0.12703071022829476
+p_min 0.675913212026813
+empirical_p_min 0.309631828240078
+empirical_p_min_alternative 0.3326169887856557
+theory_p_min 868.9578660593704
+[sanity] p=0.99: bulk=7.027, count_out=43, lambda1=312.5, lambda2=148.2
+p*=0.3578, bulk=43.8794, count_out(p*)=2
+Estimated sampling bounds: pmin=0.1794, pmax=0.4851
+Using sampling_fraction=0.3323
+Running 300 jobs (30 params x 10 CV splits)
+Fitting 50 stable runs with rank=4
+Clustering stable embeddings
+optimal rank: 4
+clustering range: 2 to 9
+optimal clusters: 5
+results saved to /raven/u/fmahner/similarity-factorization/experiments/similarity_analysis/outputs/peterson-animals
+effective dimension :  1.145139321523753
+2.189036588786208 5.5324668809890865
+1.8560570501242202 12.941873588270454
+2.256389487804733 12.941873588270454
+493.9814728675439 0.12203686598272968
+p_min 0.3956709793073095
+empirical_p_min 0.14341486473847276
+empirical_p_min_alternative 0.1743479777031477
+theory_p_min 4047.8052995678436
+[sanity] p=0.99: bulk=15.35, count_out=53, lambda1=1409, lambda2=172
+p*=0.7732, bulk=113.597, count_out(p*)=2
+effective dimension :  1.144361313477717
+2.1310825472088073 5.735289163152514
+1.8823149688810834 13.514513305314376
+2.203805200007153 13.514513305314376
+889.2122501666172 0.12033083170351659
+p_min 0.3715736881935027
+empirical_p_min 0.13928100304884022
+empirical_p_min_alternative 0.16306952016840595
+theory_p_min 7389.729112465118
+[sanity] p=0.99: bulk=27.64, count_out=53, lambda1=2538, lambda2=206.1
+p*=0.8716, bulk=161.82, count_out(p*)=2
+effective dimension :  1.2208710705119332
+2.1966906581353394 4.64645607887859
+1.8951360813133347 10.565202450407268
+2.249599702325387 10.565202450407268
+232.5982059652282 0.12512120049557926
+p_min 0.47276690467835114
+empirical_p_min 0.17937527370715747
+empirical_p_min_alternative 0.21292537581602797
+theory_p_min 1858.983170269744
+[sanity] p=0.99: bulk=7.248, count_out=53, lambda1=661.7, lambda2=157.9
+p*=0.4851, bulk=66.6086, count_out(p*)=2
+effective dimension :  1.1430880429112562
+2.1452285117883996 5.694944854279094
+1.880549099738987 13.52402612738837
+2.2281944914515037 13.52402612738837
+757.3598762882203 0.12074267347677772
+p_min 0.3766899534025352
+empirical_p_min 0.13905245982411754
+empirical_p_min_alternative 0.16475822143962326
+theory_p_min 6272.51206619905
+[sanity] p=0.99: bulk=23.53, count_out=53, lambda1=2161, lambda2=192.2
+p*=0.8361, bulk=140.861, count_out(p*)=2
+effective dimension :  1.1485951240325192
+2.103957975574118 5.800775034539404
+1.886610317299582 13.481893834692023
+2.1596797456170007 13.481893834692023
+1285.0041605258311 0.11960224490151948
+p_min 0.36270290832631424
+empirical_p_min 0.1399365949941616
+empirical_p_min_alternative 0.16019112537881336
+theory_p_min 10743.980278830919
+[sanity] p=0.99: bulk=39.95, count_out=52, lambda1=3669, lambda2=266.3
+p*=0.8829, bulk=232.068, count_out(p*)=2
+effective dimension :  1.1581560747122752
+2.206309395753501 5.2678948515433515
+1.8546617024630692 12.28977885635671
+2.2750463235159515 12.28977885635671
+362.72935772119143 0.1232418755922038
+p_min 0.41882183641291015
+empirical_p_min 0.15091090931256035
+empirical_p_min_alternative 0.18511694556157263
+theory_p_min 2943.231397430448
+[sanity] p=0.99: bulk=11.27, count_out=54, lambda1=1034, lambda2=164.7
+p*=0.6383, bulk=101.201, count_out(p*)=2
+effective dimension :  1.1426627193208525
+2.1638492492805166 5.633834884115151
+1.8681929248282616 13.317349886405973
+2.2422028133398975 13.317349886405973
+625.5914224500985 0.121274002987926
+p_min 0.38408105558464023
+empirical_p_min 0.14028263436521013
+empirical_p_min_alternative 0.16836704242701347
+theory_p_min 5158.495696001576
+[sanity] p=0.99: bulk=19.44, count_out=53, lambda1=1785, lambda2=181
+p*=0.7949, bulk=142.49, count_out(p*)=2
+effective dimension :  1.1472641682563633
+2.1111871327894915 5.784688001010317
+1.8844758609932644 13.469505665999824
+2.1691293621421264 13.469505665999824
+1153.0484271904832 0.11978636906259499
+p_min 0.3649612792290206
+empirical_p_min 0.13990683160333947
+empirical_p_min_alternative 0.16104001259805065
+theory_p_min 9625.873429621626
+[sanity] p=0.99: bulk=35.85, count_out=53, lambda1=3292, lambda2=243.1
+p*=0.8828, bulk=208.22, count_out(p*)=2
+effective dimension :  1.682469918505736
+1.956073200629187 2.8939709504473945
+1.8382619662007293 5.936928308208042
+1.9747232165124762 5.936928308208042
+110.38433488398526 0.12703071022829476
+p_min 0.6759132120268129
+empirical_p_min 0.309631828240078
+empirical_p_min_alternative 0.3326169887856557
+theory_p_min 868.9578660593704
+[sanity] p=0.99: bulk=7.027, count_out=43, lambda1=312.5, lambda2=148.2
+p*=0.3578, bulk=43.8794, count_out(p*)=2
+effective dimension :  1.1458280936379266
+2.1200324913078443 5.763699616558004
+1.8838406103112812 13.497385408853791
+2.184917891336631 13.497385408853791
+1021.1143817599544 0.12002427008630583
+p_min 0.36782494445362796
+empirical_p_min 0.13957078006200746
+empirical_p_min_alternative 0.16187712102400253
+theory_p_min 8507.565853353675
+[sanity] p=0.99: bulk=31.74, count_out=53, lambda1=2915, lambda2=222.9
+p*=0.8831, bulk=184.325, count_out(p*)=2
+[0;32mRunning experiment: similarity_analysis[0m
+[1;33mWorking directory: experiments/similarity_analysis[0m
+
+                                  
+================================= 
+Global information about the job: 
+================================= 
+  
+Job owner: fmahner(50045)
+Job name:  debug_peterson-animals
+Node list: raven05
+Job start: Thu Oct  2 17:21:37 CEST 2025
+Job end:   Thu Oct  2 17:22:38 CEST 2025
+Work dir:  /u/fmahner/similarity-factorization
+Command:   /u/fmahner/similarity-factorization/experiments/similarity_analysis/logs/debug_peterson-animals.sbatch
+  
+  
+  
+==========================================================================================
+Information on jobsteps (Note: MaxRSS/AveRSS is the maximum/average over all 
+tasks of the per-task memory high-water marks; cf. "man sacct"): 
+==========================================================================================
+  
+JobID            JobName NNodes NTasks  NCPUS       MaxRSS       AveRSS    Elapsed ExitCode
+------------- ---------- ------ ------ ------ ------------ ------------ ---------- --------
+22298241      debug_pete      1             8                             00:01:01      0:0
+22298241.0           run      1      1      8     1068.18M     1068.18M   00:00:56      0:0
+  
+Maximum memory per node: 1.120069 GB (defined as MaxRSS*Ntasks/NNodes)
+CPU utilization: 38.5 %
+  

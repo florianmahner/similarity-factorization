@@ -1,0 +1,18 @@
+The currently activated Python version 3.10.14 is not supported by the project (>=3.12,<4.0).
+Trying to find and use a compatible version. 
+Using python3 (3.12.4)
+The lock file might not be compatible with the current version of Poetry.
+Upgrade Poetry to ensure the lock file is read properly or, alternatively, regenerate the lock file with the `poetry lock` command.
+The currently activated Python version 3.10.14 is not supported by the project (>=3.12,<4.0).
+Trying to find and use a compatible version. 
+Using python3 (3.12.4)
+Traceback (most recent call last):
+  File "/u/fmahner/similarity-factorization/experiments/similarity_analysis/run.py", line 8, in <module>
+    from datasets import load_dataset
+  File "/raven/u/fmahner/similarity-factorization/src/datasets/__init__.py", line 4, in <module>
+    from .loaders import DATASETS, load_dataset
+  File "/raven/u/fmahner/similarity-factorization/src/datasets/loaders.py", line 22, in <module>
+    from tools.rsa import compute_similarity
+ModuleNotFoundError: No module named 'tools'
+srun: error: raven05: task 0: Exited with exit code 1
+srun: Terminating StepId=22297658.0

@@ -1,0 +1,72 @@
+The currently activated Python version 3.10.14 is not supported by the project (>=3.12,<4.0).
+Trying to find and use a compatible version. 
+Using python3 (3.12.4)
+The lock file might not be compatible with the current version of Poetry.
+Upgrade Poetry to ensure the lock file is read properly or, alternatively, regenerate the lock file with the `poetry lock` command.
+The currently activated Python version 3.10.14 is not supported by the project (>=3.12,<4.0).
+Trying to find and use a compatible version. 
+Using python3 (3.12.4)
+[Parallel(n_jobs=4)]: Using backend LokyBackend with 4 concurrent workers.
+[Parallel(n_jobs=4)]: Done  60 out of  60 | elapsed:    2.4s finished
+[Parallel(n_jobs=4)]: Using backend LokyBackend with 4 concurrent workers.
+[Parallel(n_jobs=4)]: Done   5 out of   5 | elapsed:    0.1s finished
+[Parallel(n_jobs=4)]: Using backend LokyBackend with 4 concurrent workers.
+joblib.externals.loky.process_executor._RemoteTraceback: 
+"""
+Traceback (most recent call last):
+  File "/u/fmahner/.cache/pypoetry/virtualenvs/similarity-factorization-8QbpfJl5-py3.12/lib/python3.12/site-packages/joblib/externals/loky/process_executor.py", line 490, in _process_worker
+    r = call_item()
+        ^^^^^^^^^^^
+  File "/u/fmahner/.cache/pypoetry/virtualenvs/similarity-factorization-8QbpfJl5-py3.12/lib/python3.12/site-packages/joblib/externals/loky/process_executor.py", line 291, in __call__
+    return self.fn(*self.args, **self.kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/u/fmahner/.cache/pypoetry/virtualenvs/similarity-factorization-8QbpfJl5-py3.12/lib/python3.12/site-packages/joblib/parallel.py", line 607, in __call__
+    return [func(*args, **kwargs) for func, args, kwargs in self.items]
+            ^^^^^^^^^^^^^^^^^^^^^
+  File "/raven/u/fmahner/similarity-factorization/pysrf/pysrf/stability.py", line 160, in _score_k
+    km.fit(x)
+  File "/u/fmahner/.cache/pypoetry/virtualenvs/similarity-factorization-8QbpfJl5-py3.12/lib/python3.12/site-packages/sklearn/base.py", line 1365, in wrapper
+    return fit_method(estimator, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/u/fmahner/.cache/pypoetry/virtualenvs/similarity-factorization-8QbpfJl5-py3.12/lib/python3.12/site-packages/sklearn/cluster/_kmeans.py", line 1464, in fit
+    self._check_params_vs_input(X)
+  File "/u/fmahner/.cache/pypoetry/virtualenvs/similarity-factorization-8QbpfJl5-py3.12/lib/python3.12/site-packages/sklearn/cluster/_kmeans.py", line 1404, in _check_params_vs_input
+    super()._check_params_vs_input(X, default_n_init=10)
+  File "/u/fmahner/.cache/pypoetry/virtualenvs/similarity-factorization-8QbpfJl5-py3.12/lib/python3.12/site-packages/sklearn/cluster/_kmeans.py", line 871, in _check_params_vs_input
+    raise ValueError(
+ValueError: n_samples=15 should be >= n_clusters=16.
+"""
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/raven/u/fmahner/similarity-factorization/experiments/similarity_analysis/run.py", line 215, in <module>
+    main()
+  File "/raven/u/fmahner/similarity-factorization/experiments/similarity_analysis/run.py", line 203, in main
+    run_analysis(
+  File "/raven/u/fmahner/similarity-factorization/experiments/similarity_analysis/run.py", line 123, in run_analysis
+    cv_result = cross_val_score(
+                ^^^^^^^^^^^^^^^^
+  File "/raven/u/fmahner/similarity-factorization/pysrf/pysrf/cross_validation.py", line 449, in cross_val_score
+    ) = cluster_stable(grid.stable_embeddings_, **cluster_kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/raven/u/fmahner/similarity-factorization/pysrf/pysrf/stability.py", line 167, in cluster_stable
+    records = Parallel(n_jobs=n_jobs, verbose=verbose)(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/u/fmahner/.cache/pypoetry/virtualenvs/similarity-factorization-8QbpfJl5-py3.12/lib/python3.12/site-packages/joblib/parallel.py", line 2072, in __call__
+    return output if self.return_generator else list(output)
+                                                ^^^^^^^^^^^^
+  File "/u/fmahner/.cache/pypoetry/virtualenvs/similarity-factorization-8QbpfJl5-py3.12/lib/python3.12/site-packages/joblib/parallel.py", line 1682, in _get_outputs
+    yield from self._retrieve()
+  File "/u/fmahner/.cache/pypoetry/virtualenvs/similarity-factorization-8QbpfJl5-py3.12/lib/python3.12/site-packages/joblib/parallel.py", line 1784, in _retrieve
+    self._raise_error_fast()
+  File "/u/fmahner/.cache/pypoetry/virtualenvs/similarity-factorization-8QbpfJl5-py3.12/lib/python3.12/site-packages/joblib/parallel.py", line 1859, in _raise_error_fast
+    error_job.get_result(self.timeout)
+  File "/u/fmahner/.cache/pypoetry/virtualenvs/similarity-factorization-8QbpfJl5-py3.12/lib/python3.12/site-packages/joblib/parallel.py", line 758, in get_result
+    return self._return_or_raise()
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/u/fmahner/.cache/pypoetry/virtualenvs/similarity-factorization-8QbpfJl5-py3.12/lib/python3.12/site-packages/joblib/parallel.py", line 773, in _return_or_raise
+    raise self._result
+ValueError: n_samples=15 should be >= n_clusters=16.
+srun: error: raven05: task 0: Exited with exit code 1
+srun: Terminating StepId=22297880.0
