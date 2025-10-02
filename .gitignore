@@ -18,11 +18,17 @@ poetry.lock
 .cursor/
 .idea/
 
-# Data and results (keep local only)
+# Data (keep local only)
 data/
-results/
 embeddings/
-_trash/
+
+# Experiment outputs and scratch work
+experiments/*/outputs/
+experiments/_scratch/
+
+# SLURM logs and scripts
+experiments/*/logs/
+scripts/slurm/
 
 # Large binary files
 *.npy
