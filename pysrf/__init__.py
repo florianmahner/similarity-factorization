@@ -19,10 +19,6 @@ from .consensus import (
     EnsembleEmbedding,
     ClusterEmbedding,
 )
-from .stability import (
-    fit_stable,
-    cluster_stable,
-)
 
 # Version is managed in pyproject.toml
 try:

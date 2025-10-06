@@ -20,10 +20,10 @@ make compile  # Strongly recommended for performance (10-50x speedup)
 
 ```bash
 # Add as subtree in your project
-git subtree add --prefix=pysrf https://github.com/fmahner/pysrf.git main --squash
+git subtree add --prefix=pysrf https://github.com/florianmahner/pysrf.git master --squash
 
 # Update subtree
-git subtree pull --prefix=pysrf https://github.com/fmahner/pysrf.git main --squash
+git subtree pull --prefix=pysrf https://github.com/florianmahner/pysrf.git master --squash
 
 # Install from subtree
 cd pysrf && poetry install && make compile
