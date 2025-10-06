@@ -23,8 +23,8 @@ submit_single() {
 #SBATCH --time=${TIME}
 
 cd ${REPO_ROOT}
-source setup_env.sh
-poetry install --no-interaction --only main
+source ${REPO_ROOT}/scripts/slurm/slurm_modules.sh
+poetry install --no-interaction
 
 poetry run python experiments/embedding_generation/run.py \
     --dataset ${DATASET} \

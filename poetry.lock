@@ -4269,20 +4269,6 @@ doc = ["sphinx", "sphinx_rtd_theme"]
 test = ["pytest", "ruff"]
 
 [[package]]
-name = "tools"
-version = "0.0.1"
-description = "A collection of tools for machine learning and scientific computing"
-optional = false
-python-versions = ">=3.10,<4.0"
-groups = ["main"]
-files = []
-develop = true
-
-[package.source]
-type = "directory"
-url = "tools"
-
-[[package]]
 name = "torch"
 version = "2.7.1"
 description = "Tensors and Dynamic neural networks in Python with strong GPU acceleration"
@@ -4608,4 +4594,4 @@ test = ["websockets"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4.0"
-content-hash = "1179a8fec35df885a1584781f745891c26b4da1fd6c4d3c41bd5dbae0676f374"
+content-hash = "721602470c13ecc31150b816594affd04772f145a19c9198dbdaaad665399f51"
