@@ -18,9 +18,11 @@ sbatch <<EOF
 
 cd ${REPO_ROOT}
 source setup_env.sh
-poetry install --only main --no-interaction
 
-poetry run python experiments/embedding_generation/run.py \
+python -m pip install -e ./tools --no-deps
+python -m pip install -e ./pysrf --no-deps
+
+python experiments/embedding_generation/run.py \
     --dataset ${DATASET} \
     --n_jobs 4 \
     --random_state 0 \
