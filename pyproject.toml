@@ -43,5 +43,7 @@ black = "^25.1.0"
 autopep8 = "^2.3.2"
 
 [build-system]
-requires = ["setuptools", "wheel", "cython", "numpy"]
-build-backend = "setuptools.build_meta"
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.setuptools_scm]
