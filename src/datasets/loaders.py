@@ -16,7 +16,6 @@ from sklearn.datasets import (
     load_wine,
 )
 from sklearn.feature_extraction.text import TfidfVectorizer
-from torchvision.datasets import MNIST as MNIST_torch
 
 from config import get_dataset_path
 from tools.rsa import compute_similarity
@@ -320,6 +319,8 @@ def load_digits(root: str | None = None) -> DatasetResult:
 
 def load_mnist(root: str | None = None) -> DatasetResult:
     """Load MNIST dataset."""
+    from torchvision.datasets import MNIST as MNIST_torch
+    
     root = root or get_dataset_path("mnist")
     train = MNIST_torch(root, train=True, download=True)
     test = MNIST_torch(root, train=False, download=True)
