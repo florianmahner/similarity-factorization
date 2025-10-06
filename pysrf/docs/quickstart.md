@@ -25,6 +25,9 @@ score = model.score(s)
 print(f"Reconstruction error: {score:.4f}")
 ```
 
+
+
+
 ## Handling Missing Data
 
 ```python
