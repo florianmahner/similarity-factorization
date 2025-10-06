@@ -124,7 +124,9 @@ def load_cichy118(root: str | None = None) -> DatasetResult:
         Dataset with group_rsm, subject_rsms
     """
     root = Path(root or get_dataset_path("cichy118"))
-    mat_file = root / "cichy_118_rdms.mat"
+    mat_file = (
+        root / "fmri_roidata_new_all" / "118_fmri_hvc_raw_new_unconstrained_single.mat"
+    )
     data = loadmat(mat_file)["data"].ravel()
     data = [d.T for d in data]
 
@@ -163,12 +165,12 @@ def load_peterson(root: str | None = None, variant: str = "animals") -> DatasetR
     rsm_file = root / "rsm.npy"
     if rsm_file.exists():
         rsm = np.load(rsm_file)
-    else:
-        mat_file = root / f"peterson_rdm_{variant}_all.mat"
-        data = loadmat(mat_file)
-        rsm = data["RSM_4dim_merged"]
 
-    return DatasetResult(name=f"peterson-{variant}", rsm=rsm)
+    images = sorted(glob(f"{root}/images/*.png"))
+
+    return DatasetResult(
+        name=f"peterson-{variant}", rsm=rsm, metadata={"images": images}
+    )
 
 
 def load_nsd(
@@ -257,14 +259,14 @@ def load_things_monkey(
         Dataset with neural data, rsm, filenames
     """
     import h5py
-    
+
     root = Path(root or get_dataset_path("things-monkey-22k"))
     mat_path = root / "THINGS_normMUA_raw.mat"
-    
-    with h5py.File(mat_path, 'r') as f:
+
+    with h5py.File(mat_path, "r") as f:
         data_key = f"data_{roi}"
         reliab_key = f"reliab_{roi}"
-        
+
         data = f[data_key][:].astype("float32")
         reliab = f[reliab_key][:].mean(axis=0)
 

@@ -10,24 +10,34 @@ from h5py import File
 from scipy.io import loadmat
 from scipy.stats import zscore
 from tqdm.auto import tqdm
+from joblib import Parallel, delayed
 
 NSD_DIR_IRIS = Path("/LOCAL/LABSHARE/natural-scenes-dataset/")
 
 
 def load_betas_from_fp(
-    fp: str, standardize: bool = True, voxel_indices: np.ndarray = None
+    fp: str, standardize: bool = True, voxel_indices: np.ndarray | None = None
 ) -> np.ndarray:
     # Betas need to be divided by 300, as they've been multiplied by 300 and stored
     # as int16 to save space (https://cvnlab.slite.page/p/6CusMRYfk0/Functional-data-NSD)
-    betas = nib.load(fp).get_fdata().astype(np.float32) / 300
+    betas_4d = nib.load(fp).get_fdata().astype(np.float32) / 300
+
+    # Reshape to (n_voxels, n_timepoints)
+    n_timepoints = betas_4d.shape[-1]
+    betas_2d = betas_4d.reshape(-1, n_timepoints)
 
     if voxel_indices is not None:
-        betas = betas[voxel_indices]
+        mask = np.asarray(voxel_indices)
+        if mask.dtype != bool:
+            mask = mask != 0
+        if mask.ndim > 1:
+            mask = mask.reshape(-1)
+        betas_2d = betas_2d[mask]
 
     if standardize:
-        betas = zscore(betas, axis=-1)
+        betas_2d = zscore(betas_2d, axis=-1)
 
-    return betas
+    return betas_2d
 
 
 def get_available_subjects(nsd_dir: Path = NSD_DIR_IRIS) -> list[int]:
@@ -104,7 +114,7 @@ def load_nsd_betas(
     zscore_betas: bool = True,
     nsd_dir: Path = NSD_DIR_IRIS,
     space: str = "func1pt8mm",
-    voxel_indices: np.ndarray = None,
+    voxel_indices: np.ndarray | None = None,
     max_workers: int = 16,
 ) -> tuple[np.ndarray, np.ndarray]:
     experiment_design = loadmat(
@@ -124,25 +134,12 @@ def load_nsd_betas(
         )
     )
 
-    with ProcessPoolExecutor(max_workers=max_workers) as executor:
-        future_to_idx = {
-            executor.submit(
-                load_betas_from_fp,
-                fp,
-                zscore_betas,
-                voxel_indices,
-            ): i
-            for i, fp in enumerate(sub_betas_fps)
-        }
+    betas_list = Parallel(n_jobs=max_workers)(
+        delayed(load_betas_from_fp)(fp, zscore_betas, voxel_indices)
+        for fp in tqdm(sub_betas_fps, total=len(sub_betas_fps), desc="Loading betas")
+    )
 
-        betas = [None] * len(sub_betas_fps)
-        for future in tqdm(
-            as_completed(future_to_idx), total=len(future_to_idx), desc="Loading betas"
-        ):
-            idx = future_to_idx[future]
-            betas[idx] = future.result()
-
-    betas = np.concatenate(betas, axis=-1)
+    betas = np.concatenate(betas_list, axis=-1)
 
     trial_ordering = (
         experiment_design["subjectim"][
