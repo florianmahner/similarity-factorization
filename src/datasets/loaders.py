@@ -93,6 +93,10 @@ def load_mur92(root: str | None = None) -> DatasetResult:
     images = sorted(glob(f"{image_folder}/*.jpg"))
     mri_dir = root / "fmri_roidata_new_all"
     mri_file = mri_dir / "92_fmri_hvc_raw_new_unconstrained_single.mat"
+    if not mri_file.exists():
+        raise FileNotFoundError(
+            f"Missing mur92 file: {mri_file}. Set DATASET_MUR92 or update config."
+        )
     mri_data = loadmat(mri_file)["data"].ravel()
     mri_data = [d.T for d in mri_data]
 
@@ -125,6 +129,10 @@ def load_cichy118(root: str | None = None) -> DatasetResult:
     """
     root = Path(root or get_dataset_path("cichy118"))
     mat_file = root / "cichy_118_rdms.mat"
+    if not mat_file.exists():
+        raise FileNotFoundError(
+            f"Missing cichy118 file: {mat_file}. Set DATASET_CICHY118 or update config."
+        )
     data = loadmat(mat_file)["data"].ravel()
     data = [d.T for d in data]
 
@@ -206,15 +214,20 @@ def load_nsd(
         raise ValueError(f"Subject {subject_id} not found. Available: {subjects}")
 
     roi = get_roi(subject_id, roi_name, root, space=space)
+    if roi_name == "streams":
+        roi_mask = roi == 5
+    else:
+        roi_mask = roi.astype(bool) if roi.dtype == bool else (roi != 0)
+
     betas, trials_with_betas = load_nsd_betas(
-        subject_id, zscore_betas, root, space, voxel_indices=roi
+        subject_id, zscore_betas, root, space, voxel_indices=roi_mask
     )
-    images, categories = load_nsd_images(trials_with_betas, root)
+    images = load_nsd_images(trials_with_betas, root)
 
     return DatasetResult(
         name="nsd",
         data=betas,
-        metadata={"images": images, "categories": categories},
+        metadata={"images": images},
     )
 
 

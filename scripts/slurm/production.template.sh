@@ -21,5 +21,9 @@ fi
 
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 
+echo "[ $(date -Is) ] Starting: {command}"
 srun {command}
+status=$?
+echo "[ $(date -Is) ] Finished with exit code: ${status}"
+exit ${status}
 
