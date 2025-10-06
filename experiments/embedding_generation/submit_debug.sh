@@ -18,8 +18,7 @@ sbatch <<EOF
 
 cd ${REPO_ROOT}
 source setup_env.sh
-poetry env remove --all 2>/dev/null || true
-poetry install
+poetry install --no-interaction --only main
 
 poetry run python experiments/embedding_generation/run.py \
     --dataset ${DATASET} \

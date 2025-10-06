@@ -24,7 +24,7 @@ submit_single() {
 
 cd ${REPO_ROOT}
 source setup_env.sh
-poetry install --only main
+poetry install --no-interaction --only main
 
 poetry run python experiments/embedding_generation/run.py \
     --dataset ${DATASET} \
@@ -69,7 +69,7 @@ submit_chain() {
 
 cd ${REPO_ROOT}
 source setup_env.sh
-poetry install --only main
+poetry install --no-interaction --only main
 
 poetry run python experiments/embedding_generation/run.py \
     --dataset ${DATASET} \
