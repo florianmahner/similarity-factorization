@@ -11,7 +11,6 @@ packages = [
 [tool.poetry.dependencies]
 python = ">=3.12,<4.0"
 pysrf = {path = "pysrf", develop = true}
-tools = {path = "tools", develop = true}
 numpy = ">=1.23,<3.0"
 matplotlib = "^3.10.1"
 seaborn = "^0.13.2"
