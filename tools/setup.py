@@ -1,9 +1,10 @@
-from setuptools import setup, find_packages
+from setuptools import setup
 
 setup(
     name="tools",
     version="0.0.1",
-    packages=find_packages(),
+    packages=["tools"],
+    package_dir={"tools": "."},
     python_requires=">=3.10",
 )
 
