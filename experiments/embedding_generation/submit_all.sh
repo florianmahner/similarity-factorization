@@ -24,13 +24,9 @@ submit_single() {
 
 cd ${REPO_ROOT}
 source setup_env.sh
+poetry install --only main
 
-python -m pip install -e ./tools --no-deps --quiet
-python -m pip install -e ./pysrf --no-deps --quiet
-python -m pip install numpy pandas scikit-learn scipy matplotlib seaborn joblib --quiet
-export PYTHONPATH="${REPO_ROOT}/src:\${PYTHONPATH}"
-
-python experiments/embedding_generation/run.py \
+poetry run python experiments/embedding_generation/run.py \
     --dataset ${DATASET} \
     --n_jobs ${CPUS} \
     --random_state 0 \
@@ -73,13 +69,9 @@ submit_chain() {
 
 cd ${REPO_ROOT}
 source setup_env.sh
+poetry install --only main
 
-python -m pip install -e ./tools --no-deps --quiet
-python -m pip install -e ./pysrf --no-deps --quiet
-python -m pip install numpy pandas scikit-learn scipy matplotlib seaborn joblib --quiet
-export PYTHONPATH="${REPO_ROOT}/src:\${PYTHONPATH}"
-
-python experiments/embedding_generation/run.py \
+poetry run python experiments/embedding_generation/run.py \
     --dataset ${DATASET} \
     --n_jobs ${CPUS} \
     --random_state 0 \
