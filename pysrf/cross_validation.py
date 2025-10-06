@@ -27,15 +27,14 @@ def mask_missing_entries(
     Create a missing mask for symmetric matrix cross-validation.
 
     Subsample from valid upper triangular positions to keep as observed,
-    maintaining symmetry. The diagonal is always observed to ensure proper
-    scaling of the optimization.
+    maintaining symmetry.
 
     Parameters
     ----------
     x : ndarray
         Input symmetric matrix
     sampling_fraction : float
-        Fraction of entries to keep as observed (0.0 to 1.0)
+        Fraction of entries kept as observed for training; must be in (0, 1).
     rng : RandomState
         Random number generator
     missing_values : float or None
@@ -44,7 +43,7 @@ def mask_missing_entries(
     Returns
     -------
     missing_mask : ndarray of bool
-        Boolean mask where True indicates missing entries
+        True indicates missing (held out for validation)
     """
     observed_mask = ~np.isnan(x) if missing_values is np.nan else x != missing_values
 
@@ -68,8 +67,8 @@ def mask_missing_entries(
     missing_mask[keep_i, keep_j] = False
     missing_mask[keep_j, keep_i] = False
 
-    # Diagonal is always observed to ensure proper scaling of the optimization
-    np.fill_diagonal(missing_mask, False)
+    # IMPORTANT: Diagonal is never observed to not influence the scaling of the optimization
+    np.fill_diagonal(missing_mask, True)
 
     return missing_mask
 
@@ -157,7 +156,7 @@ class EntryMaskSplit(BaseCrossValidator):
     n_repeats : int, default=5
         Number of random splits to generate
     sampling_fraction : float, default=0.8
-        Fraction of entries to use for training
+        Fraction of entries kept as observed for training; must be in (0, 1).
     random_state : int or None, default=None
         Random seed for reproducibility
     missing_values : float or None, default=np.nan
@@ -175,6 +174,8 @@ class EntryMaskSplit(BaseCrossValidator):
         self.sampling_fraction = sampling_fraction
         self.random_state = random_state
         self.missing_values = missing_values
+        if not (0.0 < float(self.sampling_fraction) < 1.0):
+            raise ValueError("sampling_fraction must be in (0, 1)")
 
     def get_n_splits(
         self, x: np.ndarray = None, y: np.ndarray = None, groups: np.ndarray = None
@@ -298,6 +299,7 @@ def cross_val_score(
     n_repeats: int = 5,
     sampling_fraction: float = 0.8,
     estimate_sampling_fraction: bool | dict = False,
+    sampling_selection: str = "mean",
     random_state: int = 0,
     verbose: int = 1,
     n_jobs: int = -1,
@@ -320,16 +322,18 @@ def cross_val_score(
     param_grid : dict or None, default=None
         Dictionary with parameter names (str) as keys and lists of values to try
         as values. If None, uses default {'rank': [5, 10, 15, 20]} for SRF.
-        For pipelines, use nested notation (e.g., {'step__param': [...]}).
     n_repeats : int, default=5
         Number of times to repeat the cross-validation
     sampling_fraction : float, default=0.8
-        Fraction of observed entries to use for training in each split (0.0 to 1.0).
-        Ignored if estimate_sampling_fraction is True or dict
+        Fraction of observed entries to use for training in each split; must be in (0, 1).
+        Ignored when estimate_sampling_fraction is True or a dict; if both are provided,
+        estimate_sampling_fraction takes precedence.
     estimate_sampling_fraction : bool or dict, default=False
         If True, automatically estimate optimal sampling fraction using sampling
         bound estimation from Random Matrix Theory. If dict, passed as kwargs to
-        estimate_sampling_bounds_fast(). When enabled, overrides sampling_fraction
+        estimate_sampling_bounds_fast(). When enabled, overrides sampling_fraction.
+    sampling_selection : str, default="mean"
+        Selection method for the estimated sampling fraction; one of {"mean", "min", "max"}.
     random_state : int, default=0
         Random seed for reproducibility
     verbose : int, default=1
@@ -348,37 +352,20 @@ def cross_val_score(
 
     Examples
     --------
-    >>> from pysrf import SRF, cross_val_score
-    >>>
-    >>> # Basic usage (backwards compatible)
+    >>> from pysrf.cross_validation import cross_val_score
     >>> result = cross_val_score(similarity_matrix, param_grid={'rank': [5, 10, 15]})
-    >>>
-    >>> # With ensemble embedding
-    >>> from sklearn.pipeline import Pipeline
-    >>> from pysrf.consensus import EnsembleEmbedding
-    >>> pipeline = Pipeline([
-    ...     ('ensemble', EnsembleEmbedding(SRF(rank=10), n_runs=50))
-    ... ])
-    >>> result = cross_val_score(similarity_matrix, estimator=pipeline)
-    >>>
-    >>> # Full pipeline with clustering
-    >>> from pysrf.consensus import EnsembleEmbedding, ClusterEmbedding
-    >>> pipeline = Pipeline([
-    ...     ('ensemble', EnsembleEmbedding(SRF(rank=10), n_runs=50)),
-    ...     ('cluster', ClusterEmbedding(min_clusters=10, max_clusters=30))
-    ... ])
-    >>> result = cross_val_score(
-    ...     similarity_matrix,
-    ...     estimator=pipeline,
-    ...     fit_final_estimator=True
-    ... )
-    >>> final_embedding = result.best_estimator_.transform(similarity_matrix)
     """
     if estimator is None:
         estimator = SRF(random_state=random_state)
 
     if param_grid is None:
         param_grid = {"rank": [5, 10, 15, 20]}
+
+    valid_selections = {"mean", "min", "max"}
+    if sampling_selection not in valid_selections:
+        raise ValueError(
+            f"sampling_selection must be one of {sorted(valid_selections)}"
+        )
 
     if estimate_sampling_fraction:
         from .bounds import estimate_sampling_bounds_fast
@@ -396,11 +383,22 @@ def cross_val_score(
             kwargs["verbose"] = bool(verbose)
 
         pmin, pmax, _ = estimate_sampling_bounds_fast(similarity_matrix, **kwargs)
-        sampling_fraction = 0.5 * (pmin + pmax)
-
-        if verbose:
-            print(f"Estimated sampling bounds: pmin={pmin:.4f}, pmax={pmax:.4f}")
-            print(f"Using sampling_fraction={sampling_fraction:.4f}")
+        sampling_fraction = {
+            "mean": np.mean([pmin, pmax]),
+            "min": pmin,
+            "max": pmax,
+        }[sampling_selection]
+    else:
+        if sampling_fraction is None:
+            raise ValueError(
+                "sampling_fraction must be provided when estimate_sampling_fraction is False"
+            )
+        try:
+            sampling_fraction = float(sampling_fraction)
+        except (TypeError, ValueError):
+            raise TypeError("sampling_fraction must be a float in (0, 1)")
+        if not (0.0 < sampling_fraction < 1.0):
+            raise ValueError("sampling_fraction must be in (0, 1)")
 
     cv = EntryMaskSplit(
         n_repeats=n_repeats,
