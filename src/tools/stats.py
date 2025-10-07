@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 
-""" Statistical utilities"""
+"""Statistical utilities"""
 
-import torch
 import numpy as np
 from scipy.stats import pearsonr, spearmanr
 
 Array = np.ndarray
-Tensor = torch.Tensor
 
 
 # ------- Helper Functions for Array Transformations ------- #
@@ -72,11 +70,11 @@ def normalize_l2(x: Array, axis: int = 0, eps: float = 1e-8) -> Array:
 def normalize_l1(x: Array, axis: int = 0, eps: float = 1e-8) -> Array:
     """Normalize the input array to have unit L1 norm."""
     x = np.asarray(x)
-    norms = np.sum(x, axis=axis, keepdims=True)
+    norms = np.sum(np.abs(x), axis=axis, keepdims=True)
     return x / (norms + eps)
 
 
-def positive_shift(x: Array, **kwargs) -> Array:
+def positive_shift(x: Array, axis: int = 0) -> Array:
     """Shift all values in the array to be non-negative."""
     return x - np.min(x)
 
@@ -185,7 +183,7 @@ def vectorized_pearsonr(x: Array, y: Array) -> float | Array:
 
 
 def spearman_brown_correction(reliability: float, split_factor: int) -> float:
-    """Bute the Spearman-Brown prophecy formula.
+    """Compute the Spearman-Brown prophecy formula.
     Args:
         reliability (float): The reliability of the original test.
         split_factor (int): The factor of the split (e.g. 2 for split-half reliability).
@@ -226,6 +224,7 @@ def fisher_z_transform(pearson_r: Array) -> Array:
 
     return np.arctanh(pearson_r)
 
+
 def average_pearson_r(pearson_r: Array, axis: int = 0) -> Array:
     """Compute the average Pearson r after Fisher Z-transform and inverse transformation."""
     fisher_z = fisher_z_transform(pearson_r)
@@ -240,36 +239,3 @@ def average_pearson_r(pearson_r: Array, axis: int = 0) -> Array:
 def _normal_pdf_numpy(x: Array, mean: Array, std: Array) -> Array:
     """Compute the probability density function of a normal distribution."""
     return np.exp(-0.5 * ((x - mean) / std) ** 2) / (std * np.sqrt(2 * np.pi))
-
-
-def _normal_pdf_tensor(x: Tensor, mean: Tensor, std: Tensor) -> Tensor:
-    """Compute the probability density function of a normal distribution."""
-    return torch.exp(-0.5 * ((x - mean) / std) ** 2) / (std * torch.sqrt(2 * torch.pi))
-
-
-def normal_pdf(
-    x: Array | Tensor, mean: Array | Tensor, std: Array | Tensor
-) -> Array | Tensor:
-    """
-    Compute the probability density function of a normal distribution.
-    Args:
-        x (Array | Tensor): The input values.
-        mean (Array | Tensor): The mean of the distribution.
-        std (Array | Tensor): The standard deviation of the distribution.
-    """
-    # Check input shapes
-    if not (x.shape == mean.shape == std.shape):
-        raise ValueError(
-            f"Input arrays must have the same shape. "
-            f"Shapes: x={x.shape}, mean={mean.shape}, std={std.shape}"
-        )
-
-        raise TypeError("All inputs must be of type Array or Tensor.")
-
-    if not all(isinstance(arr, type(x)) for arr in (mean, std)):
-        raise TypeError("All inputs must be of the same type (Array or Tensor).")
-
-    if isinstance(x, Array):
-        return _normal_pdf_numpy(x, mean, std)
-    else:
-        return _normal_pdf_tensor(x, mean, std)

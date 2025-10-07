@@ -63,8 +63,7 @@ def process_combination(
 
     # SNMF clustering
     similarity_matrix = compute_similarity(data, data, similarity_measure)
-    # similarity_matrix = data @ data.T
-    # np.fill_diagonal(similarity_matrix, 0.0)
+
     w_snmf = SRF(
         rank=rank,
         random_state=seed,

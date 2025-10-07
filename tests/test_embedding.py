@@ -57,7 +57,7 @@ for i in range(n_dims):
 
         img = Image.open(images[idx[j]])
         axs[i, j].imshow(img)
-        axs[i, j].axis("off")
+        axs[i, j].axis("off")res
 plt.tight_layout()
 plt.show()
 

@@ -1,0 +1,13 @@
+{
+  "dataset": "mur92",
+  "n_samples": 92,
+  "optimal_rank": 3,
+  "optimal_clusters": 3,
+  "best_cv_score": 0.014426433806685185,
+  "n_stable_runs": 50,
+  "n_cv_repeats": 20,
+  "random_state": 0,
+  "p_min": 0.14973507699633049,
+  "p_max": 0.9098123516613924,
+  "observed_fraction": 0.5297737143288614
+}

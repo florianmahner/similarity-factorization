@@ -53,21 +53,16 @@ def compute_distance(x: Array, y: Array, metric: str, **kwargs) -> float | Array
 
 
 def pearson_similarity(x: np.ndarray, y: np.ndarray) -> np.ndarray:
-    """Pearson similarity between two matrices, returning an n x n similarity matrix.
-    NOTE this is the same as np.corrcoef(x, y, rowvar=True)"""
+    """Pearson similarity between two matrices, returning an n x n similarity matrix."""
     x_centered = x - x.mean(axis=1, keepdims=True)
     y_centered = y - y.mean(axis=1, keepdims=True)
     xy = x_centered @ y_centered.T
     x_norms = np.linalg.norm(x_centered, axis=1, keepdims=True)
     y_norms = np.linalg.norm(y_centered, axis=1, keepdims=True)
-
-    # Safely handle zero norms by setting invalid entries to 0
     norm_product = x_norms @ y_norms.T
-    valid = norm_product > 0
-    s = np.zeros_like(norm_product)
-    s[valid] = xy[valid] / norm_product[valid]
-    s = np.nan_to_num(s, nan=0.0)
-    s = np.clip(s, a_min=-1, a_max=1)
+    
+    s = np.divide(xy, norm_product, out=np.zeros_like(xy), where=norm_product > 0)
+    s = np.clip(s, -1, 1)
     np.fill_diagonal(s, 1)
     return s
 
@@ -146,12 +141,10 @@ def gaussian_kernel_similarity(
             smooth similarity functions. If not provided, it is estimated from the data.
     """
     if sigma is None:
-        print("Sigma not provided, estimating from data using median distance")
         dist = pairwise_distances(x, metric="euclidean")
         median_dist = np.median(dist)
         sigma = median_dist
 
-    # convert sigma to sklearn kernel parameter
     gamma = 1 / (2 * sigma**2)
     similarity = pairwise_kernels(x, y, metric="rbf", gamma=gamma)
     return similarity

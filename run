@@ -1,230 +1,101 @@
 #!/usr/bin/env python3
-"""Experiment management for similarity-factorization.
-
-Usage:
-    ./run <experiment_name> [args...]     Run an experiment
-    ./run list                             List all experiments
-    ./run new <name>                       Create a new experiment
-    ./run new scratch <description>        Create a scratch experiment
-"""
-
-import sys
-import os
-import subprocess
-from pathlib import Path
-from datetime import datetime
-
-
-class Colors:
-    RED = '\033[0;31m'
-    GREEN = '\033[0;32m'
-    YELLOW = '\033[1;33m'
-    BLUE = '\033[0;34m'
-    NC = '\033[0m'
-
-
-def list_experiments():
-    """List all available experiments."""
-    print(f"{Colors.GREEN}Available experiments:{Colors.NC}\n")
-    
-    experiments_dir = Path("experiments")
-    if not experiments_dir.exists():
-        print("No experiments directory found")
-        return
-    
-    # List regular experiments
-    for exp_dir in sorted(experiments_dir.iterdir()):
-        if not exp_dir.is_dir() or exp_dir.name.startswith("_"):
-            continue
-        
-        exp_name = exp_dir.name
-        run_file = exp_dir / "run.py"
-        
-        if run_file.exists():
-            outputs_dir = exp_dir / "outputs"
-            if outputs_dir.exists() and any(outputs_dir.iterdir()):
-                # Get size
-                result = subprocess.run(
-                    ["du", "-sh", str(outputs_dir)],
-                    capture_output=True,
-                    text=True
-                )
-                size = result.stdout.split()[0] if result.returncode == 0 else "?"
-                print(f"  {Colors.BLUE}{exp_name}{Colors.NC} {Colors.YELLOW}({size}){Colors.NC}")
-            else:
-                print(f"  {Colors.BLUE}{exp_name}{Colors.NC}")
-    
-    # List scratch experiments
-    print(f"\n{Colors.GREEN}Scratch experiments:{Colors.NC}")
-    scratch_dir = experiments_dir / "_scratch"
-    if scratch_dir.exists() and any(scratch_dir.iterdir()):
-        for exp_dir in sorted(scratch_dir.iterdir()):
-            if exp_dir.is_dir():
-                print(f"  {exp_dir.name}")
-    else:
-        print("  (none)")
-    
-    print(f"\nRun with: ./run <experiment_name>")
-
-
-def create_experiment(args):
-    """Create a new experiment."""
-    if not args:
-        print("Usage:")
-        print('  ./run new <name>                Create a named experiment')
-        print('  ./run new scratch <description> Create a scratch experiment')
-        sys.exit(1)
-    
-    if args[0] == "scratch":
-        # Create timestamped scratch experiment
-        description = args[1] if len(args) > 1 else "experiment"
-        date_str = datetime.now().strftime("%Y-%m-%d")
-        exp_name = f"{date_str}_{description}"
-        exp_dir = Path(f"experiments/_scratch/{exp_name}")
-        
-        exp_dir.mkdir(parents=True, exist_ok=False)
-        (exp_dir / "outputs").mkdir(exist_ok=True)
-        
-        # Create run.py
-        run_content = '''"""Quick scratch experiment."""
-
-import numpy as np
-from pathlib import Path
-
-# Your experiment code here
-if __name__ == "__main__":
-    print("Running scratch experiment...")
-    
-    # Save outputs
-    output_dir = Path("outputs")
-    output_dir.mkdir(exist_ok=True)
-    
-    # Example: np.save(output_dir / "results.npy", data)
-'''
-        (exp_dir / "run.py").write_text(run_content)
-        
-        print(f"{Colors.GREEN}Created scratch experiment: {exp_name}{Colors.NC}")
-        print(f"{Colors.YELLOW}Location: {exp_dir}{Colors.NC}\n")
-        print(f"Run with: ./run _scratch/{exp_name}")
-        
-    else:
-        # Create named experiment
-        exp_name = args[0]
-        exp_dir = Path(f"experiments/{exp_name}")
-        
-        if exp_dir.exists():
-            print(f"{Colors.RED}Error: Experiment '{exp_name}' already exists{Colors.NC}")
-            sys.exit(1)
-        
-        exp_dir.mkdir(parents=True)
-        (exp_dir / "outputs").mkdir(exist_ok=True)
-        
-        # Create run.py
-        run_content = f'''"""Experiment: {exp_name}
-
-Description:
-    TODO: Add description
-
-Usage:
-    ./run {exp_name} [args]
-"""
-
 import argparse
+import subprocess
+from datetime import datetime
 from pathlib import Path
-
-def main(args):
-    """Run experiment."""
-    output_dir = Path("outputs")
-    output_dir.mkdir(exist_ok=True)
-    
-    # Your experiment code here
-    print(f"Running {exp_name} experiment...")
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__)
-    # Add your arguments here
-    # parser.add_argument("--param", type=int, default=10)
-    
-    args = parser.parse_args()
-    main(args)
-'''
-        (exp_dir / "run.py").write_text(run_content)
-        
-        # Create README
-        readme_content = f'''# {exp_name}
-
-## Description
-
-TODO: Describe what this experiment does
-
-## Usage
-
-```bash
-./run {exp_name}
-```
-
-## Outputs
-
-- `outputs/` - Results stored here
-'''
-        (exp_dir / "README.md").write_text(readme_content)
-        
-        print(f"{Colors.GREEN}Created experiment: {exp_name}{Colors.NC}")
-        print(f"{Colors.YELLOW}Location: {exp_dir}{Colors.NC}\n")
-        print(f"Run with: ./run {exp_name}")
+from typing import Optional
 
 
-def run_experiment(experiment_name, args):
-    """Run an experiment."""
-    exp_dir = Path(f"experiments/{experiment_name}")
-    
-    if not exp_dir.exists():
-        print(f"{Colors.RED}Error: Experiment '{experiment_name}' not found{Colors.NC}\n")
-        print("Available experiments:")
-        list_experiments()
-        sys.exit(1)
-    
-    run_file = exp_dir / "run.py"
-    if not run_file.exists():
-        print(f"{Colors.RED}Error: No run.py found in {exp_dir}{Colors.NC}")
-        sys.exit(1)
-    
-    print(f"{Colors.GREEN}Running experiment: {experiment_name}{Colors.NC}")
-    print(f"{Colors.YELLOW}Working directory: {exp_dir}{Colors.NC}\n")
-    
-    # Set PYTHONPATH to include repo root
-    repo_root = Path.cwd()
-    env = os.environ.copy()
-    env["PYTHONPATH"] = f"{repo_root}:{env.get('PYTHONPATH', '')}"
-    
-    # Run the experiment
-    result = subprocess.run(
-        ["poetry", "run", "python", "run.py"] + args,
-        cwd=exp_dir,
-        env=env
-    )
-    
-    sys.exit(result.returncode)
+DEFAULT_PARTITION = "interactive"
+DEFAULT_CPUS = 4
+DEFAULT_MEM = "4G"
+DEFAULT_TIME = "00:30:00"
 
 
-def main():
-    """Main entry point."""
-    if len(sys.argv) == 1:
-        print(__doc__)
-        sys.exit(1)
-    
-    command = sys.argv[1]
-    
-    if command == "list":
-        list_experiments()
-    elif command == "new":
-        create_experiment(sys.argv[2:])
-    elif command in ["-h", "--help", "help"]:
-        print(__doc__)
-    else:
-        # Assume it's an experiment name
-        run_experiment(command, sys.argv[2:])
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("experiment", help="Path under experiments/ (e.g. development/test)")
+    parser.add_argument("--partition", default=DEFAULT_PARTITION)
+    parser.add_argument("--cpus", type=int, default=DEFAULT_CPUS)
+    parser.add_argument("--mem", default=DEFAULT_MEM)
+    parser.add_argument("--time", default=DEFAULT_TIME)
+    parser.add_argument("--name", default=None)
+    parser.add_argument("--output-name", dest="output_name", default=None)
+    parser.add_argument("--dependency", default="")
+    parser.add_argument("--help", action="store_true")
+    ns, remaining = parser.parse_known_args()
+    if ns.help:
+        parser.print_help()
+        exit(0)
+    if remaining and remaining[0] == "--":
+        remaining = remaining[1:]
+    ns.script_args = remaining
+    return ns
+
+
+def ensure_experiment(experiment: str) -> Path:
+    repo_root = Path(__file__).resolve().parent
+    exp_path = repo_root / "experiments" / experiment
+    run_script = exp_path / "run.py"
+    if not run_script.exists():
+        raise SystemExit(f"run.py not found in experiments/{experiment}")
+    return exp_path
+
+
+def next_run_directory(exp_path: Path, output_name: str = None) -> Path:
+    if output_name:
+        candidate = exp_path / output_name
+        (candidate / "outputs").mkdir(parents=True, exist_ok=True)
+        (candidate / "logs").mkdir(exist_ok=True)
+        return candidate
+    day_prefix = datetime.now().strftime("%y%m%d")
+    counter = 1
+    while True:
+        candidate = exp_path / f"{day_prefix}-{counter:02d}"
+        if not candidate.exists():
+            break
+        counter += 1
+    (candidate / "outputs").mkdir(parents=True, exist_ok=True)
+    (candidate / "logs").mkdir(exist_ok=True)
+    return candidate
+
+
+def submit(exp_path: Path, run_dir: Path, args: argparse.Namespace) -> str:
+    repo_root = Path(__file__).resolve().parent
+    run_script = exp_path / "run.py"
+    job_name = args.name or f"{exp_path.name}_{run_dir.name}"
+    log_dir = run_dir / "logs"
+    log_dir.mkdir(exist_ok=True)
+    submit_script = repo_root / "scripts/slurm/submit_dev.sh"
+    cmd = [
+        "bash",
+        str(submit_script),
+        job_name,
+        args.partition,
+        str(args.cpus),
+        args.mem,
+        args.time,
+        str(log_dir),
+        str(repo_root),
+        str(run_script),
+        str(run_dir / "outputs"),
+        args.dependency,
+        *args.script_args,
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        raise SystemExit(result.stderr.strip())
+    return result.stdout.strip().split()[-1]
+
+
+def main() -> None:
+    args = parse_args()
+    exp_path = ensure_experiment(args.experiment)
+    run_dir = next_run_directory(exp_path, args.output_name)
+    job_id = submit(exp_path, run_dir, args)
+    print(f"submitted {args.experiment}:{run_dir.name} -> {job_id}")
 
 
 if __name__ == "__main__":
     main()
+

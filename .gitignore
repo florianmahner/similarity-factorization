@@ -25,10 +25,11 @@ embeddings/
 # Experiment outputs and scratch work
 experiments/*/outputs/
 experiments/_scratch/
+experiments/*/runs/
+experiments/.tracking.db
 
-# SLURM logs and scripts
+# SLURM logs
 experiments/*/logs/
-scripts/slurm/
 
 # Large binary files
 *.npy
