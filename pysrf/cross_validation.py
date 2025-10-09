@@ -67,8 +67,8 @@ def mask_missing_entries(
     missing_mask[keep_i, keep_j] = False
     missing_mask[keep_j, keep_i] = False
 
-    # IMPORTANT: Diagonal is never observed to not influence the scaling of the optimization
-    np.fill_diagonal(missing_mask, True)
+    # IMPORTANT: Diagonal is always observed to not influence the scaling of the optimization Or at random?
+    np.fill_diagonal(missing_mask, False)
 
     return missing_mask
 
@@ -192,7 +192,7 @@ class EntryMaskSplit(BaseCrossValidator):
             )
 
 
-class ADMMGridSearchCV:
+class GridSearchCV:
     """
     Grid search cross-validation for matrix completion.
 
@@ -242,7 +242,7 @@ class ADMMGridSearchCV:
         self.verbose = verbose
         self.fit_final_estimator = fit_final_estimator
 
-    def fit(self, x: np.ndarray) -> "ADMMGridSearchCV":
+    def fit(self, x: np.ndarray) -> "SRFGridSearchCV":
         param_grid = ParameterGrid(self.param_grid)
         cv_splits = list(self.cv.split(x))
 
@@ -292,6 +292,19 @@ class ADMMGridSearchCV:
         return self
 
 
+def _validate_sampling_fraction(sampling_fraction: float) -> float:
+    if sampling_fraction is None:
+        raise ValueError(
+            "sampling_fraction must be provided when estimate_sampling_fraction is False"
+        )
+    try:
+        sampling_fraction = float(sampling_fraction)
+    except (TypeError, ValueError):
+        raise TypeError("sampling_fraction must be a float in (0, 1)")
+    if not (0.0 < sampling_fraction < 1.0):
+        raise ValueError("sampling_fraction must be in (0, 1)")
+
+
 def cross_val_score(
     similarity_matrix: np.ndarray,
     estimator: BaseEstimator | None = None,
@@ -305,7 +318,7 @@ def cross_val_score(
     n_jobs: int = -1,
     missing_values: float | None = np.nan,
     fit_final_estimator: bool = False,
-) -> ADMMGridSearchCV:
+) -> GridSearchCV:
     """
     Cross-validate any estimator for matrix completion.
 
@@ -347,8 +360,8 @@ def cross_val_score(
 
     Returns
     -------
-    grid : ADMMGridSearchCV
-        Fitted ADMMGridSearchCV object with best parameters and scores
+    grid : SRFGridSearchCV
+        Fitted SRFGridSearchCV object with best parameters and scores
 
     Examples
     --------
@@ -382,23 +395,15 @@ def cross_val_score(
         if "verbose" not in kwargs:
             kwargs["verbose"] = bool(verbose)
 
-        pmin, pmax, _ = estimate_sampling_bounds_fast(similarity_matrix, **kwargs)
+        pmin, pmax, s_noise = estimate_sampling_bounds_fast(similarity_matrix, **kwargs)
         sampling_fraction = {
             "mean": np.mean([pmin, pmax]),
             "min": pmin,
             "max": pmax,
         }[sampling_selection]
+
     else:
-        if sampling_fraction is None:
-            raise ValueError(
-                "sampling_fraction must be provided when estimate_sampling_fraction is False"
-            )
-        try:
-            sampling_fraction = float(sampling_fraction)
-        except (TypeError, ValueError):
-            raise TypeError("sampling_fraction must be a float in (0, 1)")
-        if not (0.0 < sampling_fraction < 1.0):
-            raise ValueError("sampling_fraction must be in (0, 1)")
+        _validate_sampling_fraction(sampling_fraction)
 
     cv = EntryMaskSplit(
         n_repeats=n_repeats,
@@ -406,7 +411,7 @@ def cross_val_score(
         random_state=random_state,
         missing_values=missing_values,
     )
-    grid = ADMMGridSearchCV(
+    grid = GridSearchCV(
         estimator=estimator,
         param_grid=param_grid,
         cv=cv,

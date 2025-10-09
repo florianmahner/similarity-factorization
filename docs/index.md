@@ -2,11 +2,9 @@
 
 **Similarity-Based Representation Factorization (SRF)** 
 
-
 ## Overview
 
-`pysrf` implements symmetric non-negative matrix factorization using the Alternating Direction Method of Multipliers (ADMM). 
-
+`pysrf` implements symmetric non-negative matrix factorization using the Alternating Direction Method of Multipliers (SRF). 
 
 ## Installation
 
@@ -27,13 +25,13 @@ model = SRF(rank=10, max_outer=20, random_state=42)
 embedding = model.fit_transform(s)
 
 # Reconstruct
-s_reconstructed = w @ w.T
+s_reconstructed = model.reconstruct()
 ```
-
 
 ## Next Steps
 
-- [Quick Start Guide](quickstart.md) - Learn the basics
-- [API Reference](api/model.md) - Detailed documentation
+- [Installation Guide](installation.md) - Setup instructions
+- [Examples](examples.md) - Usage examples and workflows
+- [Quick Start Guide](quickstart.md) - Detailed tutorials
+- [API Reference](api/model.md) - Complete API documentation
 - [Development Guide](development.md) - Contributing guidelines
-

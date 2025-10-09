@@ -2,6 +2,14 @@
 # cython: boundscheck=False, wraparound=False, cdivision=True, nonecheck=False, language_level=3
 # distutils: define_macros=NPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION
 
+# Author: Florian P. Mahner
+# Date: 2025-10-08
+# Description: Cython implementation of the block successive upper bound minimization algorithm for symmetric nonnegative matrix factorization.
+# See Shi et al. (2016) for more details.
+# Reference: Shi et al. (2016) "Inexact Block Coordinate Descent Methods For Symmetric Nonnegative Matrix Factorization".
+# Link: https://arxiv.org/abs/1608.02649
+# License: MIT
+
 import numpy as np
 cimport numpy as np
 from libc.math cimport sqrt, pow, fabs, cbrt
@@ -41,8 +49,7 @@ cdef inline double _dot_product(double[:] a, double[:] b) nogil:
 cpdef np.ndarray[DTYPE_t, ndim=2] update_w(double[:, ::1] m,
                                                 double[:, ::1] w0,
                                                 int max_iter=100,
-                                                double tol=1e-6,
-                                                bint verbose=False):
+                                                double tol=1e-6):
     cdef int n = w0.shape[0]
     cdef int r = w0.shape[1]
     cdef np.ndarray[DTYPE_t, ndim=2] w = np.array(w0, copy=True)

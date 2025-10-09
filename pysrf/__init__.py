@@ -5,7 +5,7 @@ from __future__ import annotations
 from .model import SRF
 from .cross_validation import (
     cross_val_score,
-    ADMMGridSearchCV,
+    GridSearchCV,
     EntryMaskSplit,
     mask_missing_entries,
 )
@@ -30,7 +30,7 @@ except Exception:
 __all__: list[str] = [
     "SRF",
     "cross_val_score",
-    "ADMMGridSearchCV",
+    "SRFGridSearchCV",
     "EntryMaskSplit",
     "mask_missing_entries",
     "estimate_sampling_bounds",
@@ -39,6 +39,4 @@ __all__: list[str] = [
     "p_upper_only_k",
     "EnsembleEmbedding",
     "ClusterEmbedding",
-    "fit_stable",
-    "cluster_stable",
 ]
