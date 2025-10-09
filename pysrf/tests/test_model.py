@@ -16,8 +16,8 @@ def test_srf_initialization():
     model = SRF(rank=5, random_state=42)
     assert model.rank == 5
     assert model.rho == 3.0
-    assert model.max_outer == 10
-    assert model.max_inner == 30
+    assert model.max_outer == 30
+    assert model.max_inner == 20
     assert model.tol == 1e-4
 
 

@@ -45,10 +45,10 @@ nav:
   - Home: index.md
   - Installation: installation.md
   - Quick Start: quickstart.md
+  - Examples: examples.md
   - API Reference:
     - Model (SRF): api/model.md
     - Cross-Validation: api/cross_validation.md
     - Sampling Bounds: api/bounds.md
-    - Utilities: api/utils.md
   - Development: development.md
 

@@ -126,27 +126,18 @@ def test_estimate_sampling_bounds_parameters():
 
 def test_rank_recovery_with_cv():
     """Test that CV with sampling bound estimates produces reasonable rank selection."""
-    true_rank = 8
-    n_samples = 100
-    seed = 42
+    n, k, seed = 200, 10, 42
 
-    s = generate_test_matrix(n=n_samples, rank=true_rank, random_state=seed)
-
-    pmin, pmax, _ = estimate_sampling_bounds_fast(
-        s, random_state=seed, verbose=False, n_jobs=1
-    )
-
-    assert 0 < pmin < pmax <= 1, "sampling bounds should be valid probabilities"
-
-    sampling_fraction = 0.5 * (pmin + pmax)
-
-    rank_range = list(range(max(1, true_rank - 5), true_rank + 5))
+    s = generate_test_matrix(n=n, rank=k, random_state=seed)
+    rank_range = list(range(max(1, k - 5), k + 5))
 
     grid = cross_val_score(
         s,
+        estimator=SRF(rho=3.0, max_outer=50, max_inner=20, random_state=seed),
         param_grid={"rank": rank_range},
-        n_repeats=3,
-        sampling_fraction=sampling_fraction,
+        n_repeats=10,
+        estimate_sampling_fraction=True,
+        sampling_selection="mean",
         n_jobs=1,
         random_state=seed,
         verbose=0,
@@ -155,8 +146,8 @@ def test_rank_recovery_with_cv():
 
     best_rank = grid.best_params_["rank"]
 
-    assert best_rank >= 3, "CV should select a reasonable rank (at least 3)"
-    assert best_rank <= true_rank + 3, f"CV should not overestimate rank too much"
+    assert best_rank >= 7, "CV should select a reasonable rank (at least 3)"
+    assert best_rank <= k + 1, f"CV should not overestimate rank too much"
     assert grid.best_score_ < 1.0, "Best CV score should indicate good fit"
 
 

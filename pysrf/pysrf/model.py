@@ -1,7 +1,7 @@
 """
-ADMM-based Symmetric Non-negative Matrix Factorization
+SRF-based Symmetric Non-negative Matrix Factorization
 
-This module implements the Alternating Direction Method of Multipliers (ADMM)
+This module implements the Alternating Direction Method of Multipliers (SRF)
 for symmetric non-negative matrix factorization, with support for missing entries
 and optional bounded constraints.
 """
@@ -162,7 +162,7 @@ def update_v_(
     v: ndarray,
 ) -> None:
     """
-    Update auxiliary variable v in ADMM algorithm.
+    Update auxiliary variable v in SRF algorithm.
 
     Args:
         observed_mask: Binary observation mask
@@ -191,7 +191,7 @@ def update_v_(
 
 def update_lambda_(lam: ndarray, v: ndarray, x_hat: ndarray, rho: float) -> None:
     """
-    Update Lagrange multipliers in ADMM algorithm.
+    Update Lagrange multipliers in SRF algorithm.
 
     Args:
         lam: Current Lagrange multipliers
@@ -204,10 +204,10 @@ def update_lambda_(lam: ndarray, v: ndarray, x_hat: ndarray, rho: float) -> None
 
 class SRF(TransformerMixin, BaseEstimator):
     """
-    Symmetric Non-negative Matrix Factorization using ADMM.
+    Symmetric Non-negative Matrix Factorization using SRF.
 
     This class implements symmetric non-negative matrix factorization (SymNMF) using
-    the Alternating Direction Method of Multipliers (ADMM). It can handle missing
+    the Alternating Direction Method of Multipliers (SRF). It can handle missing
     entries and optional bound constraints on the factorization.
 
     The algorithm solves: min_{w>=0,v} ||M o (S - v)||^2_F + rho/2 ||v - ww^T||^2_F
@@ -218,14 +218,14 @@ class SRF(TransformerMixin, BaseEstimator):
     rank : int, default=10
         Number of factors (dimensionality of the latent space)
     rho : float, default=3.0
-        ADMM penalty parameter controlling constraint enforcement
+        SRF penalty parameter controlling constraint enforcement
     max_outer : int, default=10
-        Maximum number of ADMM outer iterations
+        Maximum number of SRF outer iterations
     max_inner : int, default=30
         Maximum iterations for w-subproblem per outer iteration
     tol : float, default=1e-4
         Convergence tolerance for constraint violation
-    verbose : bool, default=False
+    verbose : int, default=0
         Whether to print optimization progress
     init : str, default='random_sqrt'
         Method for factor initialization ('random', 'random_sqrt', 'nndsvd',
@@ -247,7 +247,7 @@ class SRF(TransformerMixin, BaseEstimator):
     components_ : ndarray of shape (n_samples, rank)
         Alias for w_ (sklearn compatibility)
     n_iter_ : int
-        Number of ADMM iterations performed
+        Number of SRF iterations performed
     history_ : dict
         Dictionary containing optimization metrics per iteration
 
@@ -274,10 +274,10 @@ class SRF(TransformerMixin, BaseEstimator):
         self,
         rank: int = 10,
         rho: float = 3.0,
-        max_outer: int = 10,
-        max_inner: int = 30,
+        max_outer: int = 30,
+        max_inner: int = 20,
         tol: float = 1e-4,
-        verbose: bool = False,
+        verbose: int = 0,
         init: str = "random_sqrt",
         random_state: int | None = None,
         missing_values: float | None = np.nan,
@@ -370,6 +370,8 @@ class SRF(TransformerMixin, BaseEstimator):
 
         update_w_ = _get_update_w_function()
 
+        # TODO Compute metrics here too.
+
         for i in range(1, self.max_outer + 1):
             w = update_w_(x, w, max_iter=self.max_inner, tol=self.tol)
 
@@ -379,7 +381,7 @@ class SRF(TransformerMixin, BaseEstimator):
             history["rec_error"].append(rec_error)
             history["evar"].append(evar)
 
-            if self.verbose:
+            if self.verbose > 0:
                 print(
                     f"Iteration {i}/{self.max_outer}, "
                     f"Rec Error: {rec_error:.3f}, "
@@ -395,7 +397,7 @@ class SRF(TransformerMixin, BaseEstimator):
         return self
 
     def _fit_missing_data(self, x: ndarray) -> SRF:
-        """Fit model with missing data using ADMM."""
+        """Fit model with missing data using SRF."""
         bound_min, bound_max = self.bounds
         history = defaultdict(list)
         self.params = defaultdict(list)
@@ -421,7 +423,7 @@ class SRF(TransformerMixin, BaseEstimator):
             for key, value in metrics.items():
                 history[key].append(value)
 
-            if self.verbose:
+            if self.verbose > 0:
                 print(
                     f"Iteration {i}/{self.max_outer}, "
                     f"Objective: {metrics['total_objective']:.3f}, "

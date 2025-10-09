@@ -3,7 +3,7 @@ import pytest
 from pysrf import (
     SRF,
     cross_val_score,
-    ADMMGridSearchCV,
+    GridSearchCV,
     EntryMaskSplit,
     mask_missing_entries,
 )
@@ -48,13 +48,13 @@ def test_entry_mask_split():
         assert mask.dtype == bool
 
 
-def test_admm_grid_search_cv():
+def test_SRF_grid_search_cv():
     s = generate_test_matrix(n=20, rank=5)
 
     param_grid = {"rank": [3, 5, 7], "rho": [2.0, 3.0]}
     cv = EntryMaskSplit(n_repeats=2, sampling_fraction=0.8, random_state=42)
 
-    grid = ADMMGridSearchCV(
+    grid = GridSearchCV(
         estimator=SRF(max_outer=5, random_state=42),
         param_grid=param_grid,
         cv=cv,
@@ -131,3 +131,20 @@ def test_cross_val_score_fit_final():
 
     assert hasattr(result, "best_estimator_")
     assert hasattr(result.best_estimator_, "w_")
+
+
+def test_rank_recovery():
+    s = generate_test_matrix(n=100, rank=5)
+
+    result = cross_val_score(
+        s,
+        estimator=SRF(rho=3.0, max_outer=50, max_inner=20, random_state=42),
+        param_grid={"rank": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]},
+        n_repeats=5,
+        estimate_sampling_fraction=True,
+        sampling_selection="mean",
+        random_state=42,
+        verbose=0,
+    )
+
+    assert result.best_params_["rank"] == 5
