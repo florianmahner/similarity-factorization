@@ -1,16 +1,6 @@
 # Cross-Validation API
 
-## Main Function
-
 ::: pysrf.cross_val_score
-    options:
-      show_root_heading: true
-      show_source: true
-      heading_level: 3
-
-## Cross-Validator
-
-::: pysrf.EntryMaskSplit
     options:
       show_root_heading: true
       show_source: true
@@ -18,13 +8,22 @@
 
 ## Grid Search
 
-::: pysrf.SRFGridSearchCV
+::: pysrf.GridSearchCV
     options:
       show_root_heading: true
       show_source: true
       heading_level: 3
 
-## Utility Functions
+## CV Strategy
+
+::: pysrf.EntryMaskSplit
+    options:
+      show_root_heading: true
+      show_source: true
+      heading_level: 3
+
+
+## Masking and Scoring
 
 ::: pysrf.cross_validation.mask_missing_entries
     options:
@@ -37,4 +36,3 @@
       show_root_heading: true
       show_source: true
       heading_level: 3
-

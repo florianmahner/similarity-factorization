@@ -10,36 +10,55 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from collections.abc import Callable
-from functools import lru_cache
 
 import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.utils.validation import check_is_fitted, check_symmetric, validate_data
+from sklearn.utils.validation import (
+    check_is_fitted,
+    check_symmetric,
+    validate_data,
+)
+from sklearn.utils._param_validation import Interval, StrOptions, Integral, Real
 
-from .utils import init_factor, validate_missing_values, get_missing_mask
 
-ndarray = np.ndarray
-optionalfloat = float | None
-optionalarray = ndarray | None
+try:
+    from ._bsum import update_w as _update_w_impl
+except ImportError:
+    import warnings
+
+    warnings.warn(
+        "Cython implementation not available. Using pure Python implementation "
+        "which is significantly slower. To compile Cython extensions, run:\n"
+        "  python setup.py build_ext --inplace",
+        RuntimeWarning,
+        stacklevel=2,
+    )
+    from .model import update_w_python as _update_w_impl
 
 
-def _quartic_root(a: float, b: float, c: float, d: float) -> float:
+def _solve_quartic_minimization(a: float, b: float, c: float, d: float) -> float:
     """
-    Solve min_{x >= 0} g(x) = a/4 x^4 + b/3 x^3 + c/2 x^2 + d x (a == 4),
-    e.g a four-order polynomial. See eq. (11) in Shi et al. (2016).
+    Find x >= 0 minimizing quartic polynomial g(x) = a/4 x^4 + b/3 x^3 + c/2 x^2 + d x.
 
-    Args:
-        a, b, c, d: Coefficients of the quartic polynomial
+    This is a key subroutine in the BSUM algorithm for updating individual
+    elements of the factor matrix W.
 
-    Returns:
-        Non-negative minimizer of the quartic polynomial
+    Parameters
+    ----------
+    a, b, c, d : float
+        Polynomial coefficients
+
+    Returns
+    -------
+    root : float
+        Non-negative minimizer of g(x)
+
+    References
+    ----------
+    Shi et al. (2016), "Inexact Block Coordinate Descent Methods For
+    Symmetric Nonnegative Matrix Factorization", Equation (11)
     """
-    a = float(a)
-    b = float(b)
-    c = float(c)
-    d = float(d)
-
+    a, b, c, d = float(a), float(b), float(c), float(d)
     bb = b * b
     a2 = a * a
     p = (3.0 * a * c - bb) / (3.0 * a2)
@@ -53,20 +72,111 @@ def _quartic_root(a: float, b: float, c: float, d: float) -> float:
         tmp = b * bb / (27.0 * a2 * a) - d / a
         root = math.cbrt(tmp)
 
-    return 0.0 if root < 0.0 else root
+    return max(0.0, root)
 
 
-def _dot(a: ndarray, b: ndarray) -> float:
+def _dot(a: np.ndarray, b: np.ndarray) -> float:
     """Compute dot product of two arrays."""
     return sum(x * y for x, y in zip(a, b))
 
 
-def update_w_python(
-    m: ndarray,
-    w0: ndarray,
+def _get_missing_mask(x: np.ndarray, missing_values: float | None) -> np.ndarray:
+    if missing_values is np.nan:
+        return np.isnan(x)
+    elif missing_values is None:
+        return np.isnan(x)
+    else:
+        return x == missing_values
+
+
+def _initialize_w(
+    x: np.ndarray,
+    rank: int,
+    method: str = "random_sqrt",
+    random_state: int | np.random.RandomState | None = None,
+    eps: float = 1e-6,
+) -> np.ndarray:
+    """
+    Initialize factor matrix W for symmetric NMF.
+    
+    Parameters
+    ----------
+    X : ndarray of shape (n_samples, n_samples)
+        Symmetric input matrix (used for scaling in some methods)
+    n_components : int
+        Number of components (columns in W)
+    method : {'random', 'random_sqrt', 'nndsvd', 'nndsvda', 'nndsvdar'}, \
+             default='random_sqrt'
+        Initialization strategy:
+        
+        - 'random' : Random Gaussian, scaled by sqrt(X.mean() / n_components)
+        - 'random_sqrt' : Element-wise sqrt(|N(0,1)|), popular for SymNMF
+        - 'nndsvd' : Non-Negative Double SVD (deterministic, sparse)
+        - 'nndsvda' : NNDSVD with zeros filled by column average
+        - 'nndsvdar' : NNDSVD with zeros filled by small random values
+    random_state : int, RandomState or None
+        Controls random number generation
+    eps : float, default=1e-6
+        Small constant added to avoid exact zeros
+    
+    Returns
+    -------
+    W : ndarray of shape (n_samples, n_components)
+        Initialized non-negative factor matrix
+    
+    References
+    ----------
+    .. [1] Boutsidis & Gallopoulos (2008). "SVD based initialization:
+           A head start for nonnegative matrix factorization."
+    """
+    rng = np.random.RandomState(random_state)
+    n_samples = x.shape[0]
+
+    if method == "random":
+        w = 0.1 * rng.rand(n_samples, rank)
+    elif method == "random_sqrt":
+        avg = np.sqrt(x.mean() / rank)
+        w = rng.rand(n_samples, rank) * avg
+
+    elif method in ("nndsvd", "nndsvda", "nndsvdar"):
+        # Leverage sklearn's implementation
+        from sklearn.decomposition._nmf import _initialize_nmf
+
+        w, _ = _initialize_nmf(x, rank, init=method, random_state=random_state, eps=eps)
+
+    else:
+        raise ValueError(
+            f"Invalid initialization method '{method}'. "
+            f"Choose from: 'random', 'random_sqrt', 'nndsvd', 'nndsvda', 'nndsvdar'"
+        )
+
+    return w
+
+
+def _validate_bounds(val) -> None:
+    if val is None:
+        return
+    if not (isinstance(val, tuple) and len(val) == 2):
+        raise ValueError("bounds must be a tuple (lower, upper) of floats or None")
+    lo, up = val
+    # allow None for either end
+    if lo is None or up is None:
+        return
+    try:
+        lo_f = float(lo)
+        up_f = float(up)
+    except (TypeError, ValueError):
+        raise ValueError("bounds must be numeric or None")
+    if lo_f > up_f:
+        raise ValueError("lower bound cannot be greater than upper bound")
+
+
+def update_w(
+    m: np.ndarray,
+    w0: np.ndarray,
     max_iter: int = 100,
     tol: float = 1e-6,
-) -> ndarray:
+) -> np.ndarray:
     """
     Block successive upper bound minimization (Shi et al., 2016).
     Implementation of the algorithm. See TABLE 1 in "Inexact Block Coordinate
@@ -95,7 +205,7 @@ def update_w_python(
                 b = 12.0 * old
                 c = 4.0 * ((diag[i] - m[i, i]) + xtx[j, j] + old * old)
                 d = 4.0 * _dot(w[i], xtx[:, j]) - 4.0 * _dot(m[i], w[:, j])
-                new = _quartic_root(a, b, c, d)
+                new = _solve_quartic_minimization(a, b, c, d)
 
                 delta = new - old
                 if abs(delta) > max_delta:
@@ -115,51 +225,15 @@ def update_w_python(
     return w
 
 
-@lru_cache(maxsize=1)
-def _get_update_w_function() -> Callable:
-    """Return the appropriate update_w function (Cython or Python fallback)."""
-    try:
-        from ._bsum import update_w
-
-        return update_w
-    except ImportError:
-        try:
-            import pyximport
-            import os
-
-            os.environ[
-                "CPPFLAGS"
-            ] = f"-I{np.get_include()} -DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION"
-
-            pyximport.install(
-                setup_args={
-                    "include_dirs": [np.get_include()],
-                    "script_args": ["--quiet"],
-                },
-                language_level=3,
-            )
-            from ._bsum import update_w
-
-            return update_w
-        except (ImportError, SystemExit, Exception):
-            import warnings
-
-            warnings.warn(
-                "Cython module not available. Falling back to Python implementation, which may be slower.",
-                RuntimeWarning,
-            )
-            return update_w_python
-
-
 def update_v_(
-    observed_mask: ndarray,
-    x: ndarray,
-    x_hat: ndarray,
-    lam: ndarray,
+    observed_mask: np.ndarray,
+    x: np.ndarray,
+    x_hat: np.ndarray,
+    lam: np.ndarray,
     rho: float,
     bound_min: float,
     bound_max: float,
-    v: ndarray,
+    v: np.ndarray,
 ) -> None:
     """
     Update auxiliary variable v in SRF algorithm.
@@ -189,7 +263,9 @@ def update_v_(
     v *= 0.5
 
 
-def update_lambda_(lam: ndarray, v: ndarray, x_hat: ndarray, rho: float) -> None:
+def update_lambda_(
+    lam: np.ndarray, v: np.ndarray, x_hat: np.ndarray, rho: float
+) -> None:
     """
     Update Lagrange multipliers in SRF algorithm.
 
@@ -242,9 +318,9 @@ class SRF(TransformerMixin, BaseEstimator):
 
     Attributes
     ----------
-    w_ : ndarray of shape (n_samples, rank)
+    w_ : np.ndarray of shape (n_samples, rank)
         Learned factor matrix w
-    components_ : ndarray of shape (n_samples, rank)
+    components_ : np.ndarray of shape (n_samples, rank)
         Alias for w_ (sklearn compatibility)
     n_iter_ : int
         Number of SRF iterations performed
@@ -270,6 +346,21 @@ class SRF(TransformerMixin, BaseEstimator):
            Symmetric Nonnegative Matrix Factorization"
     """
 
+    _parameter_constraints = {
+        "rank": [Interval(Integral, 1, None, closed="left")],
+        "rho": [Interval(Real, 0.0, None, closed="left")],
+        "max_outer": [Interval(Integral, 1, None, closed="left")],
+        "max_inner": [Interval(Integral, 1, None, closed="left")],
+        "tol": [Interval(Real, 0.0, None, closed="left")],
+        "init": [
+            StrOptions({"random", "random_sqrt", "nndsvd", "nndsvda", "nndsvdar"})
+        ],
+        "verbose": [Interval(Integral, 0, None, closed="left")],
+        "random_state": ["random_state"],  # sklearn's special validator
+        "missing_values": [None, Real, np.nan],
+        "bounds": [None, tuple],
+    }
+
     def __init__(
         self,
         rank: int = 10,
@@ -294,37 +385,8 @@ class SRF(TransformerMixin, BaseEstimator):
         self.missing_values = missing_values
         self.bounds = bounds
 
-    def _validate_input_arguments(self) -> None:
-        """Validate hyperparameters."""
-        if self.rank <= 0:
-            raise ValueError(f"rank must be positive, got {self.rank}")
-        if self.rho <= 0:
-            raise ValueError(f"rho must be positive, got {self.rho}")
-        if self.max_outer <= 0:
-            raise ValueError(f"max_outer must be positive, got {self.max_outer}")
-        if self.max_inner <= 0:
-            raise ValueError(f"max_inner must be positive, got {self.max_inner}")
-        if self.tol < 0:
-            raise ValueError(f"tol must be non-negative, got {self.tol}")
-        validate_missing_values(self.missing_values)
-        if self.bounds is not None:
-            if (
-                not isinstance(self.bounds, tuple)
-                or len(self.bounds) != 2
-                or not all(
-                    (b is None or isinstance(b, (int, float))) for b in self.bounds
-                )
-            ):
-                raise ValueError(
-                    "bounds must be a tuple (lower, upper) of floats or None, "
-                    f"got {self.bounds!r}"
-                )
-            lower, upper = self.bounds
-            if lower is not None and upper is not None and lower > upper:
-                raise ValueError(f"bounds lower must be ≤ upper, got {self.bounds!r}")
-
     def _compute_metrics(
-        self, x: ndarray, v: ndarray, x_hat: ndarray, lam: ndarray
+        self, x: np.ndarray, v: np.ndarray, x_hat: np.ndarray, lam: np.ndarray
     ) -> dict[str, float]:
         """Compute comprehensive optimization metrics for monitoring."""
         data_residual = x - v
@@ -363,17 +425,15 @@ class SRF(TransformerMixin, BaseEstimator):
             "evar": evar,
         }
 
-    def _fit_complete_data(self, x: ndarray) -> SRF:
+    def _fit_complete_data(self, x: np.ndarray) -> SRF:
         """Fit model with complete data (no missing values)."""
-        w = init_factor(x, self.rank, self.init, self.random_state)
+        w = _initialize_w(x, self.rank, self.init, self.random_state)
         history = defaultdict(list)
-
-        update_w_ = _get_update_w_function()
 
         # TODO Compute metrics here too.
 
         for i in range(1, self.max_outer + 1):
-            w = update_w_(x, w, max_iter=self.max_inner, tol=self.tol)
+            w = _update_w_impl(x, w, max_iter=self.max_inner, tol=self.tol)
 
             rec_error = np.linalg.norm(x - w @ w.T, "fro")
             evar = 1 - rec_error / np.linalg.norm(x, "fro")
@@ -396,22 +456,21 @@ class SRF(TransformerMixin, BaseEstimator):
 
         return self
 
-    def _fit_missing_data(self, x: ndarray) -> SRF:
+    def _fit_missing_data(self, x: np.ndarray) -> SRF:
         """Fit model with missing data using SRF."""
         bound_min, bound_max = self.bounds
         history = defaultdict(list)
-        self.params = defaultdict(list)
 
-        w = init_factor(x, self.rank, self.init, self.random_state)
+        w = _initialize_w(x, self.rank, self.init, self.random_state)
         lam = np.zeros_like(x)
-
-        update_w_ = _get_update_w_function()
 
         v = x.copy()
         x_hat = w @ w.T
 
         for i in range(1, self.max_outer + 1):
-            w = update_w_(v + lam / self.rho, w, max_iter=self.max_inner, tol=self.tol)
+            w = _update_w_impl(
+                v + lam / self.rho, w, max_iter=self.max_inner, tol=self.tol
+            )
             x_hat[:] = w @ w.T
 
             update_v_(
@@ -439,7 +498,7 @@ class SRF(TransformerMixin, BaseEstimator):
 
         return self
 
-    def fit(self, x: ndarray, y: ndarray | None = None) -> SRF:
+    def fit(self, x: np.ndarray, y: np.ndarray | None = None) -> SRF:
         """
         Fit the symmetric NMF model to the data.
 
@@ -456,8 +515,8 @@ class SRF(TransformerMixin, BaseEstimator):
         self : object
             Fitted estimator.
         """
-        self._validate_input_arguments()
-        x = x.copy()
+        self._validate_params()
+        _validate_bounds(self.bounds)
 
         x = validate_data(
             self,
@@ -466,9 +525,10 @@ class SRF(TransformerMixin, BaseEstimator):
             ensure_all_finite="allow-nan" if self.missing_values is np.nan else True,
             ensure_2d=True,
             dtype=np.float64,
+            copy=True,
         )
 
-        self._missing_mask = get_missing_mask(x, self.missing_values)
+        self._missing_mask = _get_missing_mask(x, self.missing_values)
         if np.all(self._missing_mask):
             raise ValueError(
                 "No observed entries found in the data. All values are missing."
@@ -484,7 +544,7 @@ class SRF(TransformerMixin, BaseEstimator):
         else:
             return self._fit_missing_data(x)
 
-    def transform(self, x: ndarray) -> ndarray:
+    def transform(self, x: np.ndarray) -> np.ndarray:
         """
         Project data onto the learned factor space.
 
@@ -501,7 +561,7 @@ class SRF(TransformerMixin, BaseEstimator):
         check_is_fitted(self)
         return self.w_
 
-    def fit_transform(self, x: ndarray, y: ndarray | None = None) -> ndarray:
+    def fit_transform(self, x: np.ndarray, y: np.ndarray | None = None) -> np.ndarray:
         """
         Fit the model and return the learned factors.
 
@@ -519,7 +579,7 @@ class SRF(TransformerMixin, BaseEstimator):
         """
         return self.fit(x, y).transform(x)
 
-    def reconstruct(self, w: ndarray | None = None) -> ndarray:
+    def reconstruct(self, w: np.ndarray | None = None) -> np.ndarray:
         """
         Reconstruct the similarity matrix from factors.
 
@@ -540,7 +600,7 @@ class SRF(TransformerMixin, BaseEstimator):
 
         return w @ w.T
 
-    def score(self, x: ndarray, y: ndarray | None = None) -> float:
+    def score(self, x: np.ndarray, y: np.ndarray | None = None) -> float:
         """
         Score the model using reconstruction error on observed entries only.
 
@@ -567,7 +627,7 @@ class SRF(TransformerMixin, BaseEstimator):
             dtype=np.float64,
             ensure_all_finite="allow-nan" if self.missing_values is np.nan else True,
         )
-        observation_mask = ~get_missing_mask(x, self.missing_values)
+        observation_mask = ~_get_missing_mask(x, self.missing_values)
         reconstruction = self.reconstruct()
         mse = np.mean((x[observation_mask] - reconstruction[observation_mask]) ** 2)
-        return mse
+        return -mse
