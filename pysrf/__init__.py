@@ -7,7 +7,7 @@ from .cross_validation import (
     cross_val_score,
     GridSearchCV,
     EntryMaskSplit,
-    mask_missing_entries,
+    create_train_val_split,
 )
 from .bounds import (
     estimate_sampling_bounds,
@@ -30,9 +30,9 @@ except Exception:
 __all__: list[str] = [
     "SRF",
     "cross_val_score",
-    "SRFGridSearchCV",
+    "GridSearchCV",
     "EntryMaskSplit",
-    "mask_missing_entries",
+    "create_train_val_split",
     "estimate_sampling_bounds",
     "estimate_sampling_bounds_fast",
     "pmin_bound",

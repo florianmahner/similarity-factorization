@@ -27,9 +27,8 @@ except ImportError:
     import warnings
 
     warnings.warn(
-        "Cython implementation not available. Using pure Python implementation "
-        "which is significantly slower. To compile Cython extensions, run:\n"
-        "  python setup.py build_ext --inplace",
+        "Cython implementation not available. Using Python implementation "
+        "which is significantly slower. Compile Cython to improve performance.",
         RuntimeWarning,
         stacklevel=2,
     )
