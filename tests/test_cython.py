@@ -31,14 +31,14 @@ def test_cython_compilation():
 
 
 def test_python_fallback():
-    from pysrf.model import update_w_python
+    from pysrf.model import update_w
 
     n, r = 10, 3
     m = np.random.rand(n, n)
     m = (m + m.T) / 2
     x0 = np.random.rand(n, r)
 
-    result = update_w_python(m, x0, max_iter=10, tol=1e-6)
+    result = update_w(m, x0, max_iter=10, tol=1e-6)
 
     assert result.shape == (n, r)
     assert np.all(result >= 0)
@@ -48,7 +48,7 @@ def test_python_fallback():
 def test_cython_vs_python():
     try:
         from pysrf._bsum import update_w as update_w_cython
-        from pysrf.model import update_w_python
+        from pysrf.model import update_w as update_w_python
 
         np.random.seed(42)
         n, r = 10, 3

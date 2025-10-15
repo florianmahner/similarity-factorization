@@ -67,8 +67,13 @@ def mask_missing_entries(
     missing_mask[keep_i, keep_j] = False
     missing_mask[keep_j, keep_i] = False
 
-    # IMPORTANT: Diagonal is always observed to not influence the scaling of the optimization Or at random?
-    np.fill_diagonal(missing_mask, False)
+    # if diagonal is constant, we never observe its entries
+    if np.all(x.diagonal() == x.diagonal()[0]):
+        missing_mask.diagonal().fill(True)
+
+    # otherwise, we always observe the diagonal entries
+    else:
+        np.fill_diagonal(missing_mask, False)
 
     return missing_mask
 
