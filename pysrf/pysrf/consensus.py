@@ -120,7 +120,7 @@ class ClusterEmbedding(BaseEstimator, TransformerMixin):
     """
     Reduce embedding dimensionality via clustering.
 
-    Takes stacked embeddings, normalizes columns, clusters them, and returns
+    Takes stacked embeddings, scales columns, clusters them, and returns
     merged cluster representatives. The optimal number of clusters is selected
     via silhouette score.
 
@@ -138,6 +138,19 @@ class ClusterEmbedding(BaseEstimator, TransformerMixin):
         Number of parallel jobs
     n_init : int, default=30
         Number of KMeans initializations
+    column_scaling : str, default="l2"
+        Column scaling method. Options: "none", "l2", "center_l2", "zscore"
+        - "none": no scaling
+        - "l2": normalize to unit length
+        - "center_l2": center then normalize
+        - "zscore": standardize (mean=0, std=1)
+    silhouette_metric : str, default="cosine"
+        Distance metric for silhouette score. Better aligned with l2-normalized
+        columns. See sklearn.metrics.silhouette_score for options
+    representative : str, default="mean"
+        Method to compute cluster representative. Options: "mean", "median"
+    renorm_output : bool, default=True
+        Whether to renormalize output columns to unit length
 
     Attributes
     ----------
@@ -147,6 +160,8 @@ class ClusterEmbedding(BaseEstimator, TransformerMixin):
         Cluster labels for each column
     cluster_results_ : DataFrame
         Silhouette scores for each k tried
+    n_features_in_ : int
+        Number of features seen during fit
 
     Examples
     --------
@@ -169,6 +184,10 @@ class ClusterEmbedding(BaseEstimator, TransformerMixin):
         random_state: int = 0,
         n_jobs: int = -1,
         n_init: int = 30,
+        column_scaling: str = "l2",
+        silhouette_metric: str = "cosine",
+        representative: str = "mean",
+        renorm_output: bool = True,
     ):
         self.min_clusters = min_clusters
         self.max_clusters = max_clusters
@@ -176,30 +195,25 @@ class ClusterEmbedding(BaseEstimator, TransformerMixin):
         self.random_state = random_state
         self.n_jobs = n_jobs
         self.n_init = n_init
+        self.column_scaling = column_scaling
+        self.silhouette_metric = silhouette_metric
+        self.representative = representative
+        self.renorm_output = renorm_output
 
     def fit(self, x: ndarray, y: ndarray | None = None) -> ClusterEmbedding:
-        """
-        Find optimal number of clusters and fit KMeans.
+        x = self._validate_x(x)
+        x_scaled = self._scale_columns(x)
+        x_t = x_scaled.T
 
-        Parameters
-        ----------
-        x : ndarray of shape (n_samples, n_features)
-            Stacked embeddings to cluster
-        y : None
-            Ignored
-
-        Returns
-        -------
-        self : ClusterEmbedding
-            Fitted estimator
-        """
-        x_norm = self._norm_columns(x)
-        x_t = x_norm.T
-
-        max_k = min(self.max_clusters, x_t.shape[0] - 1)
+        max_k = max(2, min(self.max_clusters, x_t.shape[0] - 1))
+        if self.min_clusters > max_k:
+            raise ValueError(
+                f"min_clusters={self.min_clusters} exceeds feasible maximum {max_k} "
+                f"for n_columns={x.shape[1]} (silhouette needs at least 2 and at most n-1)."
+            )
         cluster_range = range(self.min_clusters, max_k + 1, self.step)
 
-        def _score_k(k: int) -> dict:
+        def score_k(k: int) -> dict:
             km = KMeans(
                 n_clusters=k,
                 random_state=self.random_state,
@@ -207,19 +221,15 @@ class ClusterEmbedding(BaseEstimator, TransformerMixin):
                 n_init=self.n_init,
             )
             labels = km.fit_predict(x_t)
-            score = silhouette_score(x_t, labels)
-            return {"n_clusters": k, "silhouette_score": float(score)}
+            sc = silhouette_score(x_t, labels, metric=self.silhouette_metric)
+            return {"n_clusters": k, "silhouette_score": float(sc)}
 
         records = Parallel(n_jobs=self.n_jobs)(
-            delayed(_score_k)(k) for k in cluster_range
+            delayed(score_k)(k) for k in cluster_range
         )
-
         self.cluster_results_ = pd.DataFrame(records)
-        self.best_k_ = int(
-            self.cluster_results_.loc[
-                self.cluster_results_["silhouette_score"].idxmax(), "n_clusters"
-            ]
-        )
+        best_idx = self.cluster_results_["silhouette_score"].idxmax()
+        self.best_k_ = int(self.cluster_results_.loc[best_idx, "n_clusters"])
 
         km = KMeans(
             n_clusters=self.best_k_,
@@ -228,42 +238,71 @@ class ClusterEmbedding(BaseEstimator, TransformerMixin):
             n_init=self.n_init,
         )
         self.labels_ = km.fit_predict(x_t)
-        self.x_input_ = x
-
+        self.n_features_in_ = x.shape[1]
         return self
 
     def transform(self, x: ndarray, y: ndarray | None = None) -> ndarray:
-        """
-        Return merged cluster representatives.
+        check_is_fitted(self, ("best_k_", "labels_"))
+        x = self._validate_x(x)
+        if x.shape[1] != self.n_features_in_:
+            raise ValueError(
+                f"x has {x.shape[1]} columns but model was fit with {self.n_features_in_}."
+            )
+        x_scaled = self._scale_columns(x)
 
-        Parameters
-        ----------
-        x : ndarray
-            Input (ignored, uses stored data from fit)
-        y : None
-            Ignored
+        agg_func = np.median if self.representative == "median" else np.mean
+        reps = []
+        counts = []
 
-        Returns
-        -------
-        merged : ndarray of shape (n_samples, best_k)
-            Cluster representatives sorted by cluster size
-        """
-        check_is_fitted(self, "best_k_")
-
-        merged = []
-        sizes = []
         for i in range(self.best_k_):
-            cluster_cols = self.x_input_[:, self.labels_ == i]
-            merged.append(np.median(cluster_cols, axis=1))
-            sizes.append(cluster_cols.sum())
+            mask = self.labels_ == i
+            cols = x_scaled[:, mask]
+            if cols.shape[1] == 0:
+                reps.append(np.zeros(x.shape[0], dtype=x.dtype))
+                counts.append(0)
+            else:
+                reps.append(agg_func(cols, axis=1))
+                counts.append(cols.shape[1])
 
-        merged = np.column_stack(merged)
-        order = np.argsort(sizes)[::-1]
-        return merged[:, order]
+        merged = np.column_stack(reps)
+        order = np.argsort(counts)[::-1]
+        merged = merged[:, order]
+
+        if self.renorm_output:
+            merged = self._l2_norm_columns(merged)
+        return merged
+
+    # helpers
+
+    def _validate_x(self, x: ndarray) -> ndarray:
+        x = np.asarray(x)
+        if x.ndim != 2:
+            raise ValueError("x must be a 2d array (n_samples, n_features).")
+        if not np.isfinite(x).all():
+            raise ValueError("x contains nan or inf.")
+        return x
+
+    def _scale_columns(self, v: ndarray) -> ndarray:
+        if self.column_scaling == "none":
+            return v
+
+        if self.column_scaling == "l2":
+            return self._l2_norm_columns(v)
+
+        if self.column_scaling == "center_l2":
+            centered = v - v.mean(axis=0, keepdims=True)
+            return self._l2_norm_columns(centered)
+
+        if self.column_scaling == "zscore":
+            mean = v.mean(axis=0, keepdims=True)
+            std = v.std(axis=0, keepdims=True)
+            std[std == 0] = 1.0
+            return (v - mean) / std
+
+        raise ValueError(f"unknown column_scaling='{self.column_scaling}'")
 
     @staticmethod
-    def _norm_columns(v: ndarray) -> ndarray:
-        """Normalize columns to unit length."""
+    def _l2_norm_columns(v: ndarray) -> ndarray:
         n = np.linalg.norm(v, axis=0, keepdims=True)
         n[n == 0] = 1.0
         return v / n
