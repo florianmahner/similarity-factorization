@@ -5,7 +5,7 @@ from pysrf import (
     cross_val_score,
     GridSearchCV,
     EntryMaskSplit,
-    mask_missing_entries,
+    create_train_val_split,
 )
 
 
@@ -17,20 +17,26 @@ def generate_test_matrix(n=30, rank=5, random_state=42):
     return s
 
 
-def test_mask_missing_entries():
+def test_train_val_split_masks():
     np.random.seed(42)
     s = generate_test_matrix(n=20)
     rng = np.random.RandomState(42)
 
-    mask = mask_missing_entries(s, sampling_fraction=0.8, rng=rng)
+    train_mask, val_mask = create_train_val_split(
+        s, sampling_fraction=0.8, rng=rng, missing_values=np.nan
+    )
 
-    assert mask.shape == s.shape
-    assert mask.dtype == bool
-    assert np.allclose(mask, mask.T)
-
-    observed_count = np.sum(~mask)
-    total_count = s.shape[0] * (s.shape[0] + 1) // 2
-    assert observed_count > 0
+    assert train_mask.shape == s.shape
+    assert val_mask.shape == s.shape
+    assert train_mask.dtype == bool
+    assert val_mask.dtype == bool
+    assert np.allclose(train_mask, train_mask.T)
+    assert np.allclose(val_mask, val_mask.T)
+    # No overlap between train and validation
+    assert not np.any(train_mask & val_mask)
+    # At least some entries in both
+    assert np.sum(train_mask) > 0
+    assert np.sum(val_mask) > 0
 
 
 def test_entry_mask_split():
@@ -43,9 +49,14 @@ def test_entry_mask_split():
     splits = list(cv.split(s))
     assert len(splits) == 3
 
-    for mask in splits:
-        assert mask.shape == s.shape
-        assert mask.dtype == bool
+    for train_mask, val_mask in splits:
+        assert train_mask.shape == s.shape
+        assert val_mask.shape == s.shape
+        assert train_mask.dtype == bool
+        assert val_mask.dtype == bool
+        assert np.allclose(train_mask, train_mask.T)
+        assert np.allclose(val_mask, val_mask.T)
+        assert not np.any(train_mask & val_mask)
 
 
 def test_SRF_grid_search_cv():

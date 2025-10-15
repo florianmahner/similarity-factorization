@@ -13,75 +13,119 @@ from sklearn.base import BaseEstimator, clone
 from sklearn.model_selection import BaseCrossValidator, ParameterGrid
 from sklearn.utils import check_random_state
 from joblib import Parallel, delayed
-from typing import Generator
+from typing import Generator, Tuple
 from .model import SRF
 
 
-def mask_missing_entries(
+def create_train_val_split(
     x: np.ndarray,
     sampling_fraction: float,
     rng: np.random.RandomState,
     missing_values: float | None = np.nan,
-) -> np.ndarray:
+) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Create a missing mask for symmetric matrix cross-validation.
+    Create train/validation split for symmetric matrix cross-validation.
 
-    Subsample from valid upper triangular positions to keep as observed,
-    maintaining symmetry.
+    Splits entries into three categories:
+    1. Training: used to fit the model
+    2. Validation: held out to evaluate the model
+    3. Excluded: not used at all (e.g., constant diagonals)
 
     Parameters
     ----------
     x : ndarray
         Input symmetric matrix
     sampling_fraction : float
-        Fraction of entries kept as observed for training; must be in (0, 1).
+        Fraction of eligible entries kept for training; must be in (0, 1).
+        The remaining (1 - sampling_fraction) becomes validation.
     rng : RandomState
         Random number generator
     missing_values : float or None
-        Value that marks missing entries
+        Value that marks missing entries in the original data
 
     Returns
     -------
-    missing_mask : ndarray of bool
-        True indicates missing (held out for validation)
+    train_mask : ndarray of bool
+        True indicates training entry (used to fit model)
+    validation_mask : ndarray of bool
+        True indicates validation entry (held out for evaluation)
+
+    Notes
+    -----
+    Entries where both masks are False are excluded from CV entirely.
+    This happens for constant diagonal entries (e.g., all 1s in RBF kernels).
     """
-    observed_mask = ~np.isnan(x) if missing_values is np.nan else x != missing_values
+    # Find entries that are observed in the original data
+    originally_observed = (
+        ~np.isnan(x) if missing_values is np.nan else x != missing_values
+    )
 
+    # Initialize both masks as False (excluded by default)
+    train_mask = np.zeros_like(x, dtype=bool)
+    validation_mask = np.zeros_like(x, dtype=bool)
+
+    # Work with upper triangle (excluding diagonal for now)
     triu_i, triu_j = np.triu_indices_from(x, k=1)
-    triu_observed = observed_mask[triu_i, triu_j]
-    valid_positions = np.where(triu_observed)[0]
+    triu_observed = originally_observed[triu_i, triu_j]
+    eligible_positions = np.where(triu_observed)[0]
 
-    n_to_keep = int(sampling_fraction * len(valid_positions))
-    if n_to_keep == 0:
-        return np.ones_like(x, dtype=bool)
+    if len(eligible_positions) == 0:
+        return train_mask, validation_mask
 
-    # Subsample from valid upper triangular positions to keep as observed
-    keep_positions = rng.choice(valid_positions, size=n_to_keep, replace=False)
+    # Determine how many to keep for training
+    n_train = int(sampling_fraction * len(eligible_positions))
+    n_train = max(1, n_train)  # At least one training sample
 
-    # Create missing mask directly - start with all missing
-    missing_mask = np.ones_like(x, dtype=bool)
+    # Randomly select which positions go to training vs validation
+    train_positions = rng.choice(eligible_positions, size=n_train, replace=False)
+    val_positions = np.setdiff1d(eligible_positions, train_positions)
 
-    # Set kept positions as observed (False = not missing)
-    keep_i = triu_i[keep_positions]
-    keep_j = triu_j[keep_positions]
-    missing_mask[keep_i, keep_j] = False
-    missing_mask[keep_j, keep_i] = False
+    # Set training positions
+    train_i = triu_i[train_positions]
+    train_j = triu_j[train_positions]
+    train_mask[train_i, train_j] = True
+    train_mask[train_j, train_i] = True
 
-    # if diagonal is constant, we never observe its entries
-    if np.all(x.diagonal() == x.diagonal()[0]):
-        missing_mask.diagonal().fill(True)
+    val_i = triu_i[val_positions]
+    val_j = triu_j[val_positions]
+    validation_mask[val_i, val_j] = True
+    validation_mask[val_j, val_i] = True
 
-    # otherwise, we always observe the diagonal entries
+    # Handle diagonal entries based on whether they're constant or variable
+    diagonal_values = x.diagonal()
+
+    if np.allclose(diagonal_values, diagonal_values[0]):
+        # Constant diagonal (e.g., all 1s in RBF kernel)
+        # EXCLUDE from CV entirely: neither train nor validation
+        # Both masks remain False for diagonal
+        pass
     else:
-        np.fill_diagonal(missing_mask, False)
+        # Variable diagonal (e.g., in linear kernel)
+        # Include in CV sampling just like off-diagonal entries
+        n_samples = x.shape[0]
+        diag_indices = np.arange(n_samples)
 
-    return missing_mask
+        # Sample diagonal entries proportionally
+        n_diag_train = int(sampling_fraction * n_samples)
+        n_diag_train = max(1, n_diag_train)  # At least one training sample
+
+        train_diag_indices = rng.choice(diag_indices, size=n_diag_train, replace=False)
+        val_diag_indices = np.setdiff1d(diag_indices, train_diag_indices)
+
+        # Set diagonal training entries
+        train_mask[train_diag_indices, train_diag_indices] = True
+
+        # Set diagonal validation entries
+        validation_mask[val_diag_indices, val_diag_indices] = True
+
+    return train_mask, validation_mask
 
 
 def fit_and_score(
     estimator: BaseEstimator,
     x: np.ndarray,
-    val_mask: np.ndarray,
+    train_mask: np.ndarray,
+    validation_mask: np.ndarray,
     fit_params: dict,
     split_idx: int | None = None,
 ) -> dict:
@@ -94,8 +138,10 @@ def fit_and_score(
         Model instance to fit (works with SRF or any estimator with .reconstruct())
     x : ndarray
         Full data matrix
-    val_mask : ndarray
-        Boolean mask indicating validation entries
+    train_mask : ndarray of bool
+        Boolean mask where True = training entry
+    validation_mask : ndarray of bool
+        Boolean mask where True = validation entry
     fit_params : dict
         Parameters to set on the estimator
     split_idx : int or None
@@ -117,13 +163,17 @@ def fit_and_score(
             original_bounds = (np.nanmin(x), np.nanmax(x))
             est.set_params(bounds=original_bounds)
 
-    already_nan = np.isnan(x)
-    x_copy = np.copy(x)
-    x_copy[val_mask] = np.nan
+    # Track which entries were already NaN in the original data
+    originally_nan = np.isnan(x)
 
-    est.fit(x_copy)
+    # Create training data: keep only training entries, mask everything else
+    x_train = np.full_like(x, np.nan)
+    x_train[train_mask] = x[train_mask]
 
-    # Get reconstruction - works with SRF or any estimator with .reconstruct()
+    # Fit model on training data only
+    est.fit(x_train)
+
+    # Get reconstruction
     if hasattr(est, "reconstruct"):
         reconstruction = est.reconstruct()
     else:
@@ -132,8 +182,13 @@ def fit_and_score(
             "for matrix completion cross-validation"
         )
 
-    valid_mask = val_mask & ~already_nan
-    mse = np.mean((x[valid_mask] - reconstruction[valid_mask]) ** 2)
+    # Evaluate only on validation entries that were originally observed
+    valid_eval_mask = validation_mask & ~originally_nan
+
+    if not valid_eval_mask.any():
+        raise ValueError("No valid validation entries to evaluate")
+
+    mse = np.mean((x[valid_eval_mask] - reconstruction[valid_eval_mask]) ** 2)
 
     result = {
         "score": mse,
@@ -161,11 +216,13 @@ class EntryMaskSplit(BaseCrossValidator):
     n_repeats : int, default=5
         Number of random splits to generate
     sampling_fraction : float, default=0.8
-        Fraction of entries kept as observed for training; must be in (0, 1).
+        Fraction of eligible entries kept for training; must be in (0, 1).
+        Remaining (1 - sampling_fraction) becomes validation.
+        Note: Constant diagonal entries are excluded from both.
     random_state : int or None, default=None
         Random seed for reproducibility
     missing_values : float or None, default=np.nan
-        Value that marks missing entries
+        Value that marks missing entries in original data
     """
 
     def __init__(
@@ -189,10 +246,20 @@ class EntryMaskSplit(BaseCrossValidator):
 
     def split(
         self, x: np.ndarray, y: np.ndarray = None, groups: np.ndarray = None
-    ) -> Generator[tuple[np.ndarray, np.ndarray], None, None]:
+    ) -> Generator[Tuple[np.ndarray, np.ndarray], None, None]:
+        """
+        Generate train/validation splits.
+
+        Yields
+        ------
+        train_mask : ndarray of bool
+            Training entries (True = use for training)
+        validation_mask : ndarray of bool
+            Validation entries (True = use for evaluation)
+        """
         rng = check_random_state(self.random_state)
         for _ in range(self.n_repeats):
-            yield mask_missing_entries(
+            yield create_train_val_split(
                 x, self.sampling_fraction, rng, self.missing_values
             )
 
@@ -247,13 +314,13 @@ class GridSearchCV:
         self.verbose = verbose
         self.fit_final_estimator = fit_final_estimator
 
-    def fit(self, x: np.ndarray) -> "SRFGridSearchCV":
+    def fit(self, x: np.ndarray) -> "GridSearchCV":
         param_grid = ParameterGrid(self.param_grid)
         cv_splits = list(self.cv.split(x))
 
         all_jobs = [
-            (params, val_mask, split_idx)
-            for split_idx, val_mask in enumerate(cv_splits)
+            (params, train_mask, validation_mask, split_idx)
+            for split_idx, (train_mask, validation_mask) in enumerate(cv_splits)
             for params in param_grid
         ]
 
@@ -263,8 +330,10 @@ class GridSearchCV:
             )
 
         all_results = Parallel(n_jobs=self.n_jobs, verbose=self.verbose)(
-            delayed(fit_and_score)(self.estimator, x, val_mask, params, split_idx)
-            for params, val_mask, split_idx in all_jobs
+            delayed(fit_and_score)(
+                self.estimator, x, train_mask, validation_mask, params, split_idx
+            )
+            for params, train_mask, validation_mask, split_idx in all_jobs
         )
 
         df = pd.DataFrame([{**r["params"], "score": r["score"]} for r in all_results])
@@ -343,7 +412,9 @@ def cross_val_score(
     n_repeats : int, default=5
         Number of times to repeat the cross-validation
     sampling_fraction : float, default=0.8
-        Fraction of observed entries to use for training in each split; must be in (0, 1).
+        Fraction of eligible entries to use for training in each split; must be in (0, 1).
+        The remaining (1 - sampling_fraction) becomes validation.
+        Note: Constant diagonal entries are excluded from both train and validation.
         Ignored when estimate_sampling_fraction is True or a dict; if both are provided,
         estimate_sampling_fraction takes precedence.
     estimate_sampling_fraction : bool or dict, default=False
@@ -359,14 +430,14 @@ def cross_val_score(
     n_jobs : int, default=-1
         Number of jobs to run in parallel (-1 uses all processors)
     missing_values : float or None, default=np.nan
-        Value to consider as missing
+        Value to consider as missing in original data
     fit_final_estimator : bool, default=False
         Whether to fit the final estimator on the best parameters
 
     Returns
     -------
-    grid : SRFGridSearchCV
-        Fitted SRFGridSearchCV object with best parameters and scores
+    grid : GridSearchCV
+        Fitted GridSearchCV object with best parameters and scores
 
     Examples
     --------

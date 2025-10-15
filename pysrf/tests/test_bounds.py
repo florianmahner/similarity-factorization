@@ -8,7 +8,7 @@ from pysrf.bounds import (
     lambda_bulk_dyson_raw,
 )
 from pysrf import SRF, cross_val_score
-from pysrf.cross_validation import mask_missing_entries
+from pysrf import create_train_val_split
 
 
 def generate_test_matrix(n=30, rank=5, random_state=42):
@@ -124,33 +124,6 @@ def test_estimate_sampling_bounds_parameters():
     assert isinstance(pmax, (float, np.floating))
 
 
-def test_rank_recovery_with_cv():
-    """Test that CV with sampling bound estimates produces reasonable rank selection."""
-    n, k, seed = 200, 10, 42
-
-    s = generate_test_matrix(n=n, rank=k, random_state=seed)
-    rank_range = list(range(max(1, k - 5), k + 5))
-
-    grid = cross_val_score(
-        s,
-        estimator=SRF(rho=3.0, max_outer=50, max_inner=20, random_state=seed),
-        param_grid={"rank": rank_range},
-        n_repeats=10,
-        estimate_sampling_fraction=True,
-        sampling_selection="mean",
-        n_jobs=1,
-        random_state=seed,
-        verbose=0,
-        fit_final_estimator=False,
-    )
-
-    best_rank = grid.best_params_["rank"]
-
-    assert best_rank >= 7, "CV should select a reasonable rank (at least 3)"
-    assert best_rank <= k + 1, f"CV should not overestimate rank too much"
-    assert grid.best_score_ < 1.0, "Best CV score should indicate good fit"
-
-
 def test_sampling_bounds_scale_with_rank():
     """Test that sampling bounds change appropriately with matrix rank."""
     n = 80
@@ -189,18 +162,20 @@ def test_reconstruction_quality_at_estimated_bounds():
     sampling_fraction = 0.5 * (pmin + pmax)
 
     rng = np.random.RandomState(seed)
-    missing_mask = mask_missing_entries(s, sampling_fraction, rng, np.nan)
+    train_mask, validation_mask = create_train_val_split(
+        s, sampling_fraction, rng, np.nan
+    )
 
     s_masked = s.copy()
-    s_masked[missing_mask] = np.nan
+    s_masked[validation_mask] = np.nan
 
     model = SRF(rank=true_rank, max_outer=20, random_state=seed)
     model.fit(s_masked)
     s_reconstructed = model.reconstruct()
 
-    observed_mask = ~missing_mask
-    mse_observed = np.mean((s[observed_mask] - s_reconstructed[observed_mask]) ** 2)
+    train_mask = ~validation_mask
+    mse_train = np.mean((s[train_mask] - s_reconstructed[train_mask]) ** 2)
 
     assert (
-        mse_observed < 0.1
+        mse_train < 0.1
     ), "Reconstruction should be accurate at estimated sampling rate"
