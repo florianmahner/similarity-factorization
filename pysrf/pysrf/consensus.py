@@ -273,7 +273,6 @@ class ClusterEmbedding(BaseEstimator, TransformerMixin):
         return merged
 
     # helpers
-
     def _validate_x(self, x: ndarray) -> ndarray:
         x = np.asarray(x)
         if x.ndim != 2:

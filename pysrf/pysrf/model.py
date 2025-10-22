@@ -79,10 +79,15 @@ def _dot(a: np.ndarray, b: np.ndarray) -> float:
     return sum(x * y for x, y in zip(a, b))
 
 
+def _is_nan_marker(missing_values: float | None) -> bool:
+    """Check if missing_values represents NaN (handles identity issues after cloning)."""
+    return missing_values is np.nan or (
+        isinstance(missing_values, float) and np.isnan(missing_values)
+    )
+
+
 def _get_missing_mask(x: np.ndarray, missing_values: float | None) -> np.ndarray:
-    if missing_values is np.nan:
-        return np.isnan(x)
-    elif missing_values is None:
+    if _is_nan_marker(missing_values) or missing_values is None:
         return np.isnan(x)
     else:
         return x == missing_values
@@ -521,7 +526,9 @@ class SRF(TransformerMixin, BaseEstimator):
             self,
             x,
             reset=True,
-            ensure_all_finite="allow-nan" if self.missing_values is np.nan else True,
+            ensure_all_finite=(
+                "allow-nan" if _is_nan_marker(self.missing_values) else True
+            ),
             ensure_2d=True,
             dtype=np.float64,
             copy=True,
@@ -536,7 +543,7 @@ class SRF(TransformerMixin, BaseEstimator):
         check_symmetric(self._missing_mask, raise_exception=True)
         self._observation_mask = ~self._missing_mask
         x[self._missing_mask] = 0.0
-        x = check_symmetric(x, raise_exception=True)
+        x = check_symmetric(x, raise_exception=True, tol=1e-10)
 
         if np.all(self._observation_mask):
             return self._fit_complete_data(x)
