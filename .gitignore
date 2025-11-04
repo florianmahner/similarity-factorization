@@ -21,6 +21,9 @@ poetry.lock
 # Data (keep local only)
 data/
 embeddings/
+archive/
+notebooks/
+
 
 # Experiment outputs and scratch work
 experiments/*/outputs/

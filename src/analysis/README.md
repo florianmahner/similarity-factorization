@@ -69,7 +69,7 @@ Compares different clustering methods (SyNMF, KMeans, NMF) across various datase
 - `rank`: Factorization rank
 - `seeds`: Random seeds for reproducibility
 - `datasets`: List of datasets to test
-- `max_outer/max_inner`: ADMM iteration limits
+- `max_outer/max_inner`: SRF iteration limits
 
 **Usage:**
 ```python

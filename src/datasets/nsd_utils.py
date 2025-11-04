@@ -227,5 +227,5 @@ def load_nsd_data(
     if not return_images:
         return betas
 
-    images, _ = load_nsd_images(trials_with_betas, nsd_dir)
+    images = load_nsd_images(trials_with_betas, nsd_dir)
     return betas, images

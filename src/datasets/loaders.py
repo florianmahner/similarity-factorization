@@ -16,7 +16,6 @@ from sklearn.datasets import (
     load_wine,
 )
 from sklearn.feature_extraction.text import TfidfVectorizer
-from torchvision.datasets import MNIST as MNIST_torch
 
 from config import get_dataset_path
 from tools.rsa import compute_similarity
@@ -24,9 +23,7 @@ from tools.rsa import compute_similarity
 from .base import DatasetResult
 from .nsd_utils import (
     get_available_subjects,
-    get_roi,
-    load_nsd_betas,
-    load_nsd_images,
+    load_nsd_data,
 )
 
 ndarray = np.ndarray
@@ -207,16 +204,14 @@ def load_nsd(
     if subject_id not in subjects:
         raise ValueError(f"Subject {subject_id} not found. Available: {subjects}")
 
-    roi = get_roi(subject_id, roi_name, root, space=space)
-    betas, trials_with_betas = load_nsd_betas(
-        subject_id, zscore_betas, root, space, voxel_indices=roi
+    betas, images = load_nsd_data(
+        subject_id, roi_name, space, zscore_betas, return_images=True, nsd_dir=root
     )
-    images, categories = load_nsd_images(trials_with_betas, root)
 
     return DatasetResult(
         name="nsd",
         data=betas,
-        metadata={"images": images, "categories": categories},
+        metadata={"images": images},
     )
 
 
@@ -307,23 +302,6 @@ def load_digits(root: str | None = None) -> DatasetResult:
     return DatasetResult(name="digits", data=digits.data, targets=digits.target)
 
 
-def load_mnist(root: str | None = None) -> DatasetResult:
-    """Load MNIST dataset."""
-    root = root or get_dataset_path("mnist")
-    train = MNIST_torch(root, train=True, download=True)
-    test = MNIST_torch(root, train=False, download=True)
-
-    return DatasetResult(
-        name="mnist",
-        metadata={
-            "train_data": train.data.numpy(),
-            "train_targets": train.targets.numpy(),
-            "test_data": test.data.numpy(),
-            "test_targets": test.targets.numpy(),
-        },
-    )
-
-
 def load_wine(root: str | None = None) -> DatasetResult:
     """Load Wine dataset."""
     wine = load_wine()
@@ -411,6 +389,55 @@ def load_20newsgroups_full(
     )
 
 
+def load_swow_data_paper_format(data_dir, use_all_responses=True):
+    """
+    Load SWOW data following the paper's preprocessing pipeline.
+
+    This loads the strength file (preprocessed cue-response associations)
+    and returns it in long format for graph construction.
+
+    Parameters
+    ----------
+    data_dir : Path
+        Directory containing SWOW data files
+    use_all_responses : bool
+        If True, use R123 (all 3 responses). If False, use R1 only.
+
+    Returns
+    -------
+    df_long : DataFrame
+        Long format data with columns [cue, response, count, N, strength]
+    """
+    data_dir = Path(data_dir)
+
+    # Use R123 (all 3 responses) for richer associations
+    if use_all_responses:
+        strength_file = data_dir / "strength.SWOW-EN.R123.20180827.csv"
+        print(f"Loading SWOW-EN R123 data (all 3 responses)")
+    else:
+        strength_file = data_dir / "strength.SWOW-EN.R1.20180827.csv"
+        print(f"Loading SWOW-EN R1 data (first response only)")
+
+    print(f"Reading from {strength_file}")
+    df = pd.read_csv(strength_file, sep="\t")
+
+    print(f"Loaded {len(df)} cue-response associations")
+    print(f"  Unique cues: {df['cue'].nunique()}")
+    print(f"  Unique responses: {df['response'].nunique()}")
+
+    # Standardize column names
+    if "R123.Strength" in df.columns:
+        df["strength"] = df["R123.Strength"]
+        df["count"] = df["R123"]
+    elif "R1.Strength" in df.columns:
+        df["strength"] = df["R1.Strength"]
+        df["count"] = df["R1"]
+    else:
+        raise ValueError("Cannot find strength column in SWOW data")
+
+    return df
+
+
 DATASETS = {
     "mur92": load_mur92,
     "cichy118": load_cichy118,
@@ -421,7 +448,6 @@ DATASETS = {
     "iris": load_iris,
     "diabetes": load_diabetes,
     "digits": load_digits,
-    "mnist": load_mnist,
     "wine": load_wine,
     "breast_cancer": load_breast_cancer,
     "orl": load_orl,

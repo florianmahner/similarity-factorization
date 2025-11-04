@@ -24,15 +24,15 @@ from tools.rsa import compute_similarity
 matplotlib.use("Agg")
 
 SMALL_DATASETS = {"mur92", "cichy118", "peterson-animals", "peterson-various"}
-LARGE_DATASETS = {"nsd", "things-monkey-22k", "vit"}
+LARGE_DATASETS = {"nsd", "things-monkey-22k", "vit", "things-ooo"}
 
 
 def get_rank_grid(dataset_slug: str) -> list[int]:
     if dataset_slug in SMALL_DATASETS:
         return list(range(1, 31))
     if dataset_slug in LARGE_DATASETS:
-        return list(range(5, 151, 5))
-    return list(range(5, 151, 5))
+        return list(range(5, 101, 5))
+    return list(range(5, 101, 5))
 
 
 def build_similarity(dataset_slug: str, subject_id: int | None) -> np.ndarray:
@@ -56,7 +56,24 @@ def build_similarity(dataset_slug: str, subject_id: int | None) -> np.ndarray:
     if dataset_slug == "vit":
         vit_path = get_dataset_path("vit")
         features = np.load(f"{vit_path}/features.npy")
-        return compute_similarity(features, features, "cosine")
+        import pandas as pd
+
+        image_info = pd.read_csv("/SSD/projects/deepsim/raw/features/image_info.csv")
+        # find where filename contains _plus
+        plus_indices = image_info[image_info["filename"].str.contains("_plus")].index
+
+        features = features[plus_indices, :]
+        return compute_similarity(features, features, "gaussian_kernel")
+
+    if dataset_slug == "things-ooo":
+        from utils.io import load_triplets
+        from analysis.things.common import compute_similarity_matrix_from_triplets
+
+        train_triplets, validation_triplets = load_triplets(
+            Path(get_dataset_path("things-ooo")), number="4.7mio"
+        )
+        sim = compute_similarity_matrix_from_triplets(1854, train_triplets)
+        return sim
 
     raise ValueError(f"unknown dataset: {dataset_slug}")
 
@@ -130,12 +147,22 @@ def run_analysis(
     rank_grid = get_rank_grid(dataset_slug)
     print(f"rank grid: {rank_grid[0]} to {rank_grid[-1]}", flush=True)
 
-    pmin, pmax, _ = estimate_sampling_bounds_fast(
-        similarity, random_state=random_state, n_jobs=n_jobs, verbose=True
-    )
-    sampling_fraction = 0.5 * (pmin + pmax)
-    print(f"sampling bounds: pmin={pmin:.4f}, pmax={pmax:.4f}", flush=True)
-    print(f"using sampling_fraction={sampling_fraction:.4f}", flush=True)
+    # check if in experiments/bounds/outputs/dataset_slug/bounds.json exists
+    bounds_file = Path(f"experiments/bounds/outputs/{dataset_slug}/bounds.json")
+    if bounds_file.exists():
+        with open(bounds_file, "r") as f:
+            bounds = json.load(f)
+        pmin = bounds["pmin"]
+        pmax = bounds["pmax"]
+        sampling_fraction = bounds["mean_sampling_fraction"]
+    else:
+        print(f"sampling bounds not found, computing them", flush=True)
+        pmin, pmax, _ = estimate_sampling_bounds_fast(
+            similarity, random_state=random_state, n_jobs=n_jobs, verbose=True
+        )
+        sampling_fraction = 0.5 * (pmin + pmax)
+        print(f"sampling bounds: pmin={pmin:.4f}, pmax={pmax:.4f}", flush=True)
+        print(f"using sampling_fraction={sampling_fraction:.4f}", flush=True)
 
     cv_result = cross_val_score(
         similarity,
@@ -146,7 +173,7 @@ def run_analysis(
         fit_final_estimator=False,
         random_state=random_state,
         n_jobs=n_jobs,
-        verbose=1,
+        verbose=0,
     )
 
     optimal_rank = cv_result.best_params_["rank"]
@@ -221,7 +248,9 @@ def run_analysis(
 
     (output_dir / "summary.json").write_text(json.dumps(meta, indent=2))
 
-    plot_results(output_dir, cv_result.cv_results_, cluster_results, optimal_rank, best_k)
+    plot_results(
+        output_dir, cv_result.cv_results_, cluster_results, optimal_rank, best_k
+    )
 
     print(f"results saved to {output_dir}", flush=True)
 
@@ -236,18 +265,20 @@ def main():
         help="dataset to analyze",
     )
     parser.add_argument(
-        "--subject_id", type=int, default=None, help="subject id for nsd dataset"
+        "--subject-id", type=int, default=None, help="subject id for nsd dataset"
     )
     parser.add_argument(
-        "--output_dir", type=Path, default=None, help="output directory for results"
-    )
-    parser.add_argument("--n_jobs", type=int, default=-1, help="number of parallel jobs")
-    parser.add_argument("--random_state", type=int, default=0, help="random seed")
-    parser.add_argument(
-        "--n_cv_repeats", type=int, default=5, help="number of cv repeats"
+        "--output-dir", type=Path, default=None, help="output directory for results"
     )
     parser.add_argument(
-        "--n_stable_runs", type=int, default=50, help="number of stable runs"
+        "--n-jobs", type=int, default=-1, help="number of parallel jobs"
+    )
+    parser.add_argument("--random-state", type=int, default=0, help="random seed")
+    parser.add_argument(
+        "--n-cv-repeats", type=int, default=10, help="number of cv repeats"
+    )
+    parser.add_argument(
+        "--n-stable-runs", type=int, default=30, help="number of stable runs"
     )
 
     args = parser.parse_args()

@@ -132,7 +132,7 @@ def load_all_datasets():
 def create_models(rank, seed, max_outer, max_inner, verbose):
     """Register clustering models with dataset-specific preprocessing."""
 
-    # For similarity matrices (already computed) - used by SyNMF ADMM
+    # For similarity matrices (already computed) - used by SyNMF SRF
     kernel_preprocessors = {
         "mnist": lambda x: construct_similarity_graph(flatten_dataset(x)),
         "orl": lambda x: construct_similarity_graph(flatten_dataset(x)),

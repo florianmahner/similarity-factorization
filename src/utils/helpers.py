@@ -171,7 +171,7 @@ def add_noise_with_snr(
     # Combine signal and noise using square-root mixing
     return np.sqrt(snr) * x + np.sqrt(1 - snr) * noise
 
-
+ 
 def compute_snr(signal: np.ndarray, noise: np.ndarray) -> float:
     """
     Compute the SNR of a signal and noise.

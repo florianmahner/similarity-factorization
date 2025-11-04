@@ -45,5 +45,5 @@ This project uses [Poetry](https://python-poetry.org/) for dependency management
 This is kind of a project page where we can keep track of pending tasks and future development ideas.
 
 - [ ] Scaling ambiguity in $S = W A H^T$. Normalizing columns?
-- [ ] Currently the project uses tri factor optimization based on block coordinate descent. ADMM might be more stable, not yet implemented
+- [ ] Currently the project uses tri factor optimization based on block coordinate descent. SRF might be more stable, not yet implemented
 - [ ] Rank selection not working yet.

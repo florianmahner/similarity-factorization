@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from scipy.io import loadmat
-from tools.utils.multiprocessing import submit_parallel_jobs
+
 import re
 
 CATEGORY_REPLACEMENTS = {"camera": "camera1", "file": "file1"}
@@ -30,12 +30,14 @@ def load_shared_data(
     return spose_embedding, indices_48, rsm_48_true
 
 
-def load_triplets(things_data: Path | str) -> np.ndarray:
-    things_data = Path(things_data)
-    train_triplets = np.loadtxt(things_data / "triplets" / "trainset.txt").astype(int)
-    validation_triplets = np.loadtxt(
-        things_data / "triplets" / "validationset.txt"
-    ).astype(int)
+def load_triplets(things_data: Path | str, number="4.7mio") -> np.ndarray:
+    path = (
+        things_data / "triplets_47"
+        if number == "4.7mio"
+        else things_data / "triplets_147"
+    )
+    train_triplets = np.loadtxt(path / "trainset.txt").astype(int)
+    validation_triplets = np.loadtxt(path / "validationset.txt").astype(int)
     return train_triplets, validation_triplets
 
 
@@ -46,7 +48,7 @@ def load_spose_embedding(
     num_dims=66,
 ):
     embedding_path = Path(embedding_path)
-    
+
     # If path is relative, resolve from repository root
     if not embedding_path.is_absolute():
         # Find repository root by looking for pyproject.toml
@@ -55,7 +57,7 @@ def load_spose_embedding(
             if (parent / "pyproject.toml").exists():
                 embedding_path = parent / embedding_path
                 break
-    
+
     if num_dims == 66:
         path = Path(embedding_path / "spose_embedding_66d.txt")
     elif num_dims == 49:
@@ -203,52 +205,3 @@ def build_w_index(root: Path | str) -> pd.DataFrame:
 
 def _load_w(path: Path, mmap_mode: str | None) -> np.ndarray:
     return np.load(Path(path), allow_pickle=False, mmap_mode=mmap_mode)
-
-
-def load_latest_w_by_model(
-    root: Path | str,
-    rank: int | None = None,
-    mmap_mode: str | None = None,
-    n_jobs: int = -1,
-) -> dict[str, np.ndarray]:
-    df = build_w_index(root)
-    if len(df) == 0:
-        return {}
-    df = df.dropna(subset=["model"]).copy()
-    if rank is not None:
-        df = df[df["rank"] == rank]
-    if len(df) == 0:
-        return {}
-    df["timestamp_key"] = df["timestamp"].fillna("")
-    idx = df.groupby("model")["timestamp_key"].idxmax()
-    df = df.loc[idx]
-    args = [(p, mmap_mode) for p in df["path"].tolist()]
-    arrays = submit_parallel_jobs(
-        _load_w,
-        args,
-        joblib_kwargs={"n_jobs": n_jobs, "verbose": 0},
-    )
-    return {m: a for m, a in zip(df["model"].tolist(), arrays)}
-
-
-def load_all_w_by_model(
-    root: Path | str,
-    mmap_mode: str | None = None,
-    n_jobs: int = -1,
-) -> dict[str, list[np.ndarray]]:
-    df = build_w_index(root)
-    if len(df) == 0:
-        return {}
-    df = df.dropna(subset=["model"]).copy()
-    grouped = df.groupby("model")
-    result: dict[str, list[np.ndarray]] = {}
-    for model, sub in grouped:
-        paths = sub.sort_values(["timestamp"], ascending=True)["path"].tolist()
-        args = [(p, mmap_mode) for p in paths]
-        arrays = submit_parallel_jobs(
-            _load_w,
-            args,
-            joblib_kwargs={"n_jobs": n_jobs, "verbose": 0},
-        )
-        result[model] = arrays
-    return result

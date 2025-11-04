@@ -3,30 +3,19 @@ import argparse
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
-
-
-DEFAULT_PARTITION = "interactive"
-DEFAULT_CPUS = 4
-DEFAULT_MEM = "4G"
-DEFAULT_TIME = "00:30:00"
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("experiment", help="Path under experiments/ (e.g. development/test)")
-    parser.add_argument("--partition", default=DEFAULT_PARTITION)
-    parser.add_argument("--cpus", type=int, default=DEFAULT_CPUS)
-    parser.add_argument("--mem", default=DEFAULT_MEM)
-    parser.add_argument("--time", default=DEFAULT_TIME)
-    parser.add_argument("--name", default=None)
-    parser.add_argument("--output-name", dest="output_name", default=None)
-    parser.add_argument("--dependency", default="")
+    parser.add_argument(
+        "experiment", help="Path under experiments/ (e.g. development/imputation)"
+    )
+    parser.add_argument("--output-name", dest="output_name")
     parser.add_argument("--help", action="store_true")
     ns, remaining = parser.parse_known_args()
     if ns.help:
         parser.print_help()
-        exit(0)
+        raise SystemExit
     if remaining and remaining[0] == "--":
         remaining = remaining[1:]
     ns.script_args = remaining
@@ -42,60 +31,34 @@ def ensure_experiment(experiment: str) -> Path:
     return exp_path
 
 
-def next_run_directory(exp_path: Path, output_name: str = None) -> Path:
+def next_run_directory(exp_path: Path, output_name: str | None) -> Path:
     if output_name:
-        candidate = exp_path / output_name
-        (candidate / "outputs").mkdir(parents=True, exist_ok=True)
-        (candidate / "logs").mkdir(exist_ok=True)
-        return candidate
-    day_prefix = datetime.now().strftime("%y%m%d")
-    counter = 1
-    while True:
-        candidate = exp_path / f"{day_prefix}-{counter:02d}"
-        if not candidate.exists():
-            break
-        counter += 1
-    (candidate / "outputs").mkdir(parents=True, exist_ok=True)
-    (candidate / "logs").mkdir(exist_ok=True)
-    return candidate
-
-
-def submit(exp_path: Path, run_dir: Path, args: argparse.Namespace) -> str:
-    repo_root = Path(__file__).resolve().parent
-    run_script = exp_path / "run.py"
-    job_name = args.name or f"{exp_path.name}_{run_dir.name}"
-    log_dir = run_dir / "logs"
-    log_dir.mkdir(exist_ok=True)
-    submit_script = repo_root / "scripts/slurm/submit_dev.sh"
-    cmd = [
-        "bash",
-        str(submit_script),
-        job_name,
-        args.partition,
-        str(args.cpus),
-        args.mem,
-        args.time,
-        str(log_dir),
-        str(repo_root),
-        str(run_script),
-        str(run_dir / "outputs"),
-        args.dependency,
-        *args.script_args,
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
-    if result.returncode != 0:
-        raise SystemExit(result.stderr.strip())
-    return result.stdout.strip().split()[-1]
+        run_dir = exp_path / output_name
+        (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
+        return run_dir
+    timestamp = datetime.now().strftime("%y%m%d/%H%M%S")
+    run_dir = exp_path / "outputs" / timestamp
+    run_dir.mkdir(parents=True, exist_ok=True)
+    return run_dir
 
 
 def main() -> None:
     args = parse_args()
     exp_path = ensure_experiment(args.experiment)
     run_dir = next_run_directory(exp_path, args.output_name)
-    job_id = submit(exp_path, run_dir, args)
-    print(f"submitted {args.experiment}:{run_dir.name} -> {job_id}")
+    repo_root = Path(__file__).resolve().parent
+    run_script = exp_path / "run.py"
+    cmd = [
+        "poetry",
+        "run",
+        "python",
+        str(run_script.relative_to(repo_root)),
+        "--output-dir",
+        str((run_dir).relative_to(repo_root)),
+    ]
+    cmd.extend(args.script_args)
+    subprocess.run(cmd, check=True, cwd=repo_root)
 
 
 if __name__ == "__main__":
     main()
-

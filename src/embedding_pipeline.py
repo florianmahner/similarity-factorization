@@ -62,9 +62,9 @@ def run_embedding_pipeline(
     cluster_step : int, default=2
         Step size for cluster search
     rho : float, default=3.0
-        ADMM penalty parameter
+        SRF penalty parameter
     max_outer : int, default=15
-        Maximum outer ADMM iterations
+        Maximum outer SRF iterations
     max_inner : int, default=40
         Maximum inner iterations
     tol : float, default=1e-4
@@ -89,7 +89,7 @@ def run_embedding_pipeline(
             - stacked_embeddings : all embeddings (n_samples, rank * n_runs)
             - cv_results : CV results DataFrame
             - cluster_results : clustering results DataFrame
-            - cv_object : fitted ADMMGridSearchCV object
+            - cv_object : fitted SRFGridSearchCV object
 
     Examples
     --------

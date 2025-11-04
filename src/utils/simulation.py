@@ -9,6 +9,103 @@ RNG = np.random.default_rng(0)
 Array = np.ndarray
 
 
+def simulation(
+    n: int,
+    k: int,
+    primary_concentration: float = 5.0,
+    base_concentration: float = 1.0,
+    rng: np.random.Generator = np.random.default_rng(42),
+) -> np.ndarray:
+    m = np.zeros((n, k))
+    cluster_sizes = [n // k] * k
+    leftover = n - sum(cluster_sizes)
+    for i in range(leftover):
+        cluster_sizes[i] += 1
+
+    start_idx = 0
+    primary_cluster = np.zeros(n, dtype=int)
+    for c in range(k):
+        end_idx = start_idx + cluster_sizes[c]
+        m[start_idx:end_idx, c] = 1.0
+        primary_cluster[start_idx:end_idx] = c
+        start_idx = end_idx
+
+    soft_m = np.zeros_like(m, dtype=float)
+    for i in range(n):
+        alphas = np.ones(k) * base_concentration
+        alphas[primary_cluster[i]] = primary_concentration
+        soft_m[i, :] = rng.dirichlet(alphas)
+    return soft_m
+
+
+def make_rsa_similarity(
+    n_stimuli=100, K=3, block_strength=0.8, within_block_var=0.1, seed=0
+):
+    """
+    Simulate RSA-style data with latent structure
+    n_stimuli: number of stimuli (images, words, etc.)
+    K: latent feature dimensions
+    block_strength: how distinct the clusters are
+    """
+    rng = np.random.default_rng(seed)
+
+    # Soft feature loadings (what NMF should recover)
+    H = rng.dirichlet(np.ones(K) * 0.5, size=n_stimuli)  # n x K
+
+    # Expected similarity from shared features
+    S_base = H @ H.T  # This is what symmetric NMF assumes!
+
+    # Add within-block noise (measurement error)
+    S = S_base + within_block_var * rng.standard_normal((n_stimuli, n_stimuli))
+    S = np.maximum(S, 0)  # Similarities are non-negative
+    S = (S + S.T) / 2  # Symmetrize
+
+    # Normalize to [0, 1] like correlation-based RDMs
+    S = S / np.max(S)
+
+    return S, H, {"story": "RSA with overlapping latent features"}
+
+
+def simulation_dirichlet(
+    n: int,
+    k: int,
+    alpha: float = 1.0,
+    rng: np.random.Generator = np.random.default_rng(42),
+    sort_by_cluster_size: bool = True,
+) -> np.ndarray:
+    """Generate soft cluster memberships from symmetric Dirichlet distribution.
+
+    Parameters
+    ----------
+    n : int
+        Number of items
+    k : int
+        Number of clusters
+    alpha : float
+        Dirichlet concentration parameter (controls difficulty)
+        - Low alpha (0.1-0.5): Concentrated memberships (easy clustering)
+        - High alpha (5-10): Diffuse memberships (hard clustering)
+    rng : np.random.Generator
+        Random number generator
+
+    Returns
+    -------
+    memberships : np.ndarray
+        (n, k) matrix of soft cluster memberships (rows sum to 1)
+    """
+
+    # sort by cluster size
+    memberships = rng.dirichlet([alpha] * k, size=n)
+    # Sort by max membership for visualization
+    if sort_by_cluster_size:
+        max_indices = memberships.argmax(axis=1)
+        sorted_indices = np.argsort(max_indices)
+        sorted_memberships = memberships[sorted_indices]
+        return sorted_memberships
+    else:
+        return memberships
+
+
 @dataclass
 class SimulationParams:
     n: int = 100  # number of samples

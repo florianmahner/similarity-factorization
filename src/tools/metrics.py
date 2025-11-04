@@ -60,7 +60,7 @@ def pearson_similarity(x: np.ndarray, y: np.ndarray) -> np.ndarray:
     x_norms = np.linalg.norm(x_centered, axis=1, keepdims=True)
     y_norms = np.linalg.norm(y_centered, axis=1, keepdims=True)
     norm_product = x_norms @ y_norms.T
-    
+
     s = np.divide(xy, norm_product, out=np.zeros_like(xy), where=norm_product > 0)
     s = np.clip(s, -1, 1)
     np.fill_diagonal(s, 1)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 from numpy.linalg import eigvalsh
 from joblib import Parallel, delayed
+import time
 
 
 def pmin_bound(
@@ -142,6 +143,74 @@ def lambda_bulk_dyson_raw(
     return float(zs[idx])
 
 
+def lambda_bulk_dyson_raw_fast(
+    S: np.ndarray,
+    p: float,
+    s2_max: float | None = None,
+    s_norm: float | None = None,
+    omega: float = 0.8,
+    eta: float = 1e-3,
+    ngrid: int = 100,
+    jump_frac: float = 0.1,
+) -> float:
+    """Fast version of lambda_bulk_dyson_raw with pre-computed S-dependent values.
+
+    Parameters
+    ----------
+    S : ndarray
+        Similarity matrix
+    p : float
+        Sampling fraction
+    s2_max : float, optional
+        Pre-computed max eigenvalue of S**2. If None, will be computed.
+    s_norm : float, optional
+        Pre-computed 2-norm of S. If None, will be computed.
+    omega : float, default=0.8
+        Relaxation parameter for VDE solver
+    eta : float, default=1e-3
+        Imaginary offset
+    ngrid : int, default=100
+        Number of grid points for z
+    jump_frac : float, default=0.1
+        Fraction of max jump for threshold
+
+    Returns
+    -------
+    float
+        Bulk edge estimate
+    """
+    if p <= 0 or p >= 1:
+        return 0.0
+
+    n = S.shape[0]
+
+    # Use pre-computed values if provided, otherwise compute
+    if s2_max is None:
+        s2_max = np.max(eigvalsh(S**2))
+    if s_norm is None:
+        s_norm = np.linalg.norm(S, 2)
+
+    z_max = s_norm + 8.0 * np.sqrt(p * (1 - p) * s2_max)
+    z_min = 1e-8
+    zs = np.linspace(z_max, z_min, ngrid)
+
+    warm = None
+    im_mavg = []
+    for z in zs:
+        m = _solve_vde(S, p, z, eta=eta, warm=warm, omega=omega)
+        warm = m
+        im_mavg.append(np.imag(np.mean(m)))
+
+    im_mavg = np.array(im_mavg)
+    jumps = np.diff(im_mavg)
+    max_jump = np.max(jumps)
+    threshold = jump_frac * max_jump
+
+    idx = np.argmax(im_mavg > threshold)
+
+    return float(zs[idx])
+
+
 def monte_carlo_bulk_edge_raw(
     S: np.ndarray,
     p: float,
@@ -225,6 +294,175 @@ def p_upper_only_k(
 
     grid = np.linspace(0.02, 0.99, 80)
     feas = [p for p in grid if count_out(p)[0] == k]
+    if not feas:
+
+        def g(p):
+            return p * lam_k1 - edge(p)
+
+        a, b = 1e-3, 0.99
+        ga, gb = g(a), g(b)
+
+        if ga >= 0 and gb >= 0:
+            if verbose:
+                print(
+                    "(k+1) spike is out for all p; returning smallest p where count==k (none found) -> 0."
+                )
+            return 0.0
+
+        if ga < 0 and gb <= 0:
+            if verbose:
+                print("(k+1) never emerges up to 0.99; returning 1.0.")
+            return 1.0
+
+        lo, hi = a, b
+        for _ in range(60):
+            mid = 0.5 * (lo + hi)
+            if g(mid) >= 0:
+                hi = mid
+            else:
+                lo = mid
+            if (hi - lo) < tol:
+                break
+
+        p_star = max(0.0, min(1.0, lo - 2 * tol))
+
+        return p_star
+
+    p_lo = max(feas)
+
+    def cond_ge_kplus1(p):
+        return count_out(p)[0] >= (k + 1)
+
+    p_hi = min(0.99, p_lo + 0.05)
+    while (p_hi < 0.99) and (not cond_ge_kplus1(p_hi)):
+        p_hi = min(0.99, p_hi + 0.05)
+    if not cond_ge_kplus1(p_hi):
+        return 1.0
+    lo, hi = p_lo, p_hi
+    for _ in range(60):
+        mid = 0.5 * (lo + hi)
+        if cond_ge_kplus1(mid):
+            hi = mid
+        else:
+            lo = mid
+        if (hi - lo) < tol:
+            break
+    p_star = max(0.0, min(1.0, lo))
+    if verbose:
+        c_star, e_star = count_out(p_star)
+        print(f"p*={p_star:.4f}, bulk={e_star:.6g}, count_out(p*)={c_star}")
+    return p_star
+
+
+def p_upper_only_k_fast(
+    S: np.ndarray,
+    k: int = 1,
+    method: str = "dyson",
+    mc_trials: int = 600,
+    mc_quantile: float = 0.9,
+    tol: float = 1e-4,
+    verbose: bool = False,
+    seed: int | None = None,
+    omega: float = 0.8,
+    eta: float = 1e-3,
+    jump_frac: float = 0.1,
+    n_jobs: int = 1,
+) -> float:
+    """Fast version of p_upper_only_k with caching and optional parallelization.
+
+    Parameters
+    ----------
+    S : ndarray
+        Similarity matrix
+    k : int, default=1
+        Target rank
+    method : str, default='dyson'
+        Method for bulk edge estimation ('dyson' or 'monte_carlo')
+    mc_trials : int, default=600
+        Number of Monte Carlo trials (if method='monte_carlo')
+    mc_quantile : float, default=0.9
+        Quantile for Monte Carlo (if method='monte_carlo')
+    tol : float, default=1e-4
+        Tolerance for bisection
+    verbose : bool, default=False
+        Print progress information
+    seed : int, optional
+        Random seed (if method='monte_carlo')
+    omega : float, default=0.8
+        Relaxation parameter for VDE solver
+    eta : float, default=1e-3
+        Imaginary offset
+    jump_frac : float, default=0.1
+        Fraction of max jump for threshold
+    n_jobs : int, default=1
+        Number of parallel jobs for grid evaluation. -1 uses all cores.
+
+    Returns
+    -------
+    float
+        Estimated p_max value
+    """
+    lam = np.sort(eigvalsh(S))[::-1]
+    n = len(lam)
+    if not (1 <= k <= n):
+        raise ValueError("k must be between 1 and n")
+    lam_k = lam[k - 1]
+    lam_k1 = lam[k] if k < n else None
+
+    if lam_k <= 0:
+        if verbose:
+            print("lambda_k <= 0 -> no positive spike to separate.")
+        return 0.0
+    if (lam_k1 is None) or (lam_k1 <= 0):
+        if verbose:
+            print(
+                "lambda_{k+1} <= 0 -> only first k can be out for all large p; return 1.0."
+            )
+        return 1.0
+
+    # Pre-compute S-dependent values for dyson method
+    if method == "dyson":
+        s2_max = np.max(eigvalsh(S**2))
+        s_norm = np.linalg.norm(S, 2)
+        edge = lambda p: lambda_bulk_dyson_raw_fast(
+            S,
+            p,
+            s2_max=s2_max,
+            s_norm=s_norm,
+            omega=omega,
+            eta=eta,
+            jump_frac=jump_frac,
+        )
+    else:
+        edge = lambda p: monte_carlo_bulk_edge_raw(
+            S, p, n_trials=mc_trials, quantile=mc_quantile, seed=seed
+        )
+
+    def count_out(p):
+        e = edge(p)
+        return int(np.sum(p * lam > e)), e
+
+    c_hi, e_hi = count_out(0.99)
+    if verbose:
+        print(
+            f"[sanity] p=0.99: bulk={e_hi:.4g}, count_out={c_hi}, lambda1={lam[0]:.4g}, lambda2={lam[1] if n>1 else np.nan:.4g}"
+        )
+
+    if c_hi < k:
+        if verbose:
+            print(f"Even at p~1, only {c_hi} spikes out (< k). Returning 1.0.")
+        return 1.0
+
+    grid = np.linspace(0.02, 0.99, 80)
+
+    # Parallel or sequential grid evaluation
+    if n_jobs != 1:
+        edges = Parallel(n_jobs=n_jobs)(delayed(edge)(p) for p in grid)
+        counts = [int(np.sum(p * lam > e)) for p, e in zip(grid, edges)]
+        feas = grid[np.array(counts) == k].tolist()
+    else:
+        feas = [p for p in grid if count_out(p)[0] == k]
+
     if not feas:
 
         def g(p):
@@ -402,15 +640,22 @@ def estimate_sampling_bounds_fast(
     random_state: int = 31213,
     n_jobs: int = -1,
 ) -> tuple[float, float, np.ndarray]:
+
+    start_time = time.time()
     pmin, _, _, _, _ = pmin_bound(
         S, gamma=gamma, eta=eta, rho=rho, random_state=random_state, verbose=verbose
     )
+
+    # if verb/ose:
+    print(f"pmin bound took {time.time() - start_time:.2f}s")
 
     eff_dim = np.ceil((np.linalg.norm(S, "fro") / np.linalg.norm(S, 2)) ** 2).astype(
         int
     )
 
-    pmax = p_upper_only_k(
+    start_time = time.time()
+
+    pmax = p_upper_only_k_fast(
         S,
         k=eff_dim,
         method=method,
@@ -420,9 +665,15 @@ def estimate_sampling_bounds_fast(
         jump_frac=jump_frac,
         verbose=verbose,
         seed=random_state,
+        n_jobs=n_jobs,
     )
+    # if verbose:
+    print(f"pmax bound took {time.time() - start_time:.2f}s")
 
     S_noise = S
+
+    if verbose:
+        print(f"Running {n_jobs} jobs with n_jobs={n_jobs}")
 
     if pmin > pmax - gap:
         epsilon = np.linalg.norm(S, 2) / np.sqrt(S.shape[0])
@@ -444,7 +695,7 @@ def estimate_sampling_bounds_fast(
             eff_dim_t = np.ceil(
                 (np.linalg.norm(S_t, "fro") / np.linalg.norm(S_t, 2)) ** 2
             ).astype(int)
-            pmax_t = p_upper_only_k(
+            pmax_t = p_upper_only_k_fast(
                 S_t,
                 k=eff_dim_t,
                 method=method,
@@ -454,6 +705,7 @@ def estimate_sampling_bounds_fast(
                 jump_frac=jump_frac,
                 verbose=verbose,
                 seed=random_state,
+                n_jobs=1,
             )
             return float(pmin_t), float(pmax_t)
 

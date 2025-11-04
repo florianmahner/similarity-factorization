@@ -11,7 +11,7 @@ from utils.helpers import best_pairwise_match
 from tqdm import tqdm
 import itertools
 
-from experiments.things.common import (
+from analysis.things.common import (
     compute_similarity_matrix_from_triplets,
     compute_triplet_prediction_accuracy,
 )
