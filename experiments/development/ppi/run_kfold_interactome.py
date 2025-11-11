@@ -253,8 +253,8 @@ def evaluate_srf(
         # ),  # note important to set bounds to 1e-10 and 1.0 for KL loss for this count data!
         bounds=(0.0, 1.0),
         # bounds=(0.0, np.inf),
-        max_outer=50,
-        max_inner=30,
+        max_outer=300,
+        max_inner=50,
         tol=1e-4,
         verbose=verbose,
         init="random_sqrt",
@@ -268,6 +268,8 @@ def evaluate_srf(
     )
 
     w = model.fit_transform(adj)
+
+    np.save("w_string.npy", w)
 
     scores = np.sum(w[pairs[:, 0]] * w[pairs[:, 1]], axis=1)
 

@@ -270,85 +270,117 @@ def update_v_frobenius_(
     v *= 0.5
 
 
-# TODO we might actually also add a CE update_v when the data is actualluy [0,1], eg we assume true negatives are 0.
-def _solve_subproblem_newton(
-    s: float,
-    alpha: float,
-    beta: float,
+def update_v_bce_(
+    observed_mask: np.ndarray,
+    x: np.ndarray,
+    x_hat: np.ndarray,
+    lam: np.ndarray,
     rho: float,
     bound_min: float,
     bound_max: float,
-    tol: float = 1e-10,
-) -> float:
+    v: np.ndarray,
+    max_iter: int = 20,
+    tol: float = 1e-5,
+) -> None:
     """
-    (ROBUST FIX) Solves the V-subproblem for a single entry using brentq.
+    Update auxiliary variable v in-place for Symmetric NMF with BCE loss.
 
-    Finds v in (bound_min, bound_max) such that g(v) = 0, where:
-    g(v) = -s/v + (1-s)/(1-v) + alpha + rho*(v - beta)
+    This function solves the V-update subproblem of the ADMM algorithm.
+    It assumes 'v' is passed in as the warm-start (V_prev) and
+    updates it in-place.
 
-    This is the gradient of the ADMM V-subproblem.
+    Args:
+        observed_mask: Binary observation mask (M)
+        x: Original binary similarity matrix (S)
+        x_hat: Current reconstruction (W @ W.T, or beta)
+        lam: Lagrange multipliers (Lambda)
+        rho: Penalty parameter
+        bound_min: Lower bound constraint (e.g., 1e-8)
+        bound_max: Upper bound constraint (e.g., 1 - 1e-8)
+        v: Auxiliary variable (V_prev) to be updated in-place (V_next)
+        max_iter: Max iterations for Newton-Raphson solver
+        tol: Convergence tolerance for Newton-Raphson solver
     """
+    # This small epsilon is for safeguarding the derivative,
+    # not for the main bounds.
+    internal_eps = 1e-10
 
-    # Define the gradient function g(v)
-    def g(v):
-        g_val = alpha + rho * (v - beta)
+    # 1. Update unobserved entries (closed-form)
+    # This updates the elements of 'v' where observed_mask is False.
+    unobserved_mask = ~observed_mask
+    if np.any(unobserved_mask):
+        # V = beta - alpha/rho = (WW^T) + Lambda/rho
+        v_unobs = x_hat[unobserved_mask] + lam[unobserved_mask] / rho
 
-        # Add cross-entropy gradient terms only if s is not 0 or 1
-        # This avoids 0/0 or inf/inf issues at the boundaries
-        if s > tol:
-            g_val -= s / v
-        if s < 1.0 - tol:
-            g_val += (1.0 - s) / (1.0 - v)
+        # Clip and write in-place
+        v[unobserved_mask] = np.clip(v_unobs, bound_min, bound_max)
 
-        return g_val
+    # 2. Update observed entries (Newton-Raphson)
+    # This updates the elements of 'v' where observed_mask is True.
+    if np.any(observed_mask):
+        # --- Prepare slices for vectorized Newton's method ---
+        # (These are copies, which is what we want for the iterator)
 
-    # --- Edge Case 1: s = 0 ---
-    # The loss term is -log(1-v). g(v) = 1/(1-v) + alpha + rho*(v - beta)
-    # This is a simple quadratic equation in (1-v), but it's easier to solve g(v)=0
-    if s < tol:
-        # Check the sign at the lower bound.
-        # g(v) is monotonically increasing (g'(v) = 1/(1-v)^2 + rho > 0)
-        g_min = g(bound_min)
-        if g_min >= 0:
-            # The minimum is already at or above 0, so clip at the low bound
-            return bound_min
+        # Get binary targets
+        s_obs = x[observed_mask]
 
-        # Check sign at upper bound
-        g_max = g(bound_max)
-        if g_max <= 0:
-            # Function is always negative (shouldn't happen if g' > 0)
-            return bound_max
+        # alpha = -Lambda
+        alpha_obs = -lam[observed_mask]
 
-        # g_min < 0 and g_max > 0, so a root exists.
-        return brentq(g, bound_min, bound_max, xtol=tol)
+        # beta = (WW^T)
+        beta_obs = np.clip(x_hat[observed_mask], bound_min, bound_max)
 
-    # --- Edge Case 2: s = 1 ---
-    # The loss term is -log(v). g(v) = -1/v + alpha + rho*(v - beta)
-    if s > 1.0 - tol:
-        # g(v) is monotonically increasing (g'(v) = 1/v^2 + rho > 0)
-        g_min = g(bound_min)
-        if g_min >= 0:
-            return bound_min
+        # Get warm start from v, clip to ensure valid domain
+        v_obs = np.clip(v[observed_mask], bound_min, bound_max)
 
-        g_max = g(bound_max)
-        if g_max <= 0:
-            # The maximum is at or below 0, so clip at the high bound
-            return bound_max
+        # --- Run vectorized Newton-Raphson ---
+        for _ in range(max_iter):
+            # Evaluate cubic function:
+            # f(v) = ρv³ - (ρ+α+ρβ)v² + (α+ρβ-1)v + s
+            f = (
+                rho * v_obs**3
+                - (rho + alpha_obs + rho * beta_obs) * v_obs**2
+                + (alpha_obs + rho * beta_obs - 1) * v_obs
+                + s_obs
+            )
 
-        # g_min < 0 and g_max > 0, so a root exists.
-        return brentq(g, bound_min, bound_max, xtol=tol)
+            # Check convergence
+            if np.max(np.abs(f)) < tol:
+                break
 
-    # --- General Case: s in (0, 1) ---
-    # g(v) is guaranteed to go from -inf (at v=0) to +inf (at v=1)
-    # The root must be within our bounds.
-    try:
-        return brentq(g, bound_min, bound_max, xtol=tol)
-    except ValueError:
-        # This can happen if g(bound_min) and g(bound_max) have the same sign,
-        # which indicates the minimum is inside the interval.
-        # In this rare case, we can't solve g(v)=0, so we just
-        # return the clipped unobserved value.
-        return max(bound_min, min(bound_max, beta - alpha / rho))
+            # Evaluate derivative:
+            # f'(v) = 3ρv² - 2(ρ+α+ρβ)v + (α+ρβ-1)
+            f_prime = (
+                3 * rho * v_obs**2
+                - 2 * (rho + alpha_obs + rho * beta_obs) * v_obs
+                + (alpha_obs + rho * beta_obs - 1)
+            )
+
+            # Safeguard against zero/small derivative
+            safe_f_prime = np.where(
+                np.abs(f_prime) < internal_eps, np.sign(f_prime) * internal_eps, f_prime
+            )
+
+            # Newton step
+            delta = f / safe_f_prime
+
+            # Damp large steps
+            delta = np.clip(delta, -0.2, 0.2)
+
+            # Update
+            v_obs = v_obs - delta
+
+            # Enforce boundaries
+            v_obs = np.clip(v_obs, bound_min, bound_max)
+
+        # Write the final converged values back into 'v'
+        v[observed_mask] = v_obs
+
+    # 3. Enforce symmetry (in-place)
+    # This is safe because both observed and unobserved entries
+    # have been individually clipped to the valid range.
+    v += v.T
+    v *= 0.5
 
 
 def update_v_kullback_leibler_(
@@ -400,7 +432,8 @@ def update_v_kullback_leibler_(
 
     # --- 4. Final Clipping and Symmetrization ---
     # These are fast O(N^2) operations
-    np.clip(v, bound_min, bound_max, out=v)
+    # NOTE: No clipping here because we are using KL divergence loss, which is unbounded.
+    # np.clip(v, bound_min, bound_max, out=v)
 
     # Enforce symmetry (in-place)
     v += v.T
@@ -483,11 +516,6 @@ class SRF(TransformerMixin, BaseEstimator):
     >>> similarity_matrix[mask] = np.nan
     >>> model = SRF(rank=10, missing_values=np.nan)
     >>> w = model.fit_transform(similarity_matrix)
-
-    References
-    ----------
-    .. [1] Shi et al. (2016). "Inexact Block Coordinate Descent Methods For
-           Symmetric Nonnegative Matrix Factorization"
     """
 
     _parameter_constraints = {
@@ -503,7 +531,7 @@ class SRF(TransformerMixin, BaseEstimator):
         "random_state": ["random_state"],  # sklearn's special validator
         "missing_values": [None, Real, np.nan],
         "bounds": [None, tuple],
-        "loss": [StrOptions({"frobenius", "kullback-leibler"})],
+        "loss": [StrOptions({"frobenius", "kullback-leibler", "bce"})],
     }
 
     def __init__(
@@ -540,7 +568,7 @@ class SRF(TransformerMixin, BaseEstimator):
                 f"Obj={metrics['data_fit']:.2f} "
                 f"Primal={metrics['primal_residual']:.2f} "
                 f"Dual={metrics['dual_residual']:.2f} "
-                f"MSE={metrics['mse']:.3f} "
+                f"MSE={metrics['mse']:.4f} "
                 f"R\u00b2={metrics['quality']:.3f}",
                 end="\r",
             )
@@ -566,7 +594,17 @@ class SRF(TransformerMixin, BaseEstimator):
         elif self.loss == "kullback-leibler":
             v_obs = np.clip(v[mask], 1e-10, np.inf)
             data_fit = np.sum(x_obs * np.log(x_obs / v_obs) - x_obs + v_obs)
+        elif self.loss == "bce":
+            # Standard BCE loss: -[s*log(v) + (1-s)*log(1-v)]
+            # v is a probability in (0, 1)
 
+            # Clip v_obs to a safe range for logging
+            eps = 1e-10
+            v_obs = np.clip(v[mask], eps, 1.0 - eps)
+
+            data_fit = -np.sum(
+                x_obs * np.log(v_obs) + (1.0 - x_obs) * np.log(1.0 - v_obs)
+            )
         # Universal metrics (same for both losses)
         mse = np.mean((x_obs - x_hat_obs) ** 2)
         total_var = np.var(x_obs)
@@ -588,7 +626,7 @@ class SRF(TransformerMixin, BaseEstimator):
         metrics: dict[str, float],
         v: np.ndarray,
         x_hat: np.ndarray,
-        lam: np.ndarray,
+        lam: np.ndarray | None,
     ) -> bool:
         """Check ADMM convergence using primal and dual residuals."""
         eps_abs = self.tol
@@ -598,12 +636,15 @@ class SRF(TransformerMixin, BaseEstimator):
         eps_pri = np.sqrt(n) * eps_abs + eps_rel * max(
             np.linalg.norm(v), np.linalg.norm(x_hat)
         )
-        eps_dual = np.sqrt(n) * eps_abs + eps_rel * np.linalg.norm(lam)
-
-        return (
-            metrics["primal_residual"] <= eps_pri
-            and metrics["dual_residual"] <= eps_dual
-        )
+        
+        if lam is not None:
+            eps_dual = np.sqrt(n) * eps_abs + eps_rel * np.linalg.norm(lam)
+            return (
+                metrics["primal_residual"] <= eps_pri
+                and metrics["dual_residual"] <= eps_dual
+            )
+        else:
+            return metrics["primal_residual"] <= eps_pri
 
     def _fit_complete_data(self, x: np.ndarray) -> SRF:
         """Fit model with complete data (no missing values)."""
@@ -617,19 +658,13 @@ class SRF(TransformerMixin, BaseEstimator):
             w = _update_w_impl(x, w, max_iter=self.max_inner, tol=self.tol)
             x_hat = w @ w.T
 
-            # Compute metrics using _compute_metrics (no v_old, lam, or masks needed)
-            metrics = self._compute_metrics(
-                x, x_hat, x_hat, lam=None
-            )  # Pass x_hat in place of v
+            metrics = self._compute_metrics(x, x_hat, x_hat, lam=None)
 
-            # Store metrics in history
             for key, value in metrics.items():
                 history[key].append(value)
 
-            # Print verbose output
             self._print_metrics(i, metrics)
 
-            # Convergence check (based on mse)
             if self._check_convergence(metrics, x_hat, x_hat, lam=None):
                 if self.verbose > 0:
                     print(f"\nConverged at iteration {i}")
@@ -658,6 +693,20 @@ class SRF(TransformerMixin, BaseEstimator):
             bound_min = self.bounds[0] or default_min
             bound_max = self.bounds[1] or default_max
 
+        if self.loss == "bce":
+            # For BCE, V is a probability and must be in (eps, 1-eps)
+            # Use a small epsilon for numerical stability in the solver.
+            eps = 1e-8
+            bound_min = eps
+            bound_max = 1.0 - eps
+
+            # Check if user-provided bounds are valid
+            if self.bounds is not None:
+                if self.bounds[0] is not None:
+                    bound_min = max(bound_min, self.bounds[0])
+                if self.bounds[1] is not None:
+                    bound_max = min(bound_max, self.bounds[1])
+
         history = defaultdict(list)
 
         w = _initialize_w(
@@ -670,11 +719,11 @@ class SRF(TransformerMixin, BaseEstimator):
         v = 0.5 * (v + v.T)
         v[self._observation_mask] = x[self._observation_mask]
 
-        update_v_impl = (
-            update_v_frobenius_
-            if self.loss == "frobenius"
-            else update_v_kullback_leibler_
-        )
+        update_v_impl = {
+            "frobenius": update_v_frobenius_,
+            "kullback-leibler": update_v_kullback_leibler_,
+            "bce": update_v_bce_,
+        }[self.loss]
 
         for i in range(1, self.max_outer + 1):
             v_old = v.copy()
@@ -685,9 +734,15 @@ class SRF(TransformerMixin, BaseEstimator):
             )
             x_hat[:] = w @ w.T
 
-            # Update v and lambda based on the loss type
             update_v_impl(
-                self._observation_mask, x, x_hat, lam, self.rho, bound_min, bound_max, v
+                self._observation_mask,
+                x,
+                x_hat,
+                lam,
+                self.rho,
+                bound_min,
+                bound_max,
+                v,
             )
             update_lambda_(lam, v, x_hat, self.rho)
 
