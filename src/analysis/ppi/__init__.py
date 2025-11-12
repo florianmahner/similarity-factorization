@@ -6,7 +6,15 @@ from .graph_utils import (
 from .splits import kfold_cv, build_test_set, load_splits_from_csv
 from .metrics import compute_link_prediction_metrics
 from .baselines import evaluate_baseline_fast
-from .corum import load_corum, validate_embedding_against_corum, map_string_ids_to_genes
+from .corum import (
+    load_corum,
+    validate_embedding_against_corum,
+    map_string_ids_to_genes,
+    compute_additional_metrics,
+    compute_enrichment_pvalues,
+    add_complex_properties,
+    compute_summary_statistics,
+)
 from .evaluators import (
     evaluate_srf,
     evaluate_baselines,
@@ -25,6 +33,10 @@ __all__ = [
     "load_corum",
     "validate_embedding_against_corum",
     "map_string_ids_to_genes",
+    "compute_additional_metrics",
+    "compute_enrichment_pvalues",
+    "add_complex_properties",
+    "compute_summary_statistics",
     "evaluate_srf",
     "evaluate_baselines",
     "evaluate_skipgnn",
