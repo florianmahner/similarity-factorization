@@ -1,36 +1,173 @@
-[spose]
-# SPoSE Experiments Configuration - Journal Submission
+# Global defaults
+seed = 0
 
-[spose.data]
-things_dataset_path = "data/things"
-things_images_path = "/SSD/datasets/things/images"
-max_dimensions = 49
+[bounds]
+dataset = "mur92"
+n_jobs = -1
+random_state = 0
 
-[spose.output]
-base_dir = "results/spose_journal_submission"
-save_format = "csv"
-overwrite = false
+[bounds.dev]
+dataset = "mur92"
+random_state = 0
 
-[spose.computation]
-n_jobs = -1  # Use all available cores
-random_seeds = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]  # 10 seeds for robustness
+[rsa_comparison]
+task = "spose"
+n_repeats = 10
+n_permutations = 100
+max_jobs = 8
+object_counts = [50, 100]
+num_dims = 10
 
-[spose.SRF]
-rank = 49
-max_outer = 20
-max_inner = 50
-rho = 1.0
-tolerance = 0.0
+[rsa_comparison.dev]
+task = "factorial"
+n_repeats = 2
+n_permutations = 10
+max_jobs = 2
 
-[spose.pairwise_reconstruction]
-snr_values = [0.0, 0.5, 1.0, 2.0]
-similarity_measures = ["cosine", "correlation"]
+[dnn_universality]
+rank = 50
+use_absolute = true
+n_jobs = -1
 
-[spose.spose_comparison]
-# Uses default parameters with multiple seeds
+[dnn_universality.dev]
+rank = 5
+n_jobs = 1
 
-[spose.low_data_analysis]
-data_percentages = [0.05, 0.10, 0.20, 0.50, 1.0]
+[simulated_denoising]
+n_observations = 200
+n_features = 200
+rank = 10
+sparsity = 0.8
+snr_levels = [0.0, 0.5, 1.0]
+seeds = [0, 1, 2]
+similarity = "linear"
+n_jobs = -1
 
-[rank_detection]
+[simulated_denoising.dev]
+n_observations = 50
+n_features = 50
+rank = 3
+snr_levels = [0.0, 0.2]
+seeds = [0]
+n_jobs = 1
 
+[graph_clustering]
+max_outer = 100
+max_inner = 100
+n_jobs = -1
+verbose = false
+
+[graph_clustering.dev]
+seeds = [0]
+datasets = ["iris"]
+n_jobs = 1
+
+[drugs]
+task = "build_graph"
+
+[drugs.dev]
+task = "build_graph"
+
+[embedding_generation]
+dataset = "mur92"
+n_cv_repeats = 5
+n_stable_runs = 20
+n_jobs = -1
+
+[embedding_generation.dev]
+dataset = "mur92"
+n_cv_repeats = 2
+n_stable_runs = 5
+n_jobs = 1
+
+["word_association"]
+rank = 50
+use_all_responses = true
+top_n_words = 4000
+min_word_length = 2
+symmetrization = "geometric_mean"
+data_dir = "data/small-world-of-words"
+ratings_data_dir = "data"
+embedding_dir = "experiments/word_association/outputs/final"
+
+
+["word_association.dev"]
+task = "generate_embedding"
+name = "embedding_run"
+rank = 10
+top_n_words = 100
+min_word_length = 2
+
+
+
+[ppi]
+task = "link_prediction"
+dataset = "STRING"
+n_folds = 5
+methods = ["srf", "cn", "aa", "ra", "jc"]
+n_jobs = -1
+
+[ppi.dev]
+task = "link_prediction"
+dataset = "STRING"
+n_folds = 2
+methods = ["srf", "cn"]
+n_jobs = 1
+
+[things_behavior]
+task = "pairwise"
+dataset_path = "data/things"
+images_path = "/SSD/fmahner/things"
+vice_embedding_path = "data/things/vice_embedding_66d.txt"
+triplet_version = "4.7mio"
+dims = 66
+n_items = 1854
+
+[things_behavior.pairwise]
+pairwise_seeds = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+pairwise_snr_values = [1.0]
+pairwise_similarity_measures = ["linear"]
+
+[things_behavior.spose_performance]
+performance_seeds = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+[things_behavior."48_performance"]
+performance48_seeds = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+[things_behavior.low_data]
+low_data_percentages = [0.05, 0.1, 0.2, 0.5, 1.0]
+low_data_seeds = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+
+[things_behavior.dimension_reliability]
+dimension_reliability_runs = 50
+dimension_reliability_jobs = -1
+
+[things_behavior.spose_dimensionality]
+spose_dim_rank_min = 5
+spose_dim_rank_max = 90
+spose_dim_rank_step = 5
+spose_dim_repeats = 5
+spose_dim_jobs = -1
+
+[things_behavior.dev]
+task = "pairwise"
+
+[things_behavior.dev.pairwise]
+pairwise_seeds = [0, 1]
+
+[things_behavior.dev.spose_performance]
+performance_seeds = [0, 1]
+
+[things_behavior.dev."48_performance"]
+performance48_seeds = [0, 1]
+
+[things_behavior.dev.low_data]
+low_data_percentages = [0.05, 0.1]
+low_data_seeds = [0, 1]
+
+[things_behavior.dev.dimension_reliability]
+dimension_reliability_runs = 5
+
+[things_behavior.dev.spose_dimensionality]
+spose_dim_rank_max = 20
+spose_dim_repeats = 2

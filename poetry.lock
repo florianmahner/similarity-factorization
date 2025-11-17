@@ -23,7 +23,7 @@ version = "4.11.0"
 description = "High-level concurrency and networking framework on top of asyncio or Trio"
 optional = false
 python-versions = ">=3.9"
-groups = ["dev"]
+groups = ["main", "dev"]
 files = [
     {file = "anyio-4.11.0-py3-none-any.whl", hash = "sha256:0287e96f4d26d4149305414d4e3bc32f0dcd0862365a4bddea19d7a1ec38c4fc"},
     {file = "anyio-4.11.0.tar.gz", hash = "sha256:82a8d0b81e318cc5ce71a5f1f8b5c4e63619620b63141ef8c995fa0db95a57c4"},
@@ -227,6 +227,27 @@ chardet = ["chardet"]
 charset-normalizer = ["charset-normalizer"]
 html5lib = ["html5lib"]
 lxml = ["lxml"]
+
+[[package]]
+name = "biothings-client"
+version = "0.4.1"
+description = "Python Client for BioThings API services."
+optional = false
+python-versions = ">=3.6"
+groups = ["main"]
+files = [
+    {file = "biothings_client-0.4.1-py3-none-any.whl", hash = "sha256:9cbc17461b2bf6af6ed200929b886d6670d450af2034b428cd833f725695265a"},
+    {file = "biothings_client-0.4.1.tar.gz", hash = "sha256:5b34e09c905280b5bd2538f1f34b6fc780c53c8da9b4074e3ff304836046f613"},
+]
+
+[package.dependencies]
+httpx = ">=0.22.0"
+
+[package.extras]
+caching = ["anysqlite ; python_version >= \"3.8\"", "hishel[sqlite] ; python_version >= \"3.8\""]
+dataframe = ["pandas (>=1.1.5)"]
+jsonld = ["PyLD (>=0.7.2)"]
+tests = ["pytest (>=7.0.1)", "pytest-asyncio (>=0.16.0)"]
 
 [[package]]
 name = "black"
@@ -1136,12 +1157,70 @@ test = ["POT", "pytest", "pytest-cov", "testfixtures", "visdom (>=0.1.8,!=0.1.8.
 test-win = ["POT", "pytest", "pytest-cov", "testfixtures"]
 
 [[package]]
+name = "gseapy"
+version = "1.1.10"
+description = "Gene Set Enrichment Analysis in Python"
+optional = false
+python-versions = ">=3.7"
+groups = ["main"]
+files = [
+    {file = "gseapy-1.1.10-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:855f3d6d9e84b467027c0738294aaee2fa876be330b5da6d4020b267e8ccba43"},
+    {file = "gseapy-1.1.10-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:7b381fda96e7dfedc4813ab9629d0fc25c84d529535919998e4b3c90bcd06cac"},
+    {file = "gseapy-1.1.10-cp310-cp310-manylinux_2_28_aarch64.whl", hash = "sha256:09775386083eb7fc5c6bee2ac02b27f34650a9829418ed7f91cac54d78415a2b"},
+    {file = "gseapy-1.1.10-cp310-cp310-win32.whl", hash = "sha256:1042caa333e7dabc8902805f8c7fe2e05567f5b9302511dc79f3b04f423375b5"},
+    {file = "gseapy-1.1.10-cp310-cp310-win_amd64.whl", hash = "sha256:6ca2ec648f67d7068a14ca495edb1e06d34d7f45b1d9f3f47b2661df76535954"},
+    {file = "gseapy-1.1.10-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:b73db57c738b0aad69191da14df5323fb2e42acc5bf13bd4ae65ca781936a2a8"},
+    {file = "gseapy-1.1.10-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:ec7c0456c037a11a1d367abb41745721a5ac355921da815b96f5fea43ae33df1"},
+    {file = "gseapy-1.1.10-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:436768bd7f67e55f3a35f9c37de935df6d4b1339519df3bd3f27f99635c2b28c"},
+    {file = "gseapy-1.1.10-cp311-cp311-win32.whl", hash = "sha256:2d75875e728814c47e2a98546fef6e4a00bcf126f3c6a6916441499a5945b9b5"},
+    {file = "gseapy-1.1.10-cp311-cp311-win_amd64.whl", hash = "sha256:9094cc8c8b0e7c1870e65fb148b782cbd8cb83275f5dcc06b919e87a078cbe40"},
+    {file = "gseapy-1.1.10-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:7b87ddc69aee1e4451caedfda7825d8f171f4c5a105cae8032a10c27b5920373"},
+    {file = "gseapy-1.1.10-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:0a41418364780e9de8b2fd4609b994b2f0d8fd167f43d0d36b65661d9f233e12"},
+    {file = "gseapy-1.1.10-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:b9cb6ddd9cced0f234559388c6c89622b06ab80e1b624b86fb4a91c30008194b"},
+    {file = "gseapy-1.1.10-cp312-cp312-win32.whl", hash = "sha256:5f33b5567d0684b7e30503fd9b6874b6ef1db7bf7787f487d90fb089019253fc"},
+    {file = "gseapy-1.1.10-cp312-cp312-win_amd64.whl", hash = "sha256:d0b3e17d892907de1d2088b21064b6898e0e4339109b0f959c944ecfc889260f"},
+    {file = "gseapy-1.1.10-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:ad3454aa5d1be7c2e81831efea80119e0a678e6a2d89356795a11815a8ea718d"},
+    {file = "gseapy-1.1.10-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:7bb719d1ee11f932f44e2a451d52ef4cc921be90ccdc7a7d7b6b59400e0b9329"},
+    {file = "gseapy-1.1.10-cp313-cp313-manylinux_2_28_aarch64.whl", hash = "sha256:75463843a8e4f723321ba4d03e6bda8963373b97fbc827aa054d56740ccc9257"},
+    {file = "gseapy-1.1.10-cp313-cp313-win32.whl", hash = "sha256:579c86543f468ebd09486b1760a222f74081220f927a8f417a1001d1d452f84c"},
+    {file = "gseapy-1.1.10-cp313-cp313-win_amd64.whl", hash = "sha256:3fe404e739ec9e8ec840d788deea1446e10e1843e75cd57dd4e63eb1df4c4a0e"},
+    {file = "gseapy-1.1.10-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:d5ade4cf3d71d5784ba9375fd8aa8b7d0c78c478cc9d037a1dc9cc1ffd735fac"},
+    {file = "gseapy-1.1.10-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:8812ea254d581432217991b2f110564f4d040aa87897027680ef91d48a0cc124"},
+    {file = "gseapy-1.1.10-cp314-cp314-manylinux_2_28_aarch64.whl", hash = "sha256:b4932d8882589dbe5c2ba7c18d3490ad91d07054e5fc847373dc6e4e4902fe7a"},
+    {file = "gseapy-1.1.10-cp314-cp314-win32.whl", hash = "sha256:babe04d22b134452812ef21f8b527be1efa0c9ba179c668cebf85adb2c406313"},
+    {file = "gseapy-1.1.10-cp314-cp314-win_amd64.whl", hash = "sha256:42ce9c986a03c64f8ea227526f6d760d15afa0d5e52bd69017076a5521798b30"},
+    {file = "gseapy-1.1.10-cp314-cp314t-macosx_11_0_arm64.whl", hash = "sha256:d88b6337d39faa2a84f156e06c6a88bd3bd651b75ca322a21d9aaa4500014dbe"},
+    {file = "gseapy-1.1.10-cp314-cp314t-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:2809e167066d225c8db921a9284d676662dd073e01089edd1d1f93470b76307f"},
+    {file = "gseapy-1.1.10-cp314-cp314t-manylinux_2_28_aarch64.whl", hash = "sha256:ed761055c6404686c684e2bc19fed8507a25f2e90b70ae81d6433c4782a67879"},
+    {file = "gseapy-1.1.10-cp314-cp314t-win32.whl", hash = "sha256:5ba0b6fb5de6b5b7832a9be376957f935e9476e0c08bfc28d6d9c4bbc8b31fcf"},
+    {file = "gseapy-1.1.10-cp314-cp314t-win_amd64.whl", hash = "sha256:d85609795627115cae7ce73246fb13b23a5439f23e00656ee5ecbab257b6b4a3"},
+    {file = "gseapy-1.1.10-cp38-cp38-macosx_11_0_arm64.whl", hash = "sha256:bf2d76b9cc057aeea7799a028412ccd8905ad0d59f394b2694ff4fafb31c9c18"},
+    {file = "gseapy-1.1.10-cp38-cp38-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:56f7306dd08b6e24bde1e2d524cf2ffdd86f97cfaecfcacdac9af45b5e5576b7"},
+    {file = "gseapy-1.1.10-cp38-cp38-manylinux_2_28_aarch64.whl", hash = "sha256:4505941d520755df384ed502d9e0046ddfa304fbcde00f6437903023b4359674"},
+    {file = "gseapy-1.1.10-cp38-cp38-win32.whl", hash = "sha256:43adeabce1736fbba272ba76d1b1beae0496e9fa00d9f0d6985b941f187bd5cb"},
+    {file = "gseapy-1.1.10-cp38-cp38-win_amd64.whl", hash = "sha256:82db7ed98d4541ddec1c50419e127a14c9e7825fed32b0748b150e9262ceabc2"},
+    {file = "gseapy-1.1.10-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:218be023d60cae89f2a8ebe13573632d4453d50d2286c7abe515e798173dc2a1"},
+    {file = "gseapy-1.1.10-cp39-cp39-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:d0ee30a42c36c19323b9c763a2ff0b5f7a61549dbea6fdbf39194d3ddd89f030"},
+    {file = "gseapy-1.1.10-cp39-cp39-manylinux_2_28_aarch64.whl", hash = "sha256:250fbf4f10db5482bb611f529c3bdee2b9fc61596646f2c97dabaf60c5cae94b"},
+    {file = "gseapy-1.1.10-cp39-cp39-win32.whl", hash = "sha256:b845a819c8ece28bbbae5e3a14c1760f43834edd9e0bc44538a688297410845c"},
+    {file = "gseapy-1.1.10-cp39-cp39-win_amd64.whl", hash = "sha256:7a6d7cc8cb02c0a8570fab4efdb1150b191386a3e6ab3a7d4295d2a8e4549b4f"},
+    {file = "gseapy-1.1.10.tar.gz", hash = "sha256:eedc0ab585f18fd4ecd11ac923da12fec2d80fccf7f5ede4178ae7311baf4b05"},
+]
+
+[package.dependencies]
+matplotlib = ">=2.2"
+numpy = ">=1.13.0"
+pandas = "*"
+requests = "*"
+scipy = "*"
+
+[[package]]
 name = "h11"
 version = "0.16.0"
 description = "A pure-Python, bring-your-own-I/O implementation of HTTP/1.1"
 optional = false
 python-versions = ">=3.8"
-groups = ["dev"]
+groups = ["main", "dev"]
 files = [
     {file = "h11-0.16.0-py3-none-any.whl", hash = "sha256:63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86"},
     {file = "h11-0.16.0.tar.gz", hash = "sha256:4e35b956cf45792e4caa5885e69fba00bdbc6ffafbfa020300e549b208ee5ff1"},
@@ -1228,7 +1307,7 @@ version = "1.0.9"
 description = "A minimal low-level HTTP client."
 optional = false
 python-versions = ">=3.8"
-groups = ["dev"]
+groups = ["main", "dev"]
 files = [
     {file = "httpcore-1.0.9-py3-none-any.whl", hash = "sha256:2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55"},
     {file = "httpcore-1.0.9.tar.gz", hash = "sha256:6e34463af53fd2ab5d807f399a9b45ea31c3dfa2276f15a2c3f00afff6e176e8"},
@@ -1250,7 +1329,7 @@ version = "0.28.1"
 description = "The next generation HTTP client."
 optional = false
 python-versions = ">=3.8"
-groups = ["dev"]
+groups = ["main", "dev"]
 files = [
     {file = "httpx-0.28.1-py3-none-any.whl", hash = "sha256:d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad"},
     {file = "httpx-0.28.1.tar.gz", hash = "sha256:75e98c5f16b0f35b567856f597f06ff2270a374470a5c2392242528e3e3e42fc"},
@@ -2493,6 +2572,21 @@ develop = ["codecov", "pycodestyle", "pytest (>=4.6)", "pytest-cov", "wheel"]
 docs = ["sphinx"]
 gmpy = ["gmpy2 (>=2.1.0a4) ; platform_python_implementation != \"PyPy\""]
 tests = ["pytest (>=4.6)"]
+
+[[package]]
+name = "mygene"
+version = "3.2.2"
+description = "Python Client for MyGene.Info services."
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "mygene-3.2.2-py2.py3-none-any.whl", hash = "sha256:18d85d1b28ecee2be31d844607fb0c5f7d7c58573278432df819ee2a5e88fe46"},
+    {file = "mygene-3.2.2.tar.gz", hash = "sha256:e729cabbc28cf5afb221bca1ab637883b375cb1a3e2f067587ec79f71affdaea"},
+]
+
+[package.dependencies]
+biothings-client = ">=0.2.6"
 
 [[package]]
 name = "mypy-extensions"
@@ -4705,7 +4799,7 @@ version = "1.3.1"
 description = "Sniff out which async library your code is running under"
 optional = false
 python-versions = ">=3.7"
-groups = ["dev"]
+groups = ["main", "dev"]
 files = [
     {file = "sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2"},
     {file = "sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc"},
@@ -4962,6 +5056,18 @@ files = [
     {file = "tomli-2.2.1-cp313-cp313-win_amd64.whl", hash = "sha256:a38aa0308e754b0e3c67e344754dff64999ff9b513e691d0e786265c93583c69"},
     {file = "tomli-2.2.1-py3-none-any.whl", hash = "sha256:cb55c73c5f4408779d0cf3eef9f762b9c9f147a77de7b258bef0a5628adc85cc"},
     {file = "tomli-2.2.1.tar.gz", hash = "sha256:cd45e1dc79c835ce60f7404ec8119f2eb06d38b1deba146f07ced3bbc44505ff"},
+]
+
+[[package]]
+name = "tomlparse"
+version = "1.1.3"
+description = "This is a template repository for Python projects that use Poetry for their dependency management."
+optional = false
+python-versions = "<4.0,>=3.8"
+groups = ["main"]
+files = [
+    {file = "tomlparse-1.1.3-py3-none-any.whl", hash = "sha256:51691c28963f1f4ae6980f7ff6b46a5d9e7204d384d986ad0c108167518e3e52"},
+    {file = "tomlparse-1.1.3.tar.gz", hash = "sha256:a857555634524b5ae11777066a181d4610caddbc734e032294963e3c2ce2f222"},
 ]
 
 [[package]]
@@ -5623,4 +5729,4 @@ dev = ["pytest", "setuptools"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<3.15"
-content-hash = "e2b6cadaa26547da497f7e4e53ccb6a30b3b8c679137b9c56835a1237b1c585a"
+content-hash = "4cc73512d2cc2890b6060876520712c50224a4b7385b5d38e007a80c917a7d64"
