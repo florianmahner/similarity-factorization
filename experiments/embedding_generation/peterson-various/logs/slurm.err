@@ -1,6 +1,0 @@
-usage: run.py [-h] --dataset
-              {nsd,mur92,peterson-various,peterson-animals,vit,cichy118,things-monkey-22k}
-              [--subject_id SUBJECT_ID] [--output_dir OUTPUT_DIR]
-              [--n_jobs N_JOBS] [--random_state RANDOM_STATE]
-              [--n_cv_repeats N_CV_REPEATS] [--n_stable_runs N_STABLE_RUNS]
-run.py: error: unrecognized arguments: --output-dir /raven/u/fmahner/similarity-factorization/experiments/embedding_generation/peterson-various/outputs

@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 import itertools as it
+import json
+from pathlib import Path
 
 import numpy as np
-import pandas as pd
-from joblib import Parallel, delayed
+from omegaconf import DictConfig, OmegaConf
 
 from pysrf import SRF
 from statsmodels.stats.multitest import multipletests
 
-from analyses.rsa_testing import mantel_test, permutation_test
+from tools.rsa import mantel_test, permutation_test
 from utils.helpers import add_positive_noise_with_snr, align_latent_dimensions
 from tools.rsa import compute_similarity
 
@@ -37,99 +38,79 @@ def create_factorial_data(
     return X, blocks, items
 
 
-def _evaluate_factorial_condition(
-    model: SRF,
-    true_data: np.ndarray,
-    hypotheses: list[np.ndarray],
-    snr: float,
-    repeat: int,
-    n_permutations: int,
-    alpha: float,
-    similarity_metric: str,
-):
-    seed = int(snr * 100 + repeat)
-    noisy_data = add_positive_noise_with_snr(true_data, snr, rng=seed)
+def run(cfg: DictConfig) -> None:
+    """
+    Atomic task: Run ONE factorial condition.
+    Hydra handles sweeping over snr and seed.
+    """
+    # Convert levels from config
+    levels = OmegaConf.to_container(cfg.levels, resolve=True)
+
+    # Create factorial data (deterministic based on levels)
+    X, blocks, _ = create_factorial_data(levels)
+    rank = X.shape[1]
+
+    # Create hypotheses (deterministic)
+    hypotheses = [
+        compute_similarity(Z, Z, metric=cfg.similarity_metric) for Z in blocks.values()
+    ]
+
+    # Create model
+    model = SRF(rank=rank, random_state=0)
+
+    # Evaluate ONE condition
+    seed_base = int(cfg.snrs * 100 + cfg.seed)
+    noisy_data = add_positive_noise_with_snr(X, cfg.snrs, rng=seed_base)
 
     measured_similarity = compute_similarity(
-        noisy_data, noisy_data, metric=similarity_metric
+        noisy_data, noisy_data, metric=cfg.similarity_metric
     )
     w = model.fit_transform(measured_similarity)
+    w_aligned = align_latent_dimensions(X, w)
 
-    rank = true_data.shape[1]
-    w_aligned = align_latent_dimensions(true_data, w)
-
+    # RSA tests
     rsa_tests = [
         mantel_test(
             h,
             measured_similarity,
-            permutations=n_permutations,
-            random_state=seed + 100 * i,
+            permutations=cfg.n_permutations,
+            random_state=seed_base + 100 * i,
             two_sided=True,
         )
         for i, h in enumerate(hypotheses)
     ]
 
+    # Latent tests
     latent_tests = [
         permutation_test(
-            true_data[:, i],
+            X[:, i],
             w_aligned[:, i],
-            permutations=n_permutations,
-            random_state=seed + 200 * i,
+            permutations=cfg.n_permutations,
+            random_state=seed_base + 200 * i,
             two_sided=True,
         )
         for i in range(rank)
     ]
 
-    test_results = {"RSA": rsa_tests, "SRF": latent_tests}
+    # Process results
     rows = []
-    for method, tests in test_results.items():
+    for method, tests in {"RSA": rsa_tests, "SRF": latent_tests}.items():
         raw_ps = [t[0] for t in tests]
-        reject, corr_ps = multipletests(raw_ps, alpha, method="fdr_bh")[:2]
+        reject, corr_ps = multipletests(raw_ps, cfg.alpha, method="fdr_bh")[:2]
         for i, (test, corrected_p, rej) in enumerate(zip(tests, corr_ps, reject)):
             rows.append(
                 {
-                    "snr": snr,
-                    "repeat": repeat,
+                    "snr": float(cfg.snrs),
+                    "repeat": int(cfg.seed),
                     "hypothesis": i + 1,
                     "method": method,
-                    "raw_p": test[0],
-                    "corrected_p": corrected_p,
+                    "raw_p": float(test[0]),
+                    "corrected_p": float(corrected_p),
                     "significant": bool(rej),
                 }
             )
 
-    return rows
-
-
-def run_factorial_experiment(
-    snrs: list[float],
-    n_repeats: int,
-    n_permutations: int,
-    max_jobs: int,
-    similarity_metric: str,
-    levels: dict[str, list[str]],
-    alpha: float = 0.05,
-) -> pd.DataFrame:
-    X, blocks, _ = create_factorial_data(levels)
-    rank = X.shape[1]
-    hypotheses = [
-        compute_similarity(Z, Z, metric=similarity_metric) for Z in blocks.values()
-    ]
-    model = SRF(rank=rank, random_state=0)
-
-    tasks = list(it.product(snrs, range(n_repeats)))
-    results = Parallel(n_jobs=max_jobs, verbose=10)(
-        delayed(_evaluate_factorial_condition)(
-            model,
-            X,
-            hypotheses,
-            snr,
-            repeat,
-            n_permutations,
-            alpha,
-            similarity_metric,
-        )
-        for snr, repeat in tasks
-    )
-
-    return pd.DataFrame([row for sub in results for row in sub])
+    # Save results as JSON
+    output_file = Path.cwd() / "results.json"
+    with open(output_file, "w") as f:
+        json.dump(rows, f)

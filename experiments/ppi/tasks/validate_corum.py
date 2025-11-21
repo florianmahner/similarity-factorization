@@ -1,56 +1,67 @@
-#!/usr/bin/env python3
-"""Validate CORUM complex recovery from SRF embedding."""
+from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from omegaconf import DictConfig
+from pysrf import SRF
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
-from analyses.ppi import (
+from ..lib.corum import (
     load_corum,
     validate_embedding_against_corum,
     map_string_ids_to_genes,
 )
 
 
-def main():
-    root_dir = Path(__file__).parent.parent.parent
-    output_dir = root_dir / "experiments/ppi/outputs/corum_validation"
+def run(cfg: DictConfig) -> None:
+    if not cfg.string_data:
+        raise ValueError("string_data required for corum_validation task")
 
-    embedding = np.load(output_dir / "embedding.npy")
-    proteins = np.loadtxt(output_dir / "proteins.txt", dtype=str).tolist()
+    string_data = Path(cfg.string_data)
 
-    mapped_proteins, n_mapped = map_string_ids_to_genes(
-        proteins, root_dir / "data/ppi/protein_info_900.csv"
+    if string_data.suffix == ".csv":
+        from ..lib.utils import load_network, build_adjacency_with_nan
+
+        g, _ = load_network(string_data)
+        nodes = sorted(g.nodes())
+        adj = build_adjacency_with_nan(g, g, nodes, fill_missing_with_nan=False)
+        proteins = nodes
+    elif string_data.suffix == ".npy":
+        adj = np.load(string_data)
+        proteins_file = string_data.parent / "proteins.txt"
+        proteins = (
+            np.loadtxt(proteins_file, dtype=str).tolist()
+            if proteins_file.exists()
+            else [f"protein_{i}" for i in range(adj.shape[0])]
+        )
+    else:
+        raise ValueError(f"Unknown file format: {string_data.suffix}")
+
+    model = SRF(
+        rank=cfg.rank,
+        rho=3.0,
+        max_outer=2000,
+        max_inner=50,
+        tol=1e-4,
+        verbose=0,
+        init="random_sqrt",
+        random_state=cfg.seed,
+        missing_values=np.nan,
+        loss="frobenius",
     )
+    embedding = model.fit_transform(adj)
 
-    corum_complexes = load_corum(root_dir / "data/ppi/corum_complexes.txt")
+    np.save(Path.cwd() / "embedding.npy", embedding)
+    pd.Series(proteins).to_csv(Path.cwd() / "proteins.txt", index=False, header=False)
+
+    protein_info_file = Path("data/ppi/protein_info_900.csv")
+    mapped_proteins, _ = map_string_ids_to_genes(proteins, protein_info_file)
+
+    corum_file = Path("data/ppi/corum_complexes.txt")
+    corum_complexes = load_corum(corum_file)
+
     results_df = validate_embedding_against_corum(
         embedding, mapped_proteins, corum_complexes, top_n=10
     )
-
-    results_df.to_csv(output_dir / "validation_results.csv", index=False)
-
-    corum_proteins = set().union(*corum_complexes.values())
-    overlap = set(mapped_proteins) & corum_proteins
-
-    print(f"Embedding: {embedding.shape[0]} proteins x {embedding.shape[1]} dimensions")
-    print(f"Mapped: {n_mapped} ENSP IDs to gene names")
-    print(
-        f"CORUM coverage: {len(overlap)}/{len(corum_proteins)} ({len(overlap)/len(corum_proteins)*100:.1f}%)"
-    )
-    print(f"\nValidation results (top 5 by F1):")
-    print(
-        results_df.nlargest(5, "f1")[
-            ["dimension", "best_complex", "f1", "precision", "recall"]
-        ]
-    )
-    print(f"\nAverage F1: {results_df['f1'].mean():.3f}")
-    print(f"Saved: {output_dir / 'validation_results.csv'}")
-
-
-if __name__ == "__main__":
-    main()
+    results_df.to_csv(Path.cwd() / "validation_results.csv", index=False)

@@ -1,9 +1,14 @@
 from __future__ import annotations
 
-import pandas as pd
+from pathlib import Path
 
-from analyses.things.common import compute_similarity_matrix_from_triplets
+import pandas as pd
+from omegaconf import DictConfig
+
+from ..lib.common import compute_similarity_matrix_from_triplets
 from pysrf import cross_val_score
+
+from ..lib.resources import load_resources
 
 
 def run_spose_dimensionality_analysis(
@@ -32,3 +37,17 @@ def run_spose_dimensionality_analysis(
         fit_final_estimator=False,
     )
     return pd.DataFrame(scorer.cv_results_)
+
+
+def run(cfg: DictConfig) -> None:
+    resources = load_resources(cfg)
+    ranks = range(cfg.rank_min, cfg.rank_max, cfg.rank_step)
+
+    df = run_spose_dimensionality_analysis(
+        resources.train_triplets,
+        rank_range=ranks,
+        n_repeats=cfg.n_repeats,
+        n_jobs=cfg.n_jobs,
+    )
+
+    df.to_csv(Path.cwd() / "results.csv", index=False)

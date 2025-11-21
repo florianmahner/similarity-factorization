@@ -8,25 +8,23 @@ def load_behavioral_ratings(data_dir: str | Path) -> pd.DataFrame:
     data_dir = Path(data_dir)
 
     size_df = pd.read_csv(data_dir / "things/size_ratings.csv")
-    size_df = size_df.rename(columns={"Word": "word", "Size_mean": "size_rating"})
+    size_df = size_df.rename(columns={"Word": "word", "Size_mean": "size"})
     size_df["word"] = size_df["word"].str.lower()
-    size_df = size_df[["word", "size_rating"]]
+    size_df = size_df[["word", "size"]]
 
     concrete_df = pd.read_excel(data_dir / "concreteness_ratings_brysbaert.xlsx")
-    concrete_df = concrete_df.rename(
-        columns={"Word": "word", "Conc.M": "concreteness_rating"}
-    )
+    concrete_df = concrete_df.rename(columns={"Word": "word", "Conc.M": "concreteness"})
     concrete_df["word"] = concrete_df["word"].str.lower()
-    concrete_df = concrete_df[["word", "concreteness_rating"]]
+    concrete_df = concrete_df[["word", "concreteness"]]
 
     things_props = pd.read_csv(data_dir / "things/things_property_ratings.csv")
     things_props = things_props.rename(columns={"Word": "word"})
     things_props["word"] = things_props["word"].str.lower()
 
     property_cols = {
-        "pleasant_mean": "valence_rating",
-        "heavy_mean": "heaviness_rating",
-        "lives_mean": "animacy_rating",
+        "pleasant_mean": "valence",
+        "heavy_mean": "heaviness",
+        "lives_mean": "animacy",
     }
 
     things_props = things_props.rename(columns=property_cols)

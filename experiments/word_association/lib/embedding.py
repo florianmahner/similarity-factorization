@@ -5,19 +5,20 @@ import pandas as pd
 from pysrf import SRF
 
 
-def fit_srf(similarity: np.ndarray, rank: int) -> np.ndarray:
+def fit_srf(similarity: np.ndarray, rank: int, max_outer: int = 1000) -> SRF:
     """Fit SRF model to similarity matrix."""
     model = SRF(
         rank=rank,
         rho=3.0,
-        max_outer=3000,
+        max_outer=max_outer,
         max_inner=50,
         tol=1e-4,
         verbose=1,
         random_state=42,
         missing_values=np.nan,
     )
-    return model.fit_transform(similarity)
+    model.fit(similarity)
+    return model
 
 
 def compute_coherence(

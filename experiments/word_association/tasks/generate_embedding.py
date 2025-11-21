@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-import pandas as pd
-
-from cli import ExperimentContext
+import joblib
+import numpy as np
+from omegaconf import DictConfig
 
 from ..lib.data import (
     load_swow_data,
@@ -14,66 +14,48 @@ from ..lib.data import (
 from ..lib.ppmi import make_ppmi_graph
 from ..lib.embedding import (
     fit_srf,
-    compute_coherence,
-    compute_sparsity,
     get_top_words,
-    compute_reconstruction_metrics,
 )
 
-if TYPE_CHECKING:
-    from ..exp import Params
 
+def run(cfg: DictConfig) -> None:
+    data_dir = Path(cfg.data_dir)
 
-def run(context: ExperimentContext, params: Params) -> Path:
-    df = load_swow_data(params.data_dir, params.use_all_responses)
+    df = load_swow_data(data_dir, cfg.use_all_responses)
     cues = df["cue"].tolist()
     responses = df["response"].tolist()
     counts = df["count"].tolist()
 
-    if params.min_word_length > 1:
+    if cfg.min_word_length > 1:
         cues, responses, counts = filter_by_word_length(
-            cues, responses, counts, params.min_word_length
+            cues, responses, counts, cfg.min_word_length
         )
 
     similarity, vocabulary, metadata = make_ppmi_graph(
         cues,
         responses,
         counts,
-        symmetrization=params.symmetrization,
-        top_n=params.top_n_words,
+        symmetrization=cfg.symmetrization,
+        top_n=cfg.top_n_words,
+        bidirectional_only=cfg.bidirectional_only,
     )
 
-    word_embedding = fit_srf(similarity, params.rank)
-    coherence = compute_coherence(word_embedding, similarity)
-    sparsity = compute_sparsity(word_embedding)
+    model = fit_srf(similarity, cfg.rank, max_outer=cfg.max_outer)
+    word_embedding = model.w_
     top_words = get_top_words(word_embedding, vocabulary)
-    recon = compute_reconstruction_metrics(word_embedding, similarity)
 
-    context.save_npy(word_embedding, "word_embedding")
-    context.save_npy(similarity, "similarity")
-    (context.run_dir / "vocabulary.txt").write_text("\n".join(vocabulary))
-    context.save_csv(sparsity.assign(coherence=coherence), "sparsity")
-    context.save_csv(top_words, "top_words")
-    context.save_csv(
-        pd.DataFrame(
-            [
-                {
-                    **metadata,
-                    **recon,
-                    "rank": params.rank,
-                    "mean_gini": sparsity["gini"].mean(),
-                    "mean_coherence": coherence.mean(),
-                }
-            ]
-        ),
-        "summary",
-    )
+    out_dir = Path.cwd()
+    np.save(out_dir / "word_embedding.npy", word_embedding)
+    np.save(out_dir / "similarity.npy", similarity)
+    joblib.dump(model, out_dir / "model.joblib")
 
-    context.logger.info(
-        "Fitted SRF: rank=%d, n_words=%d, ppmi=[%.1f, %.1f]",
-        params.rank,
-        len(vocabulary),
-        metadata["ppmi_min"],
-        metadata["ppmi_max"],
-    )
-    return context.run_dir
+    words_to_idx = {word: i for i, word in enumerate(vocabulary)}
+
+    full_metadata = {
+        "vocabulary": vocabulary,
+        "words_to_idx": words_to_idx,
+        "graph_metadata": metadata,
+        "top_words": top_words.to_dict("list"),
+    }
+    with open(out_dir / "metadata.json", "w") as f:
+        json.dump(full_metadata, f)

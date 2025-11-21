@@ -1,12 +1,18 @@
+# FIXME not working wih hydra sweep for now
+
 from __future__ import annotations
+
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
+from omegaconf import DictConfig
 
-from analyses.things.common import compute_similarity_matrix_from_triplets
+from ..lib.common import compute_similarity_matrix_from_triplets
 
-from .utils import fit_srf_model
+from ..lib.resources import load_resources
+from ..lib.utils import fit_srf_model
 
 
 def _fisher_z(r: float) -> float:
@@ -32,12 +38,12 @@ def _find_best_matching_dimension(
 
 def compute_dimension_reliability(
     similarity_matrix: np.ndarray,
-    srf_params: dict,
+    rank: int,
     n_runs: int = 20,
     n_jobs: int = -1,
 ) -> np.ndarray:
     embeddings = Parallel(n_jobs=n_jobs)(
-        delayed(fit_srf_model)(similarity_matrix, srf_params, seed=seed)
+        delayed(fit_srf_model)(similarity_matrix, rank=rank, seed=seed)
         for seed in range(0, n_runs + 1)
     )
     original_embedding, reference_embeddings = embeddings[0], embeddings[1:]
@@ -63,16 +69,29 @@ def compute_dimension_reliability(
 
 def run_dimension_reliability_analysis(
     triplets: np.ndarray,
-    srf_params: dict,
+    rank: int,
     n_runs: int = 20,
     n_jobs: int = -1,
 ) -> pd.DataFrame:
     similarity = compute_similarity_matrix_from_triplets(1854, triplets)
     reliabilities = compute_dimension_reliability(
-        similarity, srf_params, n_runs=n_runs, n_jobs=n_jobs
+        similarity, rank=rank, n_runs=n_runs, n_jobs=n_jobs
     )
     data = [
         {"Dimension": idx, "Reliability": float(value)}
         for idx, value in enumerate(reliabilities)
     ]
     return pd.DataFrame(data)
+
+
+def run(cfg: DictConfig) -> None:
+    resources = load_resources(cfg)
+
+    df = run_dimension_reliability_analysis(
+        resources.train_triplets,
+        rank=cfg.dims,
+        n_runs=cfg.n_runs,
+        n_jobs=cfg.n_jobs,
+    )
+    output_file = Path.cwd() / "results.csv"
+    df.to_csv(output_file, index=False)

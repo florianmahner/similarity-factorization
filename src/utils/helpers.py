@@ -419,3 +419,34 @@ def rbf_entropy_heuristic_subsampled(
     if return_entropy:
         return best_sigma, entropy_values
     return best_sigma
+
+
+def compute_similarity_matrix_from_triplets(
+    n: int, triplets: np.ndarray, alpha: float = 0.0
+) -> np.ndarray:
+    """Compute similarity matrix from triplet data with Laplace smoothing.
+
+    Triplet format: [i, j, k] where (i,j) is the chosen similar pair and k is odd one out.
+    """
+    counts = np.zeros((n, n))
+    shown = np.zeros((n, n))
+
+    for i, j, k in triplets:
+        for a, b in [(i, j), (i, k), (j, k)]:
+            if a != b:
+                shown[a, b] += 1
+                shown[b, a] += 1
+
+        if i != j:
+            counts[i, j] += 1
+            counts[j, i] += 1
+
+    similarity = np.divide(
+        counts + alpha,
+        shown + 2 * alpha,
+        out=np.nan * np.ones_like(counts),
+        where=shown != 0,
+    )
+
+    np.fill_diagonal(similarity, 1.0)
+    return similarity

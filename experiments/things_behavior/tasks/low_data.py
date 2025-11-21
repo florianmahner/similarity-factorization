@@ -1,66 +1,42 @@
 from __future__ import annotations
 
-import numpy as np
+import json
+from pathlib import Path
 
-from analyses.things.common import (
+import numpy as np
+from omegaconf import DictConfig
+
+from ..lib import (
     compute_similarity_matrix_from_triplets,
     compute_triplet_prediction_accuracy,
+    fit_srf_model,
+    load_resources,
 )
 
-from .utils import fit_srf_model, run_experiment
 
-
-def subsample_triplets(
-    triplets: np.ndarray, percentage: float, seed: int
-) -> np.ndarray:
+def _subsample_triplets(triplets: np.ndarray, percentage: float, seed: int) -> np.ndarray:
     if percentage >= 1.0:
         return triplets
     n_samples = int(len(triplets) * percentage)
     rng = np.random.default_rng(seed + 1000)
-    indices = rng.choice(len(triplets), size=n_samples, replace=False)
-    return triplets[indices]
+    return triplets[rng.choice(len(triplets), size=n_samples, replace=False)]
 
 
-def low_data_trial(
-    train_triplets: np.ndarray,
-    validation_triplets: np.ndarray,
-    n_items: int,
-    srf_params: dict,
-    data_percentage: float = 1.0,
-    seed: int = 0,
-):
-    subsampled = subsample_triplets(train_triplets, data_percentage, seed)
-    similarity = compute_similarity_matrix_from_triplets(n_items, subsampled)
+def run(cfg: DictConfig) -> None:
+    resources = load_resources(cfg)
 
-    embedding = fit_srf_model(similarity, srf_params, seed=seed)
-    accuracy = compute_triplet_prediction_accuracy(embedding, validation_triplets)
+    triplets = _subsample_triplets(resources.train_triplets, cfg.percentage, cfg.seed)
+    similarity = compute_similarity_matrix_from_triplets(cfg.n_items, triplets)
+    embedding = fit_srf_model(similarity, rank=cfg.dims, seed=cfg.seed)
+    accuracy = compute_triplet_prediction_accuracy(embedding, resources.validation_triplets)
 
-    return [
-        {
-            "model": "SRF",
-            "data_percentage": data_percentage,
-            "n_triplets": len(subsampled),
-            "accuracy": accuracy,
-            "seed": seed,
-        }
-    ]
-
-
-def low_data_experiment(
-    train_triplets: np.ndarray,
-    validation_triplets: np.ndarray,
-    n_items: int,
-    srf_params: dict,
-    data_percentages=(0.1, 0.5, 1.0),
-    seeds=range(5),
-    **kwargs,
-):
-    param_grid = {
-        "train_triplets": [train_triplets],
-        "validation_triplets": [validation_triplets],
-        "n_items": [n_items],
-        "srf_params": [srf_params],
-        "data_percentage": data_percentages,
-        "seed": seeds,
+    result = {
+        "model": "SRF",
+        "percentage": cfg.percentage,
+        "n_triplets": len(triplets),
+        "accuracy": float(accuracy),
+        "seed": cfg.seed,
     }
-    return run_experiment(low_data_trial, param_grid, **kwargs)
+
+    with open(Path.cwd() / "results.json", "w") as f:
+        json.dump([result], f)

@@ -4,130 +4,67 @@ from pathlib import Path
 
 import pandas as pd
 from joblib import Parallel, delayed
+from omegaconf import DictConfig
 
-from analyses.ppi.evaluators import (
-    evaluate_baselines,
-    evaluate_skipgnn,
-    evaluate_srf,
-)
-from analyses.ppi.splits import load_splits_from_csv
+from ..lib.utils import prepare_splits, load_fold_npz, compute_all_vs_all_metrics
+from ..lib.models import get_predictor
 
 
-def _evaluate_fold_method(
-    fold_idx: int,
-    method: str,
-    dataset: str,
-    splits_dir: Path,
-    rank: int,
-    seed: int,
-    skipgnn_epochs: int,
-    seal_hop: int,
-    seal_epochs: int,
-    baseline_methods: list[str] | None,
-) -> list[dict]:
-    split = load_splits_from_csv(splits_dir / dataset, fold_idx)
-    nodes = split["nodes"]
-    train_edges = split["train_edges"]
-    test_edges = split["test_edges"]
-    test_pairs = split["test_pairs"]
-    test_labels = split["test_labels"]
+def _evaluate_fold_method(fold_idx, method, dataset, splits_dir, seed, model_params):
+    data = load_fold_npz(Path(splits_dir) / dataset, fold_idx)
+    nodes = data["nodes"]
+    train_edges = data["train_edges"]
+    test_pos_edges = data["test_pos_edges"]
 
-    results: list[dict] = []
-    if method == "srf":
-        metrics, _ = evaluate_srf(
-            nodes,
-            train_edges,
-            test_edges,
-            test_pairs,
-            test_labels,
-            rank,
-            seed + fold_idx,
-            verbose=False,
-        )
-        results.extend(
-            {
-                "fold": fold_idx,
-                "method": "srf",
-                "metric": k,
-                "value": v,
-            }
-            for k, v in metrics.items()
-        )
-    elif method in {"cn", "aa", "ra", "jc"}:
-        metrics, _ = evaluate_baselines(
-            nodes,
-            train_edges,
-            test_pairs,
-            test_labels,
-            baseline_methods or [method.upper()],
-        )
-        for key, value in metrics.items():
-            method_name, metric = key.split("_", 1)
-            if method_name.lower() == method:
-                results.append(
-                    {
-                        "fold": fold_idx,
-                        "method": method,
-                        "metric": metric,
-                        "value": value,
-                    }
-                )
-    elif method == "skipgnn":
-        metrics, _ = evaluate_skipgnn(
-            nodes,
-            train_edges,
-            test_pairs,
-            test_labels,
-            rank,
-            skipgnn_epochs,
-            seed,
-        )
-        results.extend(
-            {
-                "fold": fold_idx,
-                "method": "skipgnn",
-                "metric": k,
-                "value": v,
-            }
-            for k, v in metrics.items()
-        )
-    return results
+    model = get_predictor(method, seed + fold_idx, model_params)
+    model.fit(train_edges, len(nodes), mask_edges=test_pos_edges)
+    score_matrix = model.predict_all()
+    metrics = compute_all_vs_all_metrics(score_matrix, test_pos_edges, train_edges)
 
-
-def run_link_prediction(
-    dataset: str,
-    splits_dir: Path,
-    rank: int,
-    seed: int,
-    n_folds: int,
-    methods: list[str],
-    skipgnn_epochs: int,
-    seal_hop: int,
-    seal_epochs: int,
-    n_jobs: int,
-) -> pd.DataFrame:
-    baseline_methods = [m.upper() for m in methods if m in {"cn", "aa", "ra", "jc"}]
-    tasks = [
-        (
-            fold_idx,
-            method,
-            dataset,
-            splits_dir,
-            rank,
-            seed,
-            skipgnn_epochs,
-            seal_hop,
-            seal_epochs,
-            baseline_methods if method in {"cn", "aa", "ra", "jc"} else None,
-        )
-        for fold_idx in range(n_folds)
-        for method in methods
+    return [
+        {"fold": fold_idx, "method": method, "metric": k, "value": v}
+        for k, v in metrics.items()
     ]
 
-    outputs = Parallel(n_jobs=n_jobs, verbose=10)(
-        delayed(_evaluate_fold_method)(*task) for task in tasks
-    )
-    flat = [row for rows in outputs for row in rows]
-    df = pd.DataFrame(flat)
-    return df.pivot_table(index=["fold", "method"], columns="metric", values="value").reset_index()
 
+def run(cfg: DictConfig) -> None:
+    if not cfg.dataset:
+        raise ValueError("dataset required")
+
+    splits_dir = Path(cfg.splits_dir)
+    meta_path = splits_dir / cfg.dataset / "metadata.json"
+    if not meta_path.exists():
+        prepare_splits(
+            cfg.dataset,
+            Path(cfg.base_dir) / "data/ppi",
+            splits_dir,
+            cfg.n_folds,
+            cfg.seed,
+            cfg.n_jobs,
+        )
+
+    model_params = {
+        "rank": cfg.rank,
+        "embedding_params": {
+            "dim": cfg.embedding_dim,
+            "epochs": cfg.embedding_epochs,
+        },
+    }
+
+    methods = list(cfg.methods) if cfg.methods else ["srf", "cn", "aa", "ra", "jc"]
+    tasks = [
+        (f, m, cfg.dataset, splits_dir, cfg.seed, model_params)
+        for f in range(cfg.n_folds)
+        for m in methods
+    ]
+
+    outputs = Parallel(n_jobs=cfg.n_jobs, verbose=5)(
+        delayed(_evaluate_fold_method)(*t) for t in tasks
+    )
+
+    results = pd.DataFrame([row for batch in outputs for row in batch])
+    if not results.empty:
+        pivot = results.pivot_table(
+            index=["fold", "method"], columns="metric", values="value"
+        )
+        pivot.reset_index().to_csv(Path.cwd() / "results.csv", index=False)

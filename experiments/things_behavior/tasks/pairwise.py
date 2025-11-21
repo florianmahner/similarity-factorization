@@ -1,56 +1,61 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import numpy as np
-from sklearn.base import clone
+from omegaconf import DictConfig
+from pysrf import SRF
 
 from tools.rsa import compute_similarity
 from utils.helpers import best_pairwise_match
 from utils.simulation import add_noise_with_snr
 
-from .utils import run_experiment
+from ..lib.resources import load_resources
 
 
-def pairwise_reconstruction_trial(
-    estimator,
-    spose_embedding: np.ndarray,
-    snr: float = 1.0,
-    similarity_measure: str = "linear",
-    seed: int = 0,
-):
-    noisy_spose = add_noise_with_snr(spose_embedding, snr)
-    spose_rsm = compute_similarity(noisy_spose, spose_embedding, similarity_measure)
+def run(cfg: DictConfig) -> None:
+    resources = load_resources(cfg)
 
-    cloned_estimator = clone(estimator)
-    cloned_estimator.set_params(random_state=seed)
-    w = cloned_estimator.fit_transform(spose_rsm)
-    corrs = best_pairwise_match(spose_embedding, w)
+    # Get parameters from config (set by sweeper)
+    snr = cfg.pairwise.snr if "pairwise" in cfg else cfg.snr
+    similarity_measure = (
+        cfg.pairwise.similarity_measure if "pairwise" in cfg else cfg.similarity_measure
+    )
+    seed = cfg.seed
 
-    return [
+    # Add noise and compute similarity
+    noisy_spose = add_noise_with_snr(resources.spose_embedding, snr)
+    spose_rsm = compute_similarity(
+        noisy_spose, resources.spose_embedding, similarity_measure
+    )
+
+    # Fit SRF model
+    estimator = SRF(
+        rank=cfg.dims,
+        random_state=seed,
+        max_outer=2000,
+        max_inner=50,
+        tol=1e-4,
+        verbose=0,
+    )
+    w = estimator.fit_transform(spose_rsm)
+
+    # Compute pairwise correlations
+    corrs = best_pairwise_match(resources.spose_embedding, w)
+
+    # Save results as JSON (one row per dimension)
+    results = [
         {
             "dimension": idx,
-            "correlation": corr,
-            "snr": snr,
+            "correlation": float(corr),
+            "snr": float(snr),
             "similarity_measure": similarity_measure,
-            "seed": seed,
+            "seed": int(seed),
         }
         for idx, corr in enumerate(corrs)
     ]
 
-
-def pairwise_reconstruction_experiment(
-    estimator,
-    spose_embedding: np.ndarray,
-    snr_values: list[float] | tuple[float, ...] = (1.0,),
-    similarity_measures: list[str] | tuple[str, ...] = ("linear",),
-    seeds=range(5),
-    **kwargs,
-):
-    param_grid = {
-        "estimator": [estimator],
-        "spose_embedding": [spose_embedding],
-        "snr": snr_values,
-        "similarity_measure": similarity_measures,
-        "seed": seeds,
-    }
-    return run_experiment(pairwise_reconstruction_trial, param_grid, **kwargs)
-
+    output_file = Path.cwd() / "results.json"
+    with open(output_file, "w") as f:
+        json.dump(results, f)
