@@ -30,15 +30,24 @@ experiments/*/outputs/
 experiments/_scratch/
 experiments/*/runs/
 experiments/.tracking.db
+experiments/*/.tmp
+experiments
 
 # SLURM logs
 experiments/*/logs/
 
 # Large binary files
 *.npy
+*.npz
 *.mat
 *.h5
 *.hdf5
+*.pdf
+*.png
+*.csv
+*.json
+*.pkl
+
 
 # Jupyter
 .ipynb_checkpoints/
