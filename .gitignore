@@ -47,6 +47,7 @@ experiments/*/logs/
 *.csv
 *.json
 *.pkl
+*.*pyc
 
 
 # Jupyter
