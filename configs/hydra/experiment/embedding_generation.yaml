@@ -1,0 +1,15 @@
+# @package _global_
+defaults:
+  - override /dataset: null
+
+experiment_name: "embedding_generation"
+task: ???
+
+common:
+  n_jobs: -1
+  random_state: 0
+
+generate:
+  subject_id: null
+  n_cv_repeats: 5
+  n_stable_runs: 50

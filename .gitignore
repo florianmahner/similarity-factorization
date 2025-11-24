@@ -31,7 +31,6 @@ experiments/_scratch/
 experiments/*/runs/
 experiments/.tracking.db
 experiments/*/.tmp
-experiments
 
 # SLURM logs
 experiments/*/logs/

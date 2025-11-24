@@ -17,7 +17,6 @@ from sklearn.datasets import (
 )
 from sklearn.feature_extraction.text import TfidfVectorizer
 
-from config import get_dataset_path
 from tools.rsa import compute_similarity
 
 from .base import DatasetResult
@@ -85,7 +84,7 @@ def load_mur92(root: str | None = None) -> DatasetResult:
     DatasetResult
         Dataset with group_rsm, subject_rsms, mri_data, images
     """
-    root = Path(root or get_dataset_path("mur92"))
+    root = Path(root)
     image_folder = root / "images"
     images = sorted(glob(f"{image_folder}/*.jpg"))
     mri_dir = root / "fmri_roidata_new_all"
@@ -120,7 +119,7 @@ def load_cichy118(root: str | None = None) -> DatasetResult:
     DatasetResult
         Dataset with group_rsm, subject_rsms
     """
-    root = Path(root or get_dataset_path("cichy118"))
+    root = Path(root)
     mat_file = (
         root / "fmri_roidata_new_all" / "118_fmri_hvc_raw_new_unconstrained_single.mat"
     )
@@ -152,12 +151,7 @@ def load_peterson(root: str | None = None, variant: str = "animals") -> DatasetR
     DatasetResult
         Dataset with rsm
     """
-    if variant == "animals":
-        root = Path(root or get_dataset_path("peterson-animals"))
-    elif variant == "various":
-        root = Path(root or get_dataset_path("peterson-various"))
-    else:
-        raise ValueError(f"Unknown variant: {variant}")
+    root = Path(root)
 
     rsm_file = root / "rsm.npy"
     if rsm_file.exists():
@@ -198,7 +192,7 @@ def load_nsd(
     DatasetResult
         Dataset with betas, images, categories
     """
-    root = Path(root or get_dataset_path("nsd"))
+    root = Path(root)
 
     subjects = get_available_subjects(root)
     if subject_id not in subjects:
@@ -255,7 +249,7 @@ def load_things_monkey(
     """
     import h5py
 
-    root = Path(root or get_dataset_path("things-monkey-22k"))
+    root = Path(root)
     mat_path = root / "THINGS_normMUA_raw.mat"
 
     with h5py.File(mat_path, "r") as f:
@@ -317,7 +311,7 @@ def load_breast_cancer(root: str | None = None) -> DatasetResult:
 
 def load_orl(root: str | None = None) -> DatasetResult:
     """Load ORL faces dataset."""
-    root = Path(root or get_dataset_path("orl"))
+    root = Path(root)
     file = root / "ORL.mat"
     if not file.exists():
         raise FileNotFoundError(f"File {file} not found")

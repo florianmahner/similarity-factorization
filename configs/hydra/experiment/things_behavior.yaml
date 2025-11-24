@@ -1,0 +1,32 @@
+# @package _global_
+experiment_name: "things_behavior"
+task: ???
+
+common:
+  seed: 0
+  dataset_path: "${paths.data_dir}/things"
+  images_path: "${paths.data_dir}/things/images"
+  vice_embedding_path: "${paths.data_dir}/things/vice_embedding_66d.txt"
+  triplet_version: "4.7mio"
+  dims: 66
+  n_items: 1854
+  seeds: 0,1,2,3,4,5,6,7,8,9
+  n_jobs: -1
+
+pairwise:
+  snr_values: [1.0]
+  similarity_measures: ["linear"]
+
+low_data:
+  percentages: 0.05,0.10,0.20,0.50,1.0
+
+dimension_reliability:
+  n_runs: 50
+  n_jobs: -1
+
+spose_dimensionality:
+  rank_min: 5
+  rank_max: 90
+  rank_step: 5
+  n_repeats: 5
+  n_jobs: -1

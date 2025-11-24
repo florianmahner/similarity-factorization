@@ -10,8 +10,9 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.12,<3.15"
+python = ">=3.12,<3.14"
 pysrf = {path = "third_party/pysrf", develop = true}
+openne = {path = "third_party/OpenNE/src", develop = true}
 numpy = ">=1.23,<3.0"
 matplotlib = "^3.10.1"
 seaborn = "^0.13.2"
@@ -26,7 +27,6 @@ statsmodels = "^0.14.4"
 nimfa = "^1.4.0"
 joblib = "^1.5.1"
 mantel = "^2.2.2"
-umap = "^0.1.1"
 cython = "^3.1.1"
 pytest = "^8.4.1"
 kneed = "^0.8.5"
@@ -36,8 +36,8 @@ nbformat = "^5.10.4"
 wordcloud = "^1.9.3"
 networkx = "^3.0"
 pandas = "^2.0.0"
-torch = "^2.9.0"
-torchvision = "^0.24.0"
+torch = "~2.8.0"
+torchvision = "~0.23.0"
 gensim = "^4.4.0"
 node2vec = "^0.5.0"
 jupytext = "^1.18.1"
@@ -50,16 +50,14 @@ openpyxl = "^3.1.5"
 mygene = "^3.2.2"
 gseapy = "^1.1.10"
 tomlparse = "^1.1.3"
-# torch-geometric = "^2.7.0"
-# # --- PyG Dependencies with direct URL (Fixes Authorization Error) ---
-# # NOTE: Using the cu121 index URL provided by PyTorch/PyG for the binaries.
-# pyg-lib = { version = "0.4.0", url = "https://download.pytorch.org/whl/cu121/pyg_lib-0.4.0-cp312-cp312-linux_x86_64.whl" }
-# torch-cluster = { version = "1.6.3", url = "https://download.pytorch.org/whl/cu121/torch_cluster-1.6.3-cp312-cp312-linux_x86_64.whl" }
-# torch-scatter = { version = "2.1.2", url = "https://download.pytorch.org/whl/cu121/torch_scatter-2.1.2-cp312-cp312-linux_x86_64.whl" }
-# torch-sparse = { version = "0.6.18", url = "https://download.pytorch.org/whl/cu121/torch_sparse-0.6.18-cp312-cp312-linux_x86_64.whl" }
+
 hydra-core = "^1.3.2"
 hydra-joblib-launcher = "^1.2.0"
 hydra-submitit-launcher = "^1.2.0"
+fastapi = "^0.121.3"
+uvicorn = "^0.38.0"
+pyyaml = "^6.0.3"
+torch-geometric = "^2.7.0"
 
 
 
