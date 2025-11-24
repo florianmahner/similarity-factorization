@@ -1,0 +1,6 @@
+# @package _global_
+paths:
+  root_dir: /LOCAL/fmahner/similarity-factorization
+  data_dir: /SSD/datasets
+  output_dir: /ptmp/fmahner/outputs
+

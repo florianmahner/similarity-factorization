@@ -1,0 +1,10 @@
+# @package dataset
+type: neural_features
+path: ${paths.data_dir}/natural-scenes-dataset
+similarity_fn: gaussian_kernel
+rank_range: [5, 100, 5]
+loader_kwargs:
+  roi_name: streams
+  space: func1pt8mm
+requires: [subject_id]
+

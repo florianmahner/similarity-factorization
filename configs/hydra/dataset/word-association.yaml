@@ -1,0 +1,8 @@
+# @package dataset
+type: graph
+path: ${paths.data_dir}/ppi
+file: string_adjacency_weighted_nan.npy
+normalize: true
+fill_nan: 0.0
+rank_range: [5, 100, 5]
+

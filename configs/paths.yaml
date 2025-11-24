@@ -1,0 +1,12 @@
+# @package _global_
+paths:
+  root_dir: ${hydra:runtime.cwd}
+  data_dir: ${paths.root_dir}/data
+  output_dir: ${paths.root_dir}/experiments/${experiment_name}/outputs
+  
+  # Dataset specific paths
+  ppi:
+    string: "${paths.data_dir}/ppi/STRING_human_min900_v12.csv"
+    c_elegans: "${paths.data_dir}/ppi/C.elegans.csv"
+    huri: "${paths.data_dir}/ppi/HuRI.csv"
+    splits: "${paths.data_dir}/ppi/splits"
