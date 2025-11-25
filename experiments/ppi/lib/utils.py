@@ -28,6 +28,13 @@ import networkx as nx
 from pathlib import Path
 from sklearn.metrics import roc_auc_score, average_precision_score
 
+# Map short names to actual filenames
+FILENAME_MAP = {
+    "string": "STRING_human_min900_v12.csv",
+    "c_elegans": "C.elegans.csv",
+    "huri": "HuRI.csv",
+}
+
 
 def map_ensg_to_gene_names(ensg_ids: list[str]) -> dict[str, str]:
     try:
@@ -165,8 +172,10 @@ def prepare_splits(dataset, data_path, output_dir, n_folds, seed, n_jobs=1):
     out_path = Path(output_dir) / dataset
     out_path.mkdir(parents=True, exist_ok=True)
 
+    filename = FILENAME_MAP.get(dataset, f"{dataset}.csv")
+
     # 1. Load Data
-    df = pd.read_csv(data_path / f"{dataset}.csv")
+    df = pd.read_csv(data_path / filename)
     # omly use source and target columns
     df = df[["source", "target"]]
     df.columns = ["source", "target"]

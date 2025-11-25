@@ -112,7 +112,7 @@ def fit_pysrf(nodes: list, edges: list, rank: int, seed: int) -> dict[str, np.nd
     model = SRF(
         rank=rank,
         rho=3.0,
-        max_outer=150,
+        max_outer=500,
         max_inner=50,
         tol=1e-5,
         verbose=1,
@@ -124,6 +124,12 @@ def fit_pysrf(nodes: list, edges: list, rank: int, seed: int) -> dict[str, np.nd
 
     # Convert to dense for SRF (handles 0s as observed values)
     adj_dense = adj.toarray()
+    
+    # Debug: Check matrix stats
+    n_edges = np.sum(adj_dense == 1.0)
+    n_zeros = np.sum(adj_dense == 0.0)
+    print(f"SRF Input: Shape={adj_dense.shape}, Edges={n_edges}, Zeros={n_zeros}")
+
     W = model.fit_transform(adj_dense)
     embeddings_dict = {node: W[idx] for node, idx in node_to_idx.items()}
 
@@ -182,14 +188,9 @@ def _evaluate_method(
 
 
 def run(cfg: DictConfig) -> None:
-    if not cfg.get("string_data") and not cfg.get("string_data_dir"):
-        raise ValueError("string_data or string_data_dir required")
-
-    # Use string_data if available, otherwise string_data_dir
-    data_path = cfg.get("string_data") or cfg.get("string_data_dir")
-
     # Load network
-    g = load_network(Path(data_path))
+    string_path = Path(cfg.data_dir) / "STRING_human_min900_v12.csv"
+    g = load_network(string_path)
     nodes = sorted(g.nodes())
     edges = list(g.edges())
 
@@ -203,9 +204,8 @@ def run(cfg: DictConfig) -> None:
     print(f"Sample protein IDs: {proteins_clean[:5].tolist()}")
 
     # Fetch GO annotations (using clean IDs)
-    cache_dir = Path(cfg.get("cache_dir", "experiments/ppi/cache"))
-    cache_file = cache_dir / "go_annotations_human.pkl"
-    annotations = fetch_go_annotations(proteins_clean, cache_file)
+    cache = Path(cfg.data_dir) / "go_annotations_human.pkl"
+    annotations = fetch_go_annotations(proteins_clean, cache)
     print(f"GO annotations available for: {len(annotations)} proteins")
 
     # Build label matrix (using clean protein IDs)
