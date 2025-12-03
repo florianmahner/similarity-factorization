@@ -1,10 +1,9 @@
 # @package _global_
 hydra:
+  job:
+    chdir: true
   run:
-    # Single runs go directly to the timestamp folder
     dir: ./outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
-    # The sweep root (logs, multirun.yaml) goes to the timestamp folder
     dir: ./outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
-    # Individual jobs go into a 'tmp' subdirectory
     subdir: tmp/${hydra.job.num}

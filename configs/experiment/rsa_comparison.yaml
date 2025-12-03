@@ -5,15 +5,6 @@ defaults:
 experiment_name: "rsa_comparison"
 task: ???
 
-hydra:
-  job:
-    chdir: true
-  run:
-    dir: experiments/${experiment_name}/outputs/
-  sweep:
-    dir: experiments/${experiment_name}/outputs/
-    subdir: .tmp/${hydra.job.num}
-
 common:
   seed: range(10)
   num_dims: 49

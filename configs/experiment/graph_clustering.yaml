@@ -5,12 +5,6 @@ defaults:
 experiment_name: "graph_clustering"
 task: ???
 
-hydra:
-  job:
-    chdir: true
-  run:
-    dir: experiments/${experiment_name}/outputs/${now:%y%m%d}/${now:%H%M%S}
-
 common:
   n_jobs: -1
   verbose: false

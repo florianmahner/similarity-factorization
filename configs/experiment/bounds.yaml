@@ -5,15 +5,6 @@ defaults:
 experiment_name: "bounds"
 task: ???
 
-hydra:
-  job:
-    chdir: true
-  run:
-    dir: experiments/${experiment_name}/outputs/
-  sweep:
-    dir: experiments/${experiment_name}/outputs/
-    subdir: ${hydra.job.override_dirname}
-
 slurm:
   partition: cpu
   time: 5  # minutes

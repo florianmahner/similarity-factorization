@@ -12,7 +12,7 @@ interpretability:
   ccc_runs: 5
   alpha_grid: [0.1, 0.3, 0.5, 1.0, 2.0, 5.0, 10.0]
   kernel: linear
-  output_dir: "${project_root}/experiments/simulation/outputs/interpretability"
+  output_dir: "${project_root}/outputs/experiments/simulation/interpretability"
 
 rank_detection:
   n: 200
@@ -22,7 +22,7 @@ rank_detection:
   cv_repeats: 5
   grid_span: 10
   n_jobs: -1
-  output_dir: "${project_root}/experiments/simulation/outputs/rank_detection"
+  output_dir: "${project_root}/outputs/experiments/simulation/rank_detection"
 
 imputation:
   n: 200
@@ -31,4 +31,4 @@ imputation:
   fraction_retained: [0.01, 0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 0.9]
   n_datasets: 10
   n_replicates: 5
-  output_dir: "${project_root}/experiments/simulation/outputs/imputation"
+  output_dir: "${project_root}/outputs/experiments/simulation/imputation"

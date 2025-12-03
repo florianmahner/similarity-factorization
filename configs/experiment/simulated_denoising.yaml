@@ -6,14 +6,6 @@ experiment_name: "simulated_denoising"
 task: ???
 
 hydra:
-  job:
-    chdir: true
-  run:
-    dir: experiments/${experiment_name}/outputs/
-  sweep:
-    dir: experiments/${experiment_name}/outputs/
-    subdir: .tmp/${hydra.job.num}
-
   sweeper:
     params:
       simulate.seed: range(10)
