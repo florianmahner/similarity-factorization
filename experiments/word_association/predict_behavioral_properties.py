@@ -7,16 +7,16 @@ import numpy as np
 import pandas as pd
 from omegaconf import DictConfig
 
-from ..lib.plotting import (
+from .plotting import (
     plot_correlation_bars,
     plot_projection_scatter_grid,
 )
-from ..lib.semantic_helpers import (
+from .semantic_helpers import (
     evaluate_gland_projection_method,
     evaluate_ridge_encoding,
     evaluate_lasso_encoding,
 )
-from ..lib.validation import load_behavioral_ratings
+from .validation import load_behavioral_ratings
 
 
 def run(cfg: DictConfig) -> None:

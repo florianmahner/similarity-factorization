@@ -22,7 +22,7 @@ from analyses.words.swow_graph import (
     calculate_ppmi_then_symmetrize,
     fit_srf,
 )
-from experiments.word_association.lib.semantic_axes import validate_axes_quick
+from experiments.word_association.semantic_axes import validate_axes_quick
 
 
 def run_config(

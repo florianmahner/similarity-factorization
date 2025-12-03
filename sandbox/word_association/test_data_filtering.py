@@ -11,11 +11,11 @@ import pandas as pd
 import seaborn as sns
 from joblib import Parallel, delayed
 
-from experiments.word_association.lib import data as data_lib
-from experiments.word_association.lib import ppmi as ppmi_lib
-from experiments.word_association.lib import embedding as embedding_lib
-from experiments.word_association.lib.semantic_eval import validate_unsupervised
-from experiments.word_association.lib.validation import load_behavioral_ratings
+from experiments.word_association import data as data_lib
+from experiments.word_association import ppmi as ppmi_lib
+from experiments.word_association import embedding as embedding_lib
+from experiments.word_association.semantic_eval import validate_unsupervised
+from experiments.word_association.validation import load_behavioral_ratings
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DATA_DIR = REPO_ROOT / "data" / "small-world-of-words"

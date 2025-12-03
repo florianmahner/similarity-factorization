@@ -7,12 +7,12 @@ import joblib
 import numpy as np
 from omegaconf import DictConfig
 
-from ..lib.data import (
+from .data import (
     load_swow_data,
     filter_by_word_length,
 )
-from ..lib.ppmi import make_ppmi_graph
-from ..lib.embedding import (
+from .ppmi import make_ppmi_graph
+from .embedding import (
     fit_srf,
     get_top_words,
 )

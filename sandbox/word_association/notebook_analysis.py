@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from experiments.word_association.lib.plotting import (
+from experiments.word_association.plotting import (
     plot_analogy,
     plot_reconstruction_quality,
     plot_top_words_facet_grid,
