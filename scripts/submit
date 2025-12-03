@@ -3,13 +3,19 @@
 Unified Submission Script.
 
 Usage:
-    ./submit <script_path> [overrides...] [--bg]
+    ./submit <script_path> [overrides...] [--bg] [-e|--experiment] [-s|--sandbox]
+
+Examples:
+    ./submit experiments/ppi/link_prediction.py          # Run with default mode
+    ./submit experiments/ppi/link_prediction.py -e       # Force experiment mode
+    ./submit sandbox/my_exp/run.py -s                    # Force sandbox mode
+    ./submit experiments/ppi/link_prediction.py --bg     # Run in background
 
 Features:
-- **Directory Context**: Runs from the script's folder (clean outputs).
 - Wrapper for 'poetry run python ...'
-- **Generic Cleanup**: Recursively deletes job folders that only contain logs.
-- **Background Execution**: --bg runs the command in a detached screen session.
+- Mode selection: -e/--experiment (central outputs), -s/--sandbox (local outputs)
+- Background execution: --bg runs in detached screen session
+- Auto-cleanup: Removes job folders that only contain logs
 """
 
 import sys
@@ -73,7 +79,7 @@ def cleanup_empty_runs(base_output_dir):
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: ./submit <script_path> [options...] [--bg|-p|--production|-d|--development]")
+        print("Usage: ./submit <script_path> [options...] [--bg|-e|--experiment|-s|--sandbox]")
         sys.exit(1)
 
     script_arg = None
@@ -84,17 +90,17 @@ def main():
     for arg in sys.argv[1:]:
         if arg == "--bg":
             is_bg = True
-        elif arg in ("-p", "--production"):
-            mode_override = "production"
-        elif arg in ("-d", "--development"):
-            mode_override = "development"
+        elif arg in ("-e", "--experiment"):
+            mode_override = "experiment"
+        elif arg in ("-s", "--sandbox"):
+            mode_override = "sandbox"
         elif script_arg is None and not arg.startswith("-"):
             script_arg = arg
         else:
             raw_args.append(arg)
 
     if script_arg is None:
-        print("Usage: ./submit <script_path> [options...] [--bg|-p|--production|-d|--development]")
+        print("Usage: ./submit <script_path> [options...] [--bg|-e|--experiment|-s|--sandbox]")
         sys.exit(1)
 
     run_args.extend(raw_args)
@@ -104,13 +110,14 @@ def main():
     task_name = None
     script_path = Path(script_arg).resolve()
 
-    # Detect direct task files under experiments/<exp>/tasks/<task>.py
+    # Detect task files under experiments/<exp>/<task>.py (flattened structure)
     parts = script_path.parts
     if "experiments" in parts:
         try:
             exp_idx = parts.index("experiments")
             experiment_name = parts[exp_idx + 1]
-            if parts[exp_idx + 2] == "tasks":
+            # Task is the Python file directly in experiment folder
+            if script_path.suffix == ".py" and script_path.parent.name == experiment_name:
                 task_name = script_path.stem
                 script_path = project_root / "scripts" / "run_task.py"
         except (ValueError, IndexError):
