@@ -1,7 +1,7 @@
 # Root Configuration
 defaults:
   - _self_
-  - mode: development
+  - mode: sandbox
   - paths: local
   - launcher: local
   - override hydra/job_logging: default
