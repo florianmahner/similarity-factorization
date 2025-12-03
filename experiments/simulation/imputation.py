@@ -20,7 +20,7 @@ from sklearn.metrics import r2_score
 from tools.metrics import compute_similarity
 from utils.simulation import simulation_dirichlet
 
-from ..lib.plotting import create_imputation_r2_plot
+from .plotting import create_imputation_r2_plot
 
 log = logging.getLogger(__name__)
 

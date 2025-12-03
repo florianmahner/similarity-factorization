@@ -11,7 +11,7 @@ from tools.rsa import compute_similarity
 from utils.helpers import best_pairwise_match
 from utils.simulation import add_noise_with_snr
 
-from ..lib.resources import load_resources
+from .resources import load_resources
 
 
 def run(cfg: DictConfig) -> None:

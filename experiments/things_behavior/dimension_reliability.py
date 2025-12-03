@@ -9,10 +9,10 @@ import pandas as pd
 from joblib import Parallel, delayed
 from omegaconf import DictConfig
 
-from ..lib.common import compute_similarity_matrix_from_triplets
+from .common import compute_similarity_matrix_from_triplets
 
-from ..lib.resources import load_resources
-from ..lib.utils import fit_srf_model
+from .resources import load_resources
+from .utils import fit_srf_model
 
 
 def _fisher_z(r: float) -> float:

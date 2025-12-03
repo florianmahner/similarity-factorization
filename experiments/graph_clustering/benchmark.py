@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from omegaconf import DictConfig
 
-from ..lib.graph import (
+from .graph import (
     DATASET_REGISTRY,
     MODEL_REGISTRY,
     create_models,

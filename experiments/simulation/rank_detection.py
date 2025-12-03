@@ -19,7 +19,7 @@ from pysrf.cross_validation import cross_val_score
 from utils.helpers import add_positive_noise_with_snr
 from utils.simulation import simulation
 
-from ..lib.plotting import create_rank_detection_plot
+from .plotting import create_rank_detection_plot
 
 log = logging.getLogger(__name__)
 

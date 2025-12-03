@@ -8,12 +8,12 @@ from omegaconf import DictConfig
 
 from tools.rsa import correlate_rsms, reconstruct_rsm
 
-from ..lib.common import (
+from .common import (
     compute_similarity_matrix_from_triplets,
     compute_triplet_prediction_accuracy,
 )
-from ..lib.resources import load_resources
-from ..lib.utils import fit_srf_model
+from .resources import load_resources
+from .utils import fit_srf_model
 
 
 def run(cfg: DictConfig) -> None:

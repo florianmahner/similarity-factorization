@@ -5,10 +5,10 @@ from pathlib import Path
 import pandas as pd
 from omegaconf import DictConfig
 
-from ..lib.common import compute_similarity_matrix_from_triplets
+from .common import compute_similarity_matrix_from_triplets
 from pysrf import cross_val_score
 
-from ..lib.resources import load_resources
+from .resources import load_resources
 
 
 def run_spose_dimensionality_analysis(
