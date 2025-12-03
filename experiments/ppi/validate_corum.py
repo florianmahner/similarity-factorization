@@ -7,7 +7,7 @@ import pandas as pd
 from omegaconf import DictConfig
 from pysrf import SRF
 
-from ..lib.corum import (
+from .corum import (
     load_corum,
     validate_embedding_against_corum,
     map_string_ids_to_genes,
@@ -21,7 +21,7 @@ def run(cfg: DictConfig) -> None:
     string_data = Path(cfg.string_data)
 
     if string_data.suffix == ".csv":
-        from ..lib.utils import load_network, build_adjacency_with_nan
+        from .utils import load_network, build_adjacency_with_nan
 
         g, _ = load_network(string_data)
         nodes = sorted(g.nodes())

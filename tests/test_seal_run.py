@@ -5,7 +5,7 @@ import torch
 sys.path.append(str(Path.cwd()))
 
 try:
-    from experiments.ppi.lib.models import SEALPredictor
+    from experiments.ppi.models import SEALPredictor
     print("Successfully imported SEALPredictor.")
     
     # Create dummy graph

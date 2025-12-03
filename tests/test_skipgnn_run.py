@@ -5,7 +5,7 @@ import torch
 sys.path.append(str(Path.cwd()))
 
 try:
-    from experiments.ppi.lib.models import SkipGNNPredictor
+    from experiments.ppi.models import SkipGNNPredictor
     print("Successfully imported SkipGNNPredictor.")
     
     # Create dummy graph

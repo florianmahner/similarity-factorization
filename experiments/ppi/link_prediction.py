@@ -6,13 +6,13 @@ from joblib import Parallel, delayed
 from omegaconf import DictConfig
 
 # Ensure these imports point to your actual file structure
-from ..lib.utils import (
+from .utils import (
     evaluate_open_world,
     prepare_splits,
     load_fold_data,
     FILENAME_MAP,
 )
-from ..lib.models import get_predictor
+from .models import get_predictor
 
 
 def _run_single_task(fold_idx, method, dataset, split_dir, seed, cfg):

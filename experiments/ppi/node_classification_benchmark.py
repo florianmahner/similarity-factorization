@@ -44,7 +44,7 @@ from sklearn.preprocessing import LabelBinarizer, MultiLabelBinarizer
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from experiments.ppi.lib.embeddings import (
+from experiments.ppi.embeddings import (
     embeddings_to_matrix,
     fit_openne,
     fit_spectral,

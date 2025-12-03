@@ -4,8 +4,8 @@ import networkx as nx
 import numpy as np
 
 from utils.graphs import build_sparse_adjacency
-from ..lib.baselines import evaluate_baseline_fast
-from ..lib.utils import compute_link_prediction_metrics, build_adjacency_balanced
+from .baselines import evaluate_baseline_fast
+from .utils import compute_link_prediction_metrics, build_adjacency_balanced
 
 try:
     from pysrf import SRF
@@ -120,7 +120,7 @@ def evaluate_skipgnn(
     Returns:
         (metrics_dict, predictions_array)
     """
-    from ..lib.skip_gnn import train_skipgnn, predict_skipgnn, skipgnn_available
+    from .skip_gnn import train_skipgnn, predict_skipgnn, skipgnn_available
 
     if not skipgnn_available:
         return {"auroc": 0.0, "auprc": 0.0, "p500": 0.0, "ndcg": 0.0}, np.zeros(
@@ -176,7 +176,7 @@ def evaluate_node2vec_pyg(
     Returns:
         (metrics_dict, predictions_array)
     """
-    from ..lib.pyg_methods import train_node2vec_pyg
+    from .pyg_methods import train_node2vec_pyg
 
     embeddings = train_node2vec_pyg(
         nodes=nodes,
@@ -236,7 +236,7 @@ def evaluate_seal(
     Returns:
         (metrics_dict, predictions_array)
     """
-    from ..lib.pyg_methods import train_seal
+    from .pyg_methods import train_seal
 
     metrics, scores = train_seal(
         nodes=nodes,

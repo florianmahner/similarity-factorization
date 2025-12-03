@@ -32,9 +32,9 @@ from sklearn.preprocessing import MultiLabelBinarizer
 project_root = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.append(str(project_root))
 
-from experiments.ppi.lib.utils import load_network
-from experiments.ppi.lib.corum import load_corum, validate_embedding_against_corum
-from experiments.ppi.tasks.node_classification import (
+from experiments.ppi.utils import load_network
+from experiments.ppi.corum import load_corum, validate_embedding_against_corum
+from experiments.ppi.node_classification import (
     build_label_matrix,
     fetch_go_annotations,
     filter_terms,

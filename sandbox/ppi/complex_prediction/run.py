@@ -36,13 +36,13 @@ project_root = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.append(str(project_root))
 sys.path.append(str(project_root / "third_party/OpenNE/src"))
 
-from experiments.ppi.lib.utils import load_network
-from experiments.ppi.lib.corum import (
+from experiments.ppi.utils import load_network
+from experiments.ppi.corum import (
     load_corum,
     map_string_ids_to_genes,
     validate_embedding_against_corum,
 )
-from experiments.ppi.tasks.node_classification import fit_pysrf, fetch_go_annotations
+from experiments.ppi.node_classification import fit_pysrf, fetch_go_annotations
 
 log = logging.getLogger(__name__)
 

@@ -43,8 +43,8 @@ project_root = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.append(str(project_root))
 sys.path.append(str(project_root / "third_party/OpenNE/src"))
 
-from experiments.ppi.lib.utils import load_network
-from experiments.ppi.tasks.node_classification import (
+from experiments.ppi.utils import load_network
+from experiments.ppi.node_classification import (
     fetch_go_annotations,
     build_label_matrix,
     filter_terms,

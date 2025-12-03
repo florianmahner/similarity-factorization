@@ -16,7 +16,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.preprocessing import MultiLabelBinarizer
 
-from ..lib.utils import load_network
+from .utils import load_network
 
 
 def fetch_go_annotations(
