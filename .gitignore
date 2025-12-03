@@ -34,15 +34,17 @@ archive/
 notebooks/
 
 
-# Experiment outputs and scratch work
+# Central outputs directory
+outputs/
+
+# Experiment outputs and scratch work (legacy)
 experiments/*/outputs/
 experiments/_scratch/
 experiments/*/runs/
 experiments/.tracking.db
 experiments/*/.tmp
 
-# Development/sandbox outputs
-development/*/outputs/
+# Sandbox outputs (local to each sandbox experiment)
 sandbox/*/outputs/
 
 # SLURM logs
