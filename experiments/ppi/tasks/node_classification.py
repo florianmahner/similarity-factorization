@@ -91,7 +91,9 @@ def filter_terms(
     return Y[:, valid], [t for t, v in zip(terms, valid) if v]
 
 
-def fit_pysrf(nodes: list, edges: list, rank: int, seed: int) -> dict[str, np.ndarray]:
+def fit_pysrf(
+    nodes: list, edges: list, rank: int, seed: int, max_outer: int = 150
+) -> dict[str, np.ndarray]:
     node_to_idx = {node: idx for idx, node in enumerate(nodes)}
     n_nodes = len(nodes)
 
@@ -112,7 +114,7 @@ def fit_pysrf(nodes: list, edges: list, rank: int, seed: int) -> dict[str, np.nd
     model = SRF(
         rank=rank,
         rho=3.0,
-        max_outer=500,
+        max_outer=max_outer,
         max_inner=50,
         tol=1e-5,
         verbose=1,
@@ -124,11 +126,10 @@ def fit_pysrf(nodes: list, edges: list, rank: int, seed: int) -> dict[str, np.nd
 
     # Convert to dense for SRF (handles 0s as observed values)
     adj_dense = adj.toarray()
-    
-    # Debug: Check matrix stats
-    n_edges = np.sum(adj_dense == 1.0)
-    n_zeros = np.sum(adj_dense == 0.0)
-    print(f"SRF Input: Shape={adj_dense.shape}, Edges={n_edges}, Zeros={n_zeros}")
+
+    # Explicitly set diagonal to NaN (Self-loops should be ignored/missing)
+    # This prevents SRF from fitting the trivial diagonal=0 structure
+    np.fill_diagonal(adj_dense, np.nan)
 
     W = model.fit_transform(adj_dense)
     embeddings_dict = {node: W[idx] for node, idx in node_to_idx.items()}

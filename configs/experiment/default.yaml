@@ -1,0 +1,12 @@
+# Default placeholder - specify experiment=<name> to override
+experiment_name: "default"
+task: "none"
+
+hydra:
+  job:
+    chdir: true
+  run:
+    dir: outputs/${experiment_name}/${now:%y%m%d}/${now:%H%M%S}
+
+common:
+  seed: 42

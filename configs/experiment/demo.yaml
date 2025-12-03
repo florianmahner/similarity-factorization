@@ -1,0 +1,25 @@
+# @package _global_
+defaults:
+  - _self_
+
+experiment_name: "demo"
+task: ???
+
+hydra:
+  job:
+    chdir: true
+  run:
+    dir: experiments/${experiment_name}/outputs
+
+common:
+  n_jobs: 1
+  random_state: 0
+
+success:
+  duration: 20
+  steps: 10
+
+fail:
+  duration: 5
+  error_message: "Simulated failure in Hydra task"
+

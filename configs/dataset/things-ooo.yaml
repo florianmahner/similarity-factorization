@@ -1,0 +1,7 @@
+# @package dataset
+type: triplet
+path: ${paths.datasets}/things
+n_objects: 1854
+triplet_number: "4.7mio"
+rank_range: [5, 100, 5]
+

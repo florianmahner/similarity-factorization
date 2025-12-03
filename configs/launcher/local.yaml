@@ -1,0 +1,3 @@
+# Launcher: Local (Basic Launcher)
+defaults:
+  - /hydra/launcher@hydra.launcher: basic

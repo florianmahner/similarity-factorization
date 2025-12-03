@@ -9,6 +9,15 @@ __pycache__/
 venv/
 env/
 ENV/
+.venv/
+
+# Node modules
+node_modules/
+
+# Third party venvs
+third_party/*/.venv/
+third_party/*/build/
+third_party/*/*.egg-info/
 
 # Poetry
 poetry.lock
@@ -31,6 +40,10 @@ experiments/_scratch/
 experiments/*/runs/
 experiments/.tracking.db
 experiments/*/.tmp
+
+# Development/sandbox outputs
+development/*/outputs/
+sandbox/*/outputs/
 
 # SLURM logs
 experiments/*/logs/

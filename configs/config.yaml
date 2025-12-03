@@ -1,46 +1,5 @@
+# Main Entry Point (Wrapper)
+# This file exists to allow standard "python run.py" calls to default to base.
 defaults:
+  - base
   - _self_
-  - paths: local
-  - dataset: null
-  - experiment: null
-  - launcher: local
-  - override hydra/hydra_logging: default
-  - override hydra/job_logging: default
-
-# Global Defaults
-seed: 42
-n_jobs: -1
-
-hydra:
-  output_subdir: .hydra
-  job:
-    chdir: true
-  # Production: Static path (no timestamps)
-  run:
-    dir: experiments/${experiment_name}/outputs/${task}
-  # Sweeps still need differentiation, usually
-  sweep:
-    dir: experiments/${experiment_name}/outputs/${task}/multirun/${now:%y%m%d_%H%M%S}
-    subdir: ${hydra.job.num}
-
-  # Custom Logging to log.log with concise format
-  job_logging:
-    version: 1
-    formatters:
-      simple:
-        format: "[%(asctime)s] %(message)s"
-        datefmt: "%H:%M:%S"
-    handlers:
-      console:
-        class: logging.StreamHandler
-        formatter: simple
-        stream: ext://sys.stdout
-      file:
-        class: logging.FileHandler
-        formatter: simple
-        filename: log.log
-    root:
-      handlers: [console, file]
-      level: INFO
-
-    disable_existing_loggers: false

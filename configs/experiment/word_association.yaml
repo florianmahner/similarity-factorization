@@ -1,0 +1,25 @@
+# @package _global_
+defaults:
+  - /dataset: word-association
+
+experiment_name: "word_association"
+task: ???
+
+common:
+  data_dir: "${paths.data_dir}/small-world-of-words"
+  ratings_data_dir: "${paths.data_dir}"
+  rank: 50
+  max_outer: 1000
+  use_all_responses: false
+  top_n_words: null
+  min_word_length: 1
+  symmetrization: "geometric_mean"
+  bidirectional_only: false
+
+generate_embedding: {}
+
+predict_behavioral_properties:
+  embedding_dir: generate_embedding/${common.rank}
+  pole_size: 20
+  n_outer_folds: 5
+  n_inner_folds: 3

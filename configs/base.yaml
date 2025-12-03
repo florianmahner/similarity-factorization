@@ -1,0 +1,23 @@
+# Root Configuration
+defaults:
+  - _self_
+  - mode: development
+  - paths: local
+  - launcher: local
+  - override hydra/job_logging: default
+
+# Default Identifiers
+experiment_name: "default"
+task: "debug"
+
+# Global Parameters
+seed: 42
+n_jobs: 1
+
+# Project Root (Global Anchor)
+project_root: /LOCAL/fmahner/similarity-factorization
+
+# Hydra Basics
+hydra:
+  job:
+    chdir: true

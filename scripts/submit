@@ -1,0 +1,205 @@
+#!/usr/bin/env python3
+"""
+Unified Submission Script.
+
+Usage:
+    ./submit <script_path> [overrides...] [--bg]
+
+Features:
+- **Directory Context**: Runs from the script's folder (clean outputs).
+- Wrapper for 'poetry run python ...'
+- **Generic Cleanup**: Recursively deletes job folders that only contain logs.
+- **Background Execution**: --bg runs the command in a detached screen session.
+"""
+
+import sys
+import subprocess
+import shutil
+from pathlib import Path
+import os
+import shlex
+
+
+def get_project_root(anchor_file="pyproject.toml"):
+    path = Path.cwd()
+    while path != path.parent:
+        if (path / anchor_file).exists():
+            return path
+        path = path.parent
+    return Path.cwd()
+
+
+def cleanup_empty_runs(base_output_dir):
+    """Deletes folders that contain ONLY logs."""
+    if not base_output_dir.exists():
+        return
+
+    # print(f"🧹 Scanning for empty/failed jobs in: {base_output_dir}")
+    deleted_count = 0
+    for root, dirs, files in os.walk(base_output_dir, topdown=False):
+        current_dir = Path(root)
+        if current_dir == base_output_dir:
+            continue
+        if not current_dir.exists():
+            continue
+
+        # Check for artifacts (anything not a log or .hydra)
+        has_artifacts = False
+        for f in files:
+            if f.endswith(".log"):
+                continue
+            if f == ".hydra":
+                continue
+            has_artifacts = True
+            break
+
+        # Check valid subdirs
+        has_valid_subdirs = False
+        for d in current_dir.iterdir():
+            if d.is_dir() and d.name != ".hydra":
+                has_valid_subdirs = True
+                break
+
+        if not has_artifacts and not has_valid_subdirs:
+            try:
+                shutil.rmtree(current_dir)
+                deleted_count += 1
+            except OSError:
+                pass
+
+    if deleted_count > 0:
+        print(f"🧹 Removed {deleted_count} empty/failed run folders.")
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: ./submit <script_path> [options...] [--bg|-p|--production|-d|--development]")
+        sys.exit(1)
+
+    script_arg = None
+    raw_args = []
+    run_args = []
+    is_bg = False
+    mode_override = None
+    for arg in sys.argv[1:]:
+        if arg == "--bg":
+            is_bg = True
+        elif arg in ("-p", "--production"):
+            mode_override = "production"
+        elif arg in ("-d", "--development"):
+            mode_override = "development"
+        elif script_arg is None and not arg.startswith("-"):
+            script_arg = arg
+        else:
+            raw_args.append(arg)
+
+    if script_arg is None:
+        print("Usage: ./submit <script_path> [options...] [--bg|-p|--production|-d|--development]")
+        sys.exit(1)
+
+    run_args.extend(raw_args)
+
+    project_root = get_project_root()
+    experiment_name = None
+    task_name = None
+    script_path = Path(script_arg).resolve()
+
+    # Detect direct task files under experiments/<exp>/tasks/<task>.py
+    parts = script_path.parts
+    if "experiments" in parts:
+        try:
+            exp_idx = parts.index("experiments")
+            experiment_name = parts[exp_idx + 1]
+            if parts[exp_idx + 2] == "tasks":
+                task_name = script_path.stem
+                script_path = project_root / "scripts" / "run_task.py"
+        except (ValueError, IndexError):
+            experiment_name = None
+            task_name = None
+
+    # If the target is not a file, try treating it as an experiment alias.
+    if not script_path.exists() and experiment_name is None:
+        parts = Path(script_arg).parts
+        if len(parts) >= 2 and parts[0] in {"experiment", "experiments"}:
+            experiment_name = parts[1]
+        elif (project_root / "configs" / "experiment" / f"{script_arg}.yaml").exists():
+            experiment_name = script_arg
+        if experiment_name:
+            script_path = project_root / "scripts" / "run_task.py"
+
+    if not script_path.exists():
+        print(f"Error: Script not found: {script_path}")
+        sys.exit(1)
+
+    # --- Background Mode ---
+    if is_bg:
+        submit_script = Path(__file__).resolve()
+        session_name = f"gemini_{script_path.parent.name}"
+        # Use script_arg (original input) to preserve context for the recursive call
+        safe_args = [str(submit_script), script_arg] + run_args
+        cmd_str = " ".join(shlex.quote(a) for a in safe_args)
+
+        print(f"🚀 Launching in background screen: {session_name}")
+        print(f"   Command: {cmd_str}")
+        subprocess.run(
+            [
+                "screen",
+                "-dmS",
+                session_name,
+                "bash",
+                "-c",
+                f"{cmd_str}; echo 'Done. Press Enter.'; read",
+            ]
+        )
+        print(f"✅ Started. Attach: screen -r {session_name}")
+        sys.exit(0)
+
+    # --- Foreground Mode ---
+    if experiment_name:
+        config_dir = project_root
+    else:
+        config_dir = script_path.parent
+
+    if experiment_name:
+        cmd = [
+            "poetry",
+            "run",
+            "python",
+            str(script_path),
+            f"+experiment={experiment_name}",
+        ]
+        if task_name:
+            cmd.append(f"task={task_name}")
+        if mode_override:
+            cmd.append(f"mode={mode_override}")
+    else:
+        cmd = [
+            "poetry",
+            "run",
+            "python",
+            str(script_path),
+            f"--config-path=.",
+            "--config-name=config",
+        ]
+        if mode_override:
+            cmd.append(f"mode={mode_override}")
+
+    project_configs = project_root / "configs"
+    cmd.append(f"hydra.searchpath=[file://{project_configs}]")
+    cmd.append(f"project_root={project_root}")
+
+    cmd.extend(run_args)
+
+    print(f"🚀 Running in {config_dir}:\n   {' '.join(cmd)}")
+
+    # Execution
+    result = subprocess.run(cmd, cwd=config_dir)
+
+    # Cleanup (only after foreground execution completes)
+    local_output = config_dir / "outputs"
+    if local_output.exists():
+        cleanup_empty_runs(local_output)
+
+
+if __name__ == "__main__":
+    main()

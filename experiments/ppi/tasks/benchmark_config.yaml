@@ -1,0 +1,35 @@
+# Standalone config for node_classification_benchmark.py
+# Single run: poetry run python node_classification_benchmark.py dataset=wikipedia method=deepwalk size=500 rank=64
+# Full size:  poetry run python node_classification_benchmark.py dataset=wikipedia method=deepwalk size=null rank=64
+# Multirun:   poetry run python node_classification_benchmark.py -m dataset=wikipedia,blogcatalog method=srf,deepwalk rank=32,64
+
+dataset: wikipedia
+method: deepwalk
+size: null
+rank: 64
+seed: 42
+
+# SRF parameters
+srf:
+  max_outer: 500
+
+# DeepWalk/Node2Vec parameters
+walks:
+  num_paths: 20
+  path_length: 80
+
+# LINE parameters
+line:
+  epoch: 1000
+  order: 3
+  batch_size: 512
+  negative_ratio: 5
+
+hydra:
+  run:
+    dir: ${oc.env:PROJECT_ROOT,/LOCAL/fmahner/similarity-factorization}/experiments/ppi/outputs/node_classification/${dataset}/${method}/rank_${rank}
+  sweep:
+    dir: ${oc.env:PROJECT_ROOT,/LOCAL/fmahner/similarity-factorization}/experiments/ppi/outputs/node_classification
+    subdir: ${dataset}/${method}/rank_${rank}
+  job:
+    chdir: true

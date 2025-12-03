@@ -1,0 +1,5 @@
+- project_root=/LOCAL/fmahner/similarity-factorization
+- sizes=[100]
+- ranks=[10]
+- methods=[line]
+- n_jobs=1

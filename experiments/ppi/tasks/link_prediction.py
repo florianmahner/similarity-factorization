@@ -1,4 +1,5 @@
 from __future__ import annotations
+import json
 from pathlib import Path
 import pandas as pd
 from joblib import Parallel, delayed
@@ -15,6 +16,17 @@ from ..lib.models import get_predictor
 
 
 def _run_single_task(fold_idx, method, dataset, split_dir, seed, cfg):
+    # Construct output path first to skip if needed (optional, but good for resume)
+    # But we overwrite by default as per standard behavior unless checked
+    rank = cfg.get("rank", 0)
+
+    output_dir = Path.cwd() / "link_prediction" / dataset / method
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    output_file = output_dir / f"rank{rank}_fold{fold_idx}.json"
+
+    print(f"[{method}] Fold {fold_idx} (Rank {rank}) -> {output_file}")
+
     data = load_fold_data(split_dir, dataset, fold_idx)
     train_edges = data["train_edges"]
     test_pos = data["test_pos_edges"]
@@ -25,11 +37,20 @@ def _run_single_task(fold_idx, method, dataset, split_dir, seed, cfg):
     score_matrix = model.predict_all()
     metrics = evaluate_open_world(score_matrix, train_edges, test_pos)
 
-    return {
+    result = {
         "fold": fold_idx,
         "method": method,
+        "dataset": dataset,
+        "rank": rank,
+        "seed": seed,
         **metrics,
     }
+
+    # Atomic write
+    with open(output_file, "w") as f:
+        json.dump(result, f, indent=2)
+
+    return str(output_file)
 
 
 def run(cfg: DictConfig) -> None:
@@ -56,23 +77,12 @@ def run(cfg: DictConfig) -> None:
     ]
 
     print(f"Running {len(tasks)} tasks on {cfg.dataset} with {cfg.n_jobs} jobs...")
-    results = Parallel(n_jobs=cfg.n_jobs, verbose=5)(
+
+    # Run in parallel
+    saved_files = Parallel(n_jobs=cfg.n_jobs, verbose=5)(
         delayed(_run_single_task)(*t) for t in tasks
     )
 
-    df = pd.DataFrame(results)
-    summary = df.groupby("method")[["auroc", "auprc", "p500", "ndcg"]].agg(
-        ["mean", "std"]
+    print(
+        f"Completed. Saved {len(saved_files)} result files to results/link_prediction/{dataset}/"
     )
-    print(summary)
-
-    # Save to CSV
-    out_path = Path.cwd() / "outputs" / dataset / "results.csv"
-    df.to_csv(out_path, index=False)
-    # make a quick plot of the results
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-
-    plt.figure(figsize=(10, 5))
-    sns.barplot(x="method", y="auroc", data=df)
-    plt.savefig(out_path / "results_plot.pdf")

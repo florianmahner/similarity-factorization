@@ -26,9 +26,10 @@ def run(cfg: DictConfig) -> None:
     ratings_dir = Path(cfg.ratings_data_dir)
     out_dir = Path.cwd() / "behavioral_prediction"
     out_dir.mkdir(exist_ok=True)
+    path = Path.cwd() / cfg.embedding_dir
 
-    embeddings = np.load(Path(cfg.embedding_dir) / "word_embedding.npy")
-    with open(Path(cfg.embedding_dir) / "metadata.json") as f:
+    embeddings = np.load(path / "word_embedding.npy")
+    with open(path / "metadata.json") as f:
         metadata = json.load(f)
 
     vocabulary = metadata["vocabulary"]
@@ -64,6 +65,6 @@ def run(cfg: DictConfig) -> None:
     plots_dir.mkdir(exist_ok=True)
 
     plot_projection_scatter_grid(
-        predictions_ridge, ratings, plots_dir / "projection_scatter_grid.png"
+        predictions_ridge, ratings, plots_dir / "projection_scatter_grid.pdf"
     )
-    plot_correlation_bars(all_results, plots_dir / "method_comparison.png")
+    plot_correlation_bars(all_results, plots_dir / "method_comparison.pdf")

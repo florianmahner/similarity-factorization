@@ -1,0 +1,54 @@
+# @package _global_
+# Multi-dataset Node Classification Benchmark
+#
+# Usage:
+#   # Local debug
+#   ./scripts/submit experiments/ppi/tasks/node_classification_benchmark.py \
+#     experiment=node_classification_benchmark dataset=wikipedia size=500
+#
+#   # Full sweep on SLURM
+#   ./scripts/submit experiments/ppi/tasks/node_classification_benchmark.py \
+#     experiment=node_classification_benchmark hydra/launcher=slurm \
+#     -m dataset=wikipedia,blogcatalog,ppi size=500,1000,2000 rank=32,64,128
+
+defaults:
+  - _self_
+
+experiment_name: node_classification_benchmark
+task: node_classification_benchmark
+
+# Dataset selection (wikipedia, blogcatalog, ppi)
+dataset: wikipedia
+
+# Network size (null = full graph, int = subsample top-n by degree)
+size: 500
+
+# Embedding methods to compare
+methods:
+  - srf
+  - deepwalk
+  - node2vec
+  - line
+  - spectral
+
+# Embedding dimension
+rank: 64
+
+# Training configuration
+train_ratios:
+  - 0.1
+  - 0.5
+  - 0.9
+
+seed: 42
+n_jobs: -1
+
+# LINE-specific parameters
+line:
+  epoch: 50
+  order: 3
+  batch_size: 256
+  negative_ratio: 5
+
+# Output settings
+save_embeddings: false

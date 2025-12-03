@@ -1,0 +1,4 @@
+- project_root=/LOCAL/fmahner/similarity-factorization
+- sizes=[500]
+- ranks=[32]
+- methods=[srf,deepwalk,node2vec,line,spectral]

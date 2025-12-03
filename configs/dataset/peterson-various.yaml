@@ -1,0 +1,5 @@
+# @package dataset
+type: neural_rsm
+path: ${paths.datasets}/similarity_datasets/peterson/various
+rank_range: [1, 30, 1]
+

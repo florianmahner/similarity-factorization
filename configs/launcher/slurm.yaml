@@ -1,0 +1,12 @@
+# Launcher: Submitit Slurm
+defaults:
+  - /hydra/launcher@hydra.launcher: submitit_slurm
+
+hydra:
+  launcher:
+    partition: batch
+    timeout_min: 60
+    mem_gb: 16
+    cpus_per_task: 1
+    nodes: 1
+    name: ${experiment_name}

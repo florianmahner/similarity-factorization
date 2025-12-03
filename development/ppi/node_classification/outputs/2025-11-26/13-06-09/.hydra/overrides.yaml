@@ -1,0 +1,3 @@
+- project_root=/LOCAL/fmahner/similarity-factorization
+- sizes=[200,500]
+- methods=[srf,node2vec]

@@ -1,0 +1,3 @@
+# Local Paths
+data_dir: ${project_root}/data
+output_dir: ${project_root}/outputs

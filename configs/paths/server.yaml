@@ -1,0 +1,6 @@
+# @package _global_
+paths:
+  root_dir: $hydra:runtime.cwd
+  data_dir: ${root_dir}/data
+  datasets: /ptmp/fmahner/datasets
+  output_dir: ${paths.root_dir}/experiments/${experiment_name}/outputs

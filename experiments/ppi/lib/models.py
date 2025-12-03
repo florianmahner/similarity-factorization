@@ -6,19 +6,16 @@ import torch
 import torch.nn.functional as F
 from scipy.sparse import csr_matrix, diags
 from scipy.sparse.csgraph import shortest_path
-from torch.nn import BCEWithLogitsLoss, Conv1d, MaxPool1d, ModuleList
+from torch.nn import BCEWithLogitsLoss, Conv1d, MaxPool1d, ModuleList, Embedding, Linear
+
 from .utils import get_balanced_matrix, get_balanced_samples
 from pysrf import SRF
 
 # SEAL imports
-from torch_geometric.data import Data, InMemoryDataset
+from torch_geometric.data import Data, InMemoryDataset, Dataset
 from torch_geometric.loader import DataLoader
-from torch_geometric.nn import MLP, GCNConv, SortAggregation
+from torch_geometric.nn import MLP, GCNConv, SortAggregation, global_sort_pool
 from torch_geometric.utils import k_hop_subgraph, to_scipy_sparse_matrix, to_undirected
-from torch_geometric.nn import GCNConv, global_sort_pool
-from torch.nn import BCEWithLogitsLoss, Conv1d, MaxPool1d, ModuleList, Embedding, Linear
-from torch_geometric.data import Data, Dataset
-from torch_geometric.loader import DataLoader
 
 
 class BaseLinkPredictor(ABC):
@@ -126,37 +123,56 @@ class HeuristicPredictor(BaseLinkPredictor):
         raise ValueError(f"Unknown heuristic: {self.method}")
 
 
-# --- 3. Node2Vec (Using OpenNE) ---
-class Node2VecPredictor(BaseLinkPredictor):
-    def fit(self, train_edges, n_nodes):
+# --- 3. OpenNE Models (Node2Vec, DeepWalk, LINE) ---
+class OpenNEPredictor(BaseLinkPredictor):
+    """Base class for OpenNE based embedding methods."""
+
+    def __init__(self, seed: int = 42, **kwargs):
+        super().__init__(seed, **kwargs)
+        self.emb = None
+
+    def _prepare_graph(self, train_edges, n_nodes):
         import networkx as nx
         from openne.graph import Graph
-        from openne.node2vec import Node2vec
 
         # Create NetworkX DiGraph (OpenNE expects DiGraph for proper edge handling)
         G_nx = nx.DiGraph()
         G_nx.add_nodes_from(range(n_nodes))
 
-        # Add edges in both directions for undirected graph
+        # Add edges in both directions for undirected graph representation
         for u, v in train_edges:
             G_nx.add_edge(u, v, weight=1.0)
             G_nx.add_edge(v, u, weight=1.0)
 
-        # Wrap in OpenNE Graph
         G = Graph()
         G.read_g(G_nx)
+        return G
 
-        # Node2Vec parameters
-        embedding_dim = self.kwargs.get("embedding_dim", 64)
-        walk_length = self.kwargs.get("walk_length", 20)
+    def predict_all(self) -> np.ndarray:
+        if self.emb is None:
+            raise RuntimeError("Model not fitted")
+        return self.emb @ self.emb.T
+
+
+class Node2VecPredictor(OpenNEPredictor):
+    def fit(self, train_edges, n_nodes, mask_edges=None):
+        from openne.node2vec import Node2vec
+
+        G = self._prepare_graph(train_edges, n_nodes)
+
+        # Defaults matching development/ppi/node_classification/run.py where possible
+        embedding_dim = self.kwargs.get("rank", 64)
+        if "embedding_dim" in self.kwargs:
+            embedding_dim = self.kwargs["embedding_dim"]
+
+        walk_length = self.kwargs.get("walk_length", 16)
         num_walks = self.kwargs.get("num_walks", 10)
-        p = self.kwargs.get("p", 1.0)
+        p = self.kwargs.get("p", 4.0)
         q = self.kwargs.get("q", 1.0)
+        workers = self.kwargs.get("workers", 1)
         window_size = self.kwargs.get("window_size", 10)
-        epochs = self.kwargs.get("epochs", 5)
-        workers = self.kwargs.get("workers", 1)  # Use 1 worker for stability
+        epochs = self.kwargs.get("epochs", 1)
 
-        # Train Node2Vec
         model = Node2vec(
             graph=G,
             path_length=walk_length,
@@ -166,18 +182,284 @@ class Node2VecPredictor(BaseLinkPredictor):
             q=q,
             workers=workers,
             window=window_size,
-            iter=epochs,
+            epochs=epochs,
         )
 
-        # Extract embeddings in node order
         self.emb = np.zeros((n_nodes, embedding_dim))
-        for node_id in range(n_nodes):
-            # OpenNE uses original node IDs from G.look_back_list
-            original_node = G.look_back_list[node_id]
-            self.emb[node_id] = model.vectors[original_node]
+        for i in range(n_nodes):
+            # OpenNE might use string keys if G was built from NX with default settings
+            if i in model.vectors:
+                self.emb[i] = model.vectors[i]
+            elif str(i) in model.vectors:
+                self.emb[i] = model.vectors[str(i)]
 
-    def predict_all(self):
-        return self.emb @ self.emb.T
+
+class DeepWalkPredictor(OpenNEPredictor):
+    def fit(self, train_edges, n_nodes, mask_edges=None):
+        from openne.node2vec import Node2vec
+
+        G = self._prepare_graph(train_edges, n_nodes)
+
+        # Defaults from run.py: path_length=40, num_paths=10, dim=rank, dw=True
+        embedding_dim = self.kwargs.get("rank", 64)
+        if "embedding_dim" in self.kwargs:
+            embedding_dim = self.kwargs["embedding_dim"]
+
+        walk_length = self.kwargs.get("walk_length", 40)
+        num_walks = self.kwargs.get("num_walks", 10)
+        workers = self.kwargs.get("workers", 1)
+        window_size = self.kwargs.get("window_size", 10)
+        epochs = self.kwargs.get("epochs", 1)
+
+        model = Node2vec(
+            graph=G,
+            path_length=walk_length,
+            num_paths=num_walks,
+            dim=embedding_dim,
+            dw=True,
+            workers=workers,
+            window=window_size,
+            epochs=epochs,
+        )
+
+        self.emb = np.zeros((n_nodes, embedding_dim))
+        for i in range(n_nodes):
+            if i in model.vectors:
+                self.emb[i] = model.vectors[i]
+            elif str(i) in model.vectors:
+                self.emb[i] = model.vectors[str(i)]
+
+
+class LINEPredictor(OpenNEPredictor):
+    def fit(self, train_edges, n_nodes, mask_edges=None):
+        from openne.line import LINE
+        import tensorflow as tf
+
+        # Attempt to set global TF settings if not already set,
+        # but respect existing environment.
+        # Note: LINE in OpenNE uses TF v1 compat.
+        # Assuming the environment or previous calls handled `tf.compat.v1.disable_v2_behavior()`
+        # if this is running in a script that expects it.
+        # If not, calling it here might be late if TF was already initialized, but worth a try
+        # if it crashes. However, for library code, it is safer to assume the runner handles it
+        # or catch the error.
+
+        G = self._prepare_graph(train_edges, n_nodes)
+
+        embedding_dim = self.kwargs.get("rank", 64)
+        if "embedding_dim" in self.kwargs:
+            embedding_dim = self.kwargs["embedding_dim"]
+
+        order = self.kwargs.get("order", 3)
+        epoch = self.kwargs.get("epochs", 20)
+        batch_size = self.kwargs.get("batch_size", 500)
+        negative_ratio = self.kwargs.get("negative_ratio", 5)
+
+        model = LINE(
+            G,
+            rep_size=embedding_dim,
+            epoch=epoch,
+            batch_size=batch_size,
+            order=order,
+            negative_ratio=negative_ratio,
+        )
+
+        self.emb = np.zeros((n_nodes, embedding_dim))
+        for i in range(n_nodes):
+            if i in model.vectors:
+                self.emb[i] = model.vectors[i]
+            elif str(i) in model.vectors:
+                self.emb[i] = model.vectors[str(i)]
+
+
+class SkipGNNPredictor(BaseLinkPredictor):
+    def __init__(self, seed: int = 42, **kwargs):
+        super().__init__(seed, **kwargs)
+        self.model = None
+        self.adj = None
+        self.adj2 = None
+        self.features = None
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        # Parameters
+        self.epochs = kwargs.get("epochs", 20)
+        self.lr = kwargs.get("lr", 0.01)
+        self.hidden1 = kwargs.get("hidden1", 64)
+        self.hidden2 = kwargs.get("hidden2", 32)
+        self.hidden_decode1 = kwargs.get("hidden_decode1", 16)
+        self.dropout = kwargs.get("dropout", 0.5)
+        self.batch_size = kwargs.get("batch_size", 128)
+
+    def _normalize_adj(self, adj):
+        """Symmetrically normalize adjacency matrix."""
+        import scipy.sparse as sp
+        rowsum = np.array(adj.sum(1))
+        with np.errstate(divide='ignore'):
+            d_inv_sqrt = np.power(rowsum, -0.5).flatten()
+        d_inv_sqrt[np.isinf(d_inv_sqrt)] = 0.
+        d_mat_inv_sqrt = sp.diags(d_inv_sqrt)
+        return adj.dot(d_mat_inv_sqrt).transpose().dot(d_mat_inv_sqrt).tocoo()
+
+    def _sparse_mx_to_torch_sparse_tensor(self, sparse_mx):
+        """Convert a scipy sparse matrix to a torch sparse tensor."""
+        sparse_mx = sparse_mx.tocoo().astype(np.float32)
+        indices = torch.from_numpy(
+            np.vstack((sparse_mx.row, sparse_mx.col)).astype(np.int64))
+        values = torch.from_numpy(sparse_mx.data)
+        shape = torch.Size(sparse_mx.shape)
+        return torch.sparse_coo_tensor(indices, values, shape)
+
+    def fit(self, train_edges, n_nodes, mask_edges=None):
+        import scipy.sparse as sp
+        import sys
+        from pathlib import Path
+        
+        # SkipGNN's internal imports expect its directory to be in sys.path
+        # We locate it relative to this file
+        # this file is in experiments/ppi/lib/models.py
+        # third_party is in root/third_party
+        root_path = Path(__file__).resolve().parent.parent.parent.parent
+        skipgnn_path = root_path / "third_party/SkipGNN/SkipGNN"
+        
+        if str(skipgnn_path) not in sys.path:
+            sys.path.append(str(skipgnn_path))
+            
+        # Import from third_party
+        try:
+            from models import SkipGNN
+        except ImportError as e:
+            # If it fails, check if we are in a weird state. 
+            # But with sys.path modified, it should find 'models.py' in SkipGNN folder.
+            raise ImportError(f"Could not import SkipGNN models from {skipgnn_path}. Error: {e}")
+
+        self.n_nodes = n_nodes
+
+        # 1. Prepare Adjacency Matrices
+        # Standard symmetric adjacency
+        rows, cols = train_edges[:, 0], train_edges[:, 1]
+        data_ones = np.ones(len(rows), dtype=np.float32)
+        adj = sp.coo_matrix((data_ones, (rows, cols)), shape=(n_nodes, n_nodes), dtype=np.float32)
+        
+        # Make symmetric: A + A.T - diag
+        # Note: train_edges usually has only one direction or mixed. 
+        # The utils.py logic: adj = adj + adj.T.multiply(adj.T > adj) - adj.multiply(adj.T > adj)
+        # This assumes adj is not already symmetric. 
+        # Let's just force symmetry safely.
+        adj = adj + adj.T
+        adj = adj.sign() # Binarize
+        
+        # Skip Graph: A^2
+        adj2 = adj.dot(adj)
+        adj2 = adj2.sign() # Binary skip graph
+        
+        # Add self-loops to original adj (as per utils.py)
+        adj = adj + sp.eye(adj.shape[0])
+        
+        # Normalize
+        adj_norm = self._normalize_adj(adj)
+        adj2_norm = self._normalize_adj(adj2)
+        
+        self.adj = self._sparse_mx_to_torch_sparse_tensor(adj_norm).to(self.device)
+        self.adj2 = self._sparse_mx_to_torch_sparse_tensor(adj2_norm).to(self.device)
+        
+        # 2. Prepare Features (One-Hot)
+        # Using dense identity matrix as per SkipGNN default for PPI/DDI
+        self.features = torch.FloatTensor(np.eye(n_nodes)).to(self.device)
+        
+        # 3. Initialize Model
+        self.model = SkipGNN(nfeat=n_nodes, 
+                             nhid1=self.hidden1, 
+                             nhid2=self.hidden2, 
+                             nhid_decode1=self.hidden_decode1, 
+                             dropout=self.dropout).to(self.device)
+        
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=5e-4)
+        loss_fct = torch.nn.BCELoss()
+        m_sigmoid = torch.nn.Sigmoid()
+
+        # 4. Training Loop
+        print(f"Training SkipGNN on {self.device}...")
+        self.model.train()
+        
+        for epoch in range(self.epochs):
+            # Generate new balanced samples for each epoch
+            pos_edges_arr, neg_edges_arr = get_balanced_samples(
+                train_edges, n_nodes, seed=self.seed + epoch, neg_ratio=1.0
+            )
+            
+            all_edges = np.concatenate([pos_edges_arr, neg_edges_arr], axis=0)
+            all_labels = np.concatenate([np.ones(len(pos_edges_arr)), np.zeros(len(neg_edges_arr))])
+            
+            # Shuffle
+            perm = np.random.permutation(len(all_labels))
+            all_edges = all_edges[perm]
+            all_labels = all_labels[perm]
+            
+            total_loss = 0
+            num_batches = 0
+            
+            for i in range(0, len(all_labels), self.batch_size):
+                batch_edges = all_edges[i:i+self.batch_size]
+                batch_labels = torch.FloatTensor(all_labels[i:i+self.batch_size]).to(self.device)
+                
+                # SkipGNN forward expects idx as tuple/list of two tensors/arrays?
+                # utils.py: return y, (idx1, idx2)
+                # train.py: output, _ = model(features, adj, adj2, inp) -> inp is (idx1, idx2)
+                # So we need to pass a tuple (indices_source, indices_target)
+                
+                idx1 = torch.LongTensor(batch_edges[:, 0]).to(self.device)
+                idx2 = torch.LongTensor(batch_edges[:, 1]).to(self.device)
+                batch_idx = (idx1, idx2)
+                
+                optimizer.zero_grad()
+                output, _ = self.model(self.features, self.adj, self.adj2, batch_idx)
+                
+                # output is raw logits?
+                # models.py: o = self.decoder2(o) -> Linear. So yes, logits.
+                # train.py: n = torch.squeeze(m(output)); loss = loss_fct(n, label)
+                preds = torch.squeeze(m_sigmoid(output))
+                
+                loss = loss_fct(preds, batch_labels)
+                loss.backward()
+                optimizer.step()
+                
+                total_loss += loss.item()
+                num_batches += 1
+                
+            print(f"Epoch {epoch+1}/{self.epochs} | Loss: {total_loss / num_batches:.4f}")
+
+    def predict_all(self) -> np.ndarray:
+        self.model.eval()
+        scores = np.zeros((self.n_nodes, self.n_nodes), dtype=np.float32)
+        m_sigmoid = torch.nn.Sigmoid()
+        
+        # Process in chunks
+        rows, cols = np.triu_indices(self.n_nodes, k=1)
+        
+        batch_size = self.batch_size * 4
+        num_pairs = len(rows)
+        
+        print(f"Predicting {num_pairs} pairs with SkipGNN...")
+        
+        with torch.no_grad():
+            for i in range(0, num_pairs, batch_size):
+                batch_rows = rows[i:i+batch_size]
+                batch_cols = cols[i:i+batch_size]
+                
+                idx1 = torch.LongTensor(batch_rows).to(self.device)
+                idx2 = torch.LongTensor(batch_cols).to(self.device)
+                batch_idx = (idx1, idx2)
+                
+                output, _ = self.model(self.features, self.adj, self.adj2, batch_idx)
+                preds = torch.squeeze(m_sigmoid(output)).cpu().numpy()
+                
+                if preds.ndim == 0:
+                    preds = np.array([preds])
+                
+                scores[batch_rows, batch_cols] = preds
+                scores[batch_cols, batch_rows] = preds
+                
+        return scores
 
 
 def drnl_node_labeling(edge_index, src, dst, num_nodes=None):
@@ -223,11 +505,12 @@ class SEALDynamicDataset(Dataset):
     Extracts enclosing subgraphs on-the-fly to save RAM and allow multiprocessing.
     """
 
-    def __init__(self, edge_index, links, labels, num_hops=1, max_z=1000):
+    def __init__(self, edge_index, links, labels, num_nodes, num_hops=1, max_z=1000):
         super().__init__()
         self.edge_index = edge_index
         self.links = links  # List of (src, dst) pairs
         self.labels = labels  # List of labels (0 or 1)
+        self.num_nodes = num_nodes
         self.num_hops = num_hops
         self.max_z = max_z
 
@@ -240,7 +523,7 @@ class SEALDynamicDataset(Dataset):
 
         # 1. Extract k-hop subgraph
         subset, sub_edge_index, mapping, _ = k_hop_subgraph(
-            [src, dst], self.num_hops, self.edge_index, relabel_nodes=True
+            [src, dst], self.num_hops, self.edge_index, relabel_nodes=True, num_nodes=self.num_nodes
         )
 
         src_mapped, dst_mapped = mapping[0].item(), mapping[1].item()
@@ -265,6 +548,7 @@ class SEALDynamicDataset(Dataset):
             z=z,
             edge_index=sub_edge_index,
             y=torch.tensor([y], dtype=torch.float),
+            num_nodes=z.size(0)
         )
         return data
 
@@ -407,7 +691,7 @@ class SEALPredictor:
 
         # 3. Create Dataset and Loader
         dataset = SEALDynamicDataset(
-            self.edge_index, train_links, train_labels, num_hops=self.num_hops
+            self.edge_index, train_links, train_labels, self.n_nodes, num_hops=self.num_hops
         )
 
         # Use num_workers > 0 to parallelize subgraph extraction while GPU trains
@@ -467,7 +751,7 @@ class SEALPredictor:
         inf_batch_size = self.batch_size * 2
 
         dataset = SEALDynamicDataset(
-            self.edge_index, all_links, [0] * len(all_links), num_hops=self.num_hops
+            self.edge_index, all_links, [0] * len(all_links), self.n_nodes, num_hops=self.num_hops
         )
 
         loader = DataLoader(
@@ -503,12 +787,20 @@ class SEALPredictor:
 
 def get_predictor(method, seed, params):
     m = method.lower()
+    rank = params.get("rank", 64)  # Common parameter
+
     if m in ["cn", "aa", "ra", "jc"]:
         return HeuristicPredictor(m, seed)
     elif m == "srf":
-        return SRFPredictor(seed, rank=params.get("rank", 64))
+        return SRFPredictor(seed, rank=rank)
     elif m == "node2vec":
-        return Node2VecPredictor(seed, **params.get("node2vec", {}))
+        return Node2VecPredictor(seed, rank=rank, **params.get("node2vec", {}))
+    elif m == "deepwalk":
+        return DeepWalkPredictor(seed, rank=rank, **params.get("deepwalk", {}))
+    elif m == "line":
+        return LINEPredictor(seed, rank=rank, **params.get("line", {}))
+    elif m == "skipgnn":
+        return SkipGNNPredictor(seed, **params.get("skipgnn", {}))
     elif m == "seal":
         return SEALPredictor(seed, **params.get("seal", {}))
     raise ValueError(f"Unknown: {method}")

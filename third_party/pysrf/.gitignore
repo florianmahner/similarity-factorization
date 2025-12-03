@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.c
+*.cpp
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.pyc
+*.whl
+
+# Python version manager
+.python-version
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.tox/
+
+# Documentation
+site/
+
+# OS
+.DS_Store
+Thumbs.db
