@@ -1,0 +1,28 @@
+# Simulation: Rank Detection
+
+defaults:
+  - /base
+  - _self_
+
+experiment_name: simulation
+task: rank_detection
+
+# === Sweep ===
+seed: 42
+
+# === Simulation ===
+n: 300
+true_ranks: [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30]
+alphas: [0.1, 1.0, 5.0, 10.0]
+snrs: [0.2, 0.4, 0.6, 0.8, 1.0]
+n_seeds: 20
+
+# === CV ===
+cv_repeats: 10
+grid_span: 10
+
+# === Compute ===
+n_jobs: 16
+
+# === Paths ===
+data_dir: ${paths.output_dir}/experiments/simulation/data/rank_detection

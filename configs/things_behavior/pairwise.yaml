@@ -1,0 +1,25 @@
+# THINGS Behavior: Pairwise Analysis
+
+defaults:
+  - /base
+  - _self_
+
+experiment_name: things_behavior
+task: pairwise
+
+# === Parameters ===
+seed: 0
+dims: 66
+n_items: 1854
+snr_values: [1.0]
+similarity_measures: [linear]
+triplet_version: "4.7mio"
+
+# === Compute ===
+n_jobs: 16
+
+# === Paths ===
+dataset_path: ${paths.data_dir}/things
+images_path: ${paths.data_dir}/things/images
+vice_embedding_path: ${paths.data_dir}/things/vice_embedding_66d.txt
+data_dir: ${paths.output_dir}/experiments/things_behavior/data

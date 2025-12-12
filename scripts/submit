@@ -3,19 +3,16 @@
 Unified Submission Script.
 
 Usage:
-    ./submit <script_path> [overrides...] [--bg] [-e|--experiment] [-s|--sandbox]
+    ./submit <script_path> [overrides...] [--bg]
 
 Examples:
-    ./submit experiments/ppi/link_prediction.py          # Run with default mode
-    ./submit experiments/ppi/link_prediction.py -e       # Force experiment mode
-    ./submit sandbox/my_exp/run.py -s                    # Force sandbox mode
-    ./submit experiments/ppi/link_prediction.py --bg     # Run in background
+    ./submit experiments/ppi/link_prediction.py                    # Run task
+    ./submit experiments/ppi/link_prediction.py dataset=huri       # Override
+    ./submit experiments/ppi/link_prediction.py --bg               # Background
+    ./submit experiments/ppi/plot.py                               # Standalone script
 
-Features:
-- Wrapper for 'poetry run python ...'
-- Mode selection: -e/--experiment (central outputs), -s/--sandbox (local outputs)
-- Background execution: --bg runs in detached screen session
-- Auto-cleanup: Removes job folders that only contain logs
+Config loading:
+    experiments/ppi/link_prediction.py  →  configs/ppi/link_prediction.yaml
 """
 
 import sys
@@ -35,12 +32,20 @@ def get_project_root(anchor_file="pyproject.toml"):
     return Path.cwd()
 
 
+def is_hydra_task(script_path: Path) -> bool:
+    """Check if script is a Hydra task (has run(cfg) function)."""
+    try:
+        content = script_path.read_text()
+        return "def run(cfg" in content
+    except Exception:
+        return False
+
+
 def cleanup_empty_runs(base_output_dir):
     """Deletes folders that contain ONLY logs."""
     if not base_output_dir.exists():
         return
 
-    # print(f"🧹 Scanning for empty/failed jobs in: {base_output_dir}")
     deleted_count = 0
     for root, dirs, files in os.walk(base_output_dir, topdown=False):
         current_dir = Path(root)
@@ -49,22 +54,16 @@ def cleanup_empty_runs(base_output_dir):
         if not current_dir.exists():
             continue
 
-        # Check for artifacts (anything not a log or .hydra)
         has_artifacts = False
         for f in files:
-            if f.endswith(".log"):
-                continue
-            if f == ".hydra":
+            if f.endswith(".log") or f == ".hydra":
                 continue
             has_artifacts = True
             break
 
-        # Check valid subdirs
-        has_valid_subdirs = False
-        for d in current_dir.iterdir():
-            if d.is_dir() and d.name != ".hydra":
-                has_valid_subdirs = True
-                break
+        has_valid_subdirs = any(
+            d.is_dir() and d.name != ".hydra" for d in current_dir.iterdir()
+        )
 
         if not has_artifacts and not has_valid_subdirs:
             try:
@@ -79,133 +78,106 @@ def cleanup_empty_runs(base_output_dir):
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: ./submit <script_path> [options...] [--bg|-e|--experiment|-s|--sandbox]")
+        print("Usage: ./submit <script_path> [options...] [--bg]")
         sys.exit(1)
 
     script_arg = None
-    raw_args = []
     run_args = []
     is_bg = False
-    mode_override = None
+
     for arg in sys.argv[1:]:
         if arg == "--bg":
             is_bg = True
-        elif arg in ("-e", "--experiment"):
-            mode_override = "experiment"
-        elif arg in ("-s", "--sandbox"):
-            mode_override = "sandbox"
         elif script_arg is None and not arg.startswith("-"):
             script_arg = arg
         else:
-            raw_args.append(arg)
+            run_args.append(arg)
 
     if script_arg is None:
-        print("Usage: ./submit <script_path> [options...] [--bg|-e|--experiment|-s|--sandbox]")
+        print("Usage: ./submit <script_path> [options...] [--bg]")
         sys.exit(1)
 
-    run_args.extend(raw_args)
-
     project_root = get_project_root()
+    original_script = Path(script_arg).resolve()
     experiment_name = None
     task_name = None
-    script_path = Path(script_arg).resolve()
 
-    # Detect task files under experiments/<exp>/<task>.py (flattened structure)
-    parts = script_path.parts
+    # Detect experiments/<exp>/<task>.py structure
+    parts = original_script.parts
     if "experiments" in parts:
         try:
             exp_idx = parts.index("experiments")
             experiment_name = parts[exp_idx + 1]
-            # Task is the Python file directly in experiment folder
-            if script_path.suffix == ".py" and script_path.parent.name == experiment_name:
-                task_name = script_path.stem
-                script_path = project_root / "scripts" / "run_task.py"
+            if original_script.suffix == ".py" and original_script.parent.name == experiment_name:
+                task_name = original_script.stem
         except (ValueError, IndexError):
-            experiment_name = None
-            task_name = None
+            pass
 
-    # If the target is not a file, try treating it as an experiment alias.
-    if not script_path.exists() and experiment_name is None:
-        parts = Path(script_arg).parts
-        if len(parts) >= 2 and parts[0] in {"experiment", "experiments"}:
-            experiment_name = parts[1]
-        elif (project_root / "configs" / "experiment" / f"{script_arg}.yaml").exists():
-            experiment_name = script_arg
-        if experiment_name:
-            script_path = project_root / "scripts" / "run_task.py"
+    # Check if it's a Hydra task (has run(cfg) function)
+    use_hydra = experiment_name and task_name and is_hydra_task(original_script)
 
-    if not script_path.exists():
-        print(f"Error: Script not found: {script_path}")
-        sys.exit(1)
+    # Build session name for background mode
+    if experiment_name and task_name:
+        session_name = f"{experiment_name}_{task_name}"
+    else:
+        session_name = original_script.stem
 
     # --- Background Mode ---
     if is_bg:
         submit_script = Path(__file__).resolve()
-        session_name = f"gemini_{script_path.parent.name}"
-        # Use script_arg (original input) to preserve context for the recursive call
         safe_args = [str(submit_script), script_arg] + run_args
         cmd_str = " ".join(shlex.quote(a) for a in safe_args)
 
         print(f"🚀 Launching in background screen: {session_name}")
         print(f"   Command: {cmd_str}")
-        subprocess.run(
-            [
-                "screen",
-                "-dmS",
-                session_name,
-                "bash",
-                "-c",
-                f"{cmd_str}; echo 'Done. Press Enter.'; read",
-            ]
-        )
+        subprocess.run([
+            "screen", "-dmS", session_name, "bash", "-c",
+            f"{cmd_str}; echo 'Done. Press Enter.'; read",
+        ])
         print(f"✅ Started. Attach: screen -r {session_name}")
         sys.exit(0)
 
     # --- Foreground Mode ---
-    if experiment_name:
-        config_dir = project_root
-    else:
-        config_dir = script_path.parent
+    if use_hydra:
+        # Hydra task: use run_task.py with config from configs/<exp>/<task>.yaml
+        config_path = project_root / "configs" / experiment_name
+        config_name = task_name
 
-    if experiment_name:
+        if not (config_path / f"{config_name}.yaml").exists():
+            print(f"⚠️  Config not found: {config_path / f'{config_name}.yaml'}")
+            print(f"   Creating from template...")
+            # Could auto-generate, for now just warn
+            sys.exit(1)
+
         cmd = [
-            "poetry",
-            "run",
-            "python",
-            str(script_path),
-            f"+experiment={experiment_name}",
+            "poetry", "run", "python",
+            str(project_root / "scripts" / "run_task.py"),
+            f"--config-path={config_path}",
+            f"--config-name={config_name}",
+            f"hydra.searchpath=[file://{project_root}/configs]",
+            f"project_root={project_root}",
         ]
-        if task_name:
-            cmd.append(f"task={task_name}")
-        if mode_override:
-            cmd.append(f"mode={mode_override}")
+        cmd.extend(run_args)
+
+        print(f"🚀 Running {experiment_name}/{task_name}")
+        print(f"   Config: {config_path / f'{config_name}.yaml'}")
+        print(f"   {' '.join(cmd)}")
+
     else:
-        cmd = [
-            "poetry",
-            "run",
-            "python",
-            str(script_path),
-            f"--config-path=.",
-            "--config-name=config",
-        ]
-        if mode_override:
-            cmd.append(f"mode={mode_override}")
+        # Standalone script: run directly
+        cmd = ["poetry", "run", "python", str(original_script)]
+        cmd.extend(run_args)
 
-    project_configs = project_root / "configs"
-    cmd.append(f"hydra.searchpath=[file://{project_configs}]")
-    cmd.append(f"project_root={project_root}")
+        print(f"🚀 Running standalone: {original_script.name}")
+        print(f"   {' '.join(cmd)}")
 
-    cmd.extend(run_args)
+    # Execute
+    result = subprocess.run(cmd, cwd=project_root)
 
-    print(f"🚀 Running in {config_dir}:\n   {' '.join(cmd)}")
-
-    # Execution
-    result = subprocess.run(cmd, cwd=config_dir)
-
-    # Cleanup (only after foreground execution completes)
-    local_output = config_dir / "outputs"
-    if local_output.exists():
-        cleanup_empty_runs(local_output)
+    # Cleanup empty run folders
+    output_dir = project_root / "outputs"
+    if output_dir.exists():
+        cleanup_empty_runs(output_dir)
 
 
 if __name__ == "__main__":
