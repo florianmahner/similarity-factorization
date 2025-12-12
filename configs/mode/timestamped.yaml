@@ -1,0 +1,9 @@
+# @package _global_
+hydra:
+  job:
+    chdir: true
+  run:
+    dir: ${project_root}/outputs/experiments/${experiment_name}/${task}/${now:%Y-%m-%d}/${now:%H%M}
+  sweep:
+    dir: ${project_root}/outputs/experiments/${experiment_name}/${task}/${now:%Y-%m-%d}/${now:%H%M}
+    subdir: ${hydra.job.override_dirname}

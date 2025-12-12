@@ -3,7 +3,7 @@ hydra:
   job:
     chdir: true
   run:
-    dir: ./outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: ${project_root}/outputs/experiments/${experiment_name}/${task}
   sweep:
-    dir: ./outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
-    subdir: tmp/${hydra.job.num}
+    dir: ${project_root}/outputs/experiments/${experiment_name}/${task}
+    subdir: ${hydra.job.override_dirname}

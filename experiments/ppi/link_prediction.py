@@ -16,11 +16,9 @@ from .models import get_predictor
 
 
 def _run_single_task(fold_idx, method, dataset, split_dir, seed, cfg):
-    # Construct output path first to skip if needed (optional, but good for resume)
-    # But we overwrite by default as per standard behavior unless checked
     rank = cfg.get("rank", 0)
-
-    output_dir = Path.cwd() / "link_prediction" / dataset / method
+    base_dir = Path(cfg.project_root) / "outputs" / "experiments" / cfg.experiment_name
+    output_dir = base_dir / "data" / "link_prediction" / dataset / method
     output_dir.mkdir(parents=True, exist_ok=True)
 
     output_file = output_dir / f"rank{rank}_fold{fold_idx}.json"
@@ -70,19 +68,22 @@ def run(cfg: DictConfig) -> None:
 
     methods = list(cfg.methods) if cfg.methods else ["srf", "cn", "aa"]
 
+    fold_start = cfg.get("fold_start", 0)
+    fold_end = cfg.get("fold_end", cfg.n_folds)
+    folds = list(range(fold_start, fold_end))
+
     tasks = [
         (f, m, cfg.dataset, split_dir, cfg.seed, cfg)
-        for f in range(cfg.n_folds)
+        for f in folds
         for m in methods
     ]
 
-    print(f"Running {len(tasks)} tasks on {cfg.dataset} with {cfg.n_jobs} jobs...")
+    print(f"Running {len(tasks)} tasks on {cfg.dataset} (folds {fold_start}-{fold_end-1}) with {cfg.n_jobs} jobs...")
 
-    # Run in parallel
     saved_files = Parallel(n_jobs=cfg.n_jobs, verbose=5)(
         delayed(_run_single_task)(*t) for t in tasks
     )
 
     print(
-        f"Completed. Saved {len(saved_files)} result files to results/link_prediction/{dataset}/"
+        f"Completed. Saved {len(saved_files)} result files to data/link_prediction/{dataset}/"
     )

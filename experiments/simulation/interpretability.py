@@ -149,15 +149,11 @@ def run(cfg: DictConfig) -> None:
     log.info(f"Alpha grid: {list(cfg.alpha_grid)}")
     log.info(f"SNR values: {list(cfg.snrs)}")
 
-    # Set up output directory
-    output_dir = Path(cfg.output_dir)
+    output_dir = Path(cfg.data_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    log.info(f"Outputs: {output_dir}")
 
-    # Initialize RNG
     rng = np.random.default_rng(cfg.seed)
 
-    # Run parameter sweep
     log.info("Running parameter sweep...")
     records = []
     for alpha in cfg.alpha_grid:
@@ -168,15 +164,10 @@ def run(cfg: DictConfig) -> None:
                 f"  alpha={alpha:.1f}, snr={snr:.1f}: cophenetic_corr={record['cophenetic_corr']:.3f}"
             )
 
-    # Save summary
-    summary_df = pd.DataFrame(records)
-    summary_df["cluster_separation"] = summary_df["alpha"].apply(
-        lambda x: "low" if x < 1 else "high"
-    )
-    summary_df["cluster_overlap"] = summary_df["difficulty"]
+    df = pd.DataFrame(records)
+    df["cluster_separation"] = df["alpha"].apply(lambda x: "low" if x < 1 else "high")
+    df["cluster_overlap"] = df["difficulty"]
 
-    summary_path = output_dir / "interpretability_summary.csv"
-    summary_df.to_csv(summary_path, index=False)
-    log.info(f"Saved summary to {summary_path}")
-
-    log.info("Interpretability analysis complete")
+    csv_path = output_dir / "interpretability.csv"
+    df.to_csv(csv_path, index=False)
+    log.info(f"Saved {csv_path}")

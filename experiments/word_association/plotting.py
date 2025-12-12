@@ -702,6 +702,7 @@ def plot_word_clouds_grid(
     top_words_df: pd.DataFrame,
     output_path: Path,
     n_words: int = 100,
+    save_individual: bool = False,
 ) -> None:
     """Plot word clouds for all dimensions.
 
@@ -709,13 +710,19 @@ def plot_word_clouds_grid(
         top_words_df: DataFrame with columns: dimension, word, loading
         output_path: Path to save the figure
         n_words: Number of top words to include in each cloud
+        save_individual: If True, also save individual PDFs in wordclouds/ subdirectory
     """
     from wordcloud import WordCloud
 
     df = top_words_df.copy()
     rank = df["dimension"].nunique()
 
-    colormaps = ["Blues", "Oranges", "Greens", "Reds", "Purples", "YlOrBr"]
+    colormaps = ["Blues", "Oranges", "Greens", "Reds", "Purples", "BuGn"]
+
+    # Create individual output directory if needed
+    if save_individual:
+        wc_dir = output_path.parent / "wordclouds"
+        wc_dir.mkdir(parents=True, exist_ok=True)
 
     n_cols = 2 if rank < 4 else 3 if rank < 7 else 4 if rank < 13 else 5
     n_rows = int(np.ceil(rank / n_cols))
@@ -736,25 +743,33 @@ def plot_word_clouds_grid(
             top_words_str = ", ".join([w for w, _ in top_5])
 
             wc = WordCloud(
-                width=600,
-                height=400,
+                width=800,
+                height=600,
                 background_color="white",
                 colormap=colormaps[dim % len(colormaps)],
-                relative_scaling=0.4,
-                min_font_size=10,
-                max_font_size=80,
+                relative_scaling=0.6,
+                min_font_size=5,
+                max_font_size=100,
                 prefer_horizontal=0.7,
+                margin=8,
+                font_path="/usr/share/fonts/truetype/msttcorefonts/Arial.ttf",
             ).generate_from_frequencies(word_freq)
 
             ax = axes[i]
             ax.imshow(wc, interpolation="bilinear")
             ax.axis("off")
             ax.set_title(
-                f"Dimension {dim}\n{top_words_str}",
+                f"Dimension {dim + 1}\n{top_words_str}",
                 fontsize=11,
                 fontweight="bold",
                 pad=10,
             )
+
+            # Save individual SVG (vector) using the SAME word cloud object
+            if save_individual:
+                svg_content = wc.to_svg()
+                with open(wc_dir / f"dim_{dim + 1:02d}.svg", "w") as f:
+                    f.write(svg_content)
         else:
             axes[i].axis("off")
 
@@ -770,7 +785,11 @@ def plot_word_clouds_grid(
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.tight_layout(rect=[0, 0, 1, 0.96])
-    plt.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+    if save_individual:
+        print(f"Created: {rank} individual word clouds in {wc_dir.name}/")
 
 
 def plot_analogy(

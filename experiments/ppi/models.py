@@ -34,22 +34,22 @@ class BaseLinkPredictor(ABC):
 
 
 class SRFPredictor(BaseLinkPredictor):
+    """Original SRF on binary adjacency (balanced 1s and 0s)."""
+
     def __init__(self, seed: int = 42, rank: int = 50, **kwargs):
         super().__init__(seed, **kwargs)
         self.rank = rank
         self.w = None
 
     def fit(self, train_edges, n_nodes):
-
-        # Train on Balanced Sample (1s and sampled 0s)
         adj = get_balanced_matrix(train_edges, n_nodes, seed=self.seed, neg_ratio=1.0)
 
         model = SRF(
             rank=self.rank,
             rho=3.0,
-            max_outer=150,
-            max_inner=50,
-            tol=1e-5,
+            max_outer=500,
+            max_inner=100,
+            tol=1e-6,
             verbose=1,
             init="random_sqrt",
             random_state=self.seed,
@@ -57,6 +57,94 @@ class SRFPredictor(BaseLinkPredictor):
             loss="frobenius",
         )
         self.w = model.fit_transform(adj)
+
+    def predict_all(self) -> np.ndarray:
+        return self.w @ self.w.T
+
+
+class SRFPPMIPredictor(BaseLinkPredictor):
+    """SRF on PPMI-transformed random walk similarity (NetMF-style)."""
+
+    def __init__(self, seed: int = 42, rank: int = 50, window: int = 10, **kwargs):
+        super().__init__(seed, **kwargs)
+        self.rank = rank
+        self.window = window
+        self.w = None
+
+    def _compute_ppmi(self, adj_sparse, n_nodes):
+        """Compute PPMI matrix from adjacency (NetMF approach)."""
+        # Degree matrix
+        degrees = np.array(adj_sparse.sum(axis=1)).flatten()
+        vol = degrees.sum()
+
+        # Normalized adjacency: D^{-1} A
+        with np.errstate(divide="ignore"):
+            d_inv = 1.0 / degrees
+            d_inv[np.isinf(d_inv)] = 0.0
+        D_inv = diags(d_inv)
+        M = D_inv @ adj_sparse
+
+        # Approximate DeepWalk matrix: sum of M^k for k=1..window
+        # This captures multi-hop random walk probabilities
+        M_sum = M.copy()
+        M_power = M.copy()
+        for _ in range(2, self.window + 1):
+            M_power = M_power @ M
+            M_sum = M_sum + M_power
+
+        # Convert to dense for PPMI computation
+        M_sum = M_sum.toarray() / self.window
+
+        # PPMI: log(M_sum * vol / (d_i * d_j)) - log(negative_samples)
+        # Simplified: just use the random walk probabilities directly
+        # Scale by volume and normalize by degree product
+        d_outer = np.outer(degrees, degrees)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            pmi = np.log(M_sum * vol / (d_outer + 1e-10) + 1e-10)
+
+        # Shift to PPMI (positive only)
+        ppmi = np.maximum(pmi, 0)
+
+        # Handle NaN/inf
+        ppmi[~np.isfinite(ppmi)] = 0.0
+
+        # Ensure perfect symmetry
+        ppmi = (ppmi + ppmi.T) / 2
+
+        # Diagonal must be NaN for SRF (missing values)
+        np.fill_diagonal(ppmi, np.nan)
+
+        return ppmi
+
+    def fit(self, train_edges, n_nodes):
+        # Build sparse adjacency
+        rows = np.concatenate([train_edges[:, 0], train_edges[:, 1]])
+        cols = np.concatenate([train_edges[:, 1], train_edges[:, 0]])
+        data = np.ones(len(rows), dtype=np.float32)
+        adj_sparse = csr_matrix((data, (rows, cols)), shape=(n_nodes, n_nodes))
+
+        # Compute PPMI similarity matrix
+        print(f"  Computing PPMI matrix (window={self.window})...")
+        ppmi = self._compute_ppmi(adj_sparse, n_nodes)
+
+        print(f"  PPMI range: [{ppmi.min():.4f}, {ppmi.max():.4f}]")
+        print(f"  PPMI mean: {ppmi.mean():.4f}")
+        print(f"  PPMI non-zero: {(ppmi > 0).sum()}")
+
+        # Fit SRF on continuous PPMI values
+        model = SRF(
+            rank=self.rank,
+            rho=1.0,
+            max_outer=100,
+            max_inner=50,
+            tol=1e-6,
+            verbose=1,
+            init="random_sqrt",
+            random_state=self.seed,
+            missing_values=np.nan,
+            loss="frobenius",
+        )
+        self.w = model.fit_transform(ppmi)
 
     def predict_all(self) -> np.ndarray:
         return self.w @ self.w.T
@@ -315,10 +403,9 @@ class SkipGNNPredictor(BaseLinkPredictor):
         from pathlib import Path
         
         # SkipGNN's internal imports expect its directory to be in sys.path
-        # We locate it relative to this file
-        # this file is in experiments/ppi/lib/models.py
+        # this file is in experiments/ppi/models.py
         # third_party is in root/third_party
-        root_path = Path(__file__).resolve().parent.parent.parent.parent
+        root_path = Path(__file__).resolve().parent.parent.parent
         skipgnn_path = root_path / "third_party/SkipGNN/SkipGNN"
         
         if str(skipgnn_path) not in sys.path:
@@ -793,6 +880,9 @@ def get_predictor(method, seed, params):
         return HeuristicPredictor(m, seed)
     elif m == "srf":
         return SRFPredictor(seed, rank=rank)
+    elif m == "srf_ppmi":
+        window = params.get("window", 10)
+        return SRFPPMIPredictor(seed, rank=rank, window=window)
     elif m == "node2vec":
         return Node2VecPredictor(seed, rank=rank, **params.get("node2vec", {}))
     elif m == "deepwalk":

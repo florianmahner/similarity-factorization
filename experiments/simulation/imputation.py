@@ -20,8 +20,6 @@ from sklearn.metrics import r2_score
 from tools.metrics import compute_similarity
 from utils.simulation import simulation_dirichlet
 
-from .plotting import create_imputation_r2_plot
-
 log = logging.getLogger(__name__)
 
 
@@ -75,6 +73,21 @@ def _impute_symmetric(
     return result
 
 
+def _get_adaptive_rho(obs_per_dof: float) -> float:
+    """Compute adaptive ADMM penalty based on sampling ratio.
+
+    Lower rho for sparse observations allows better convergence.
+    """
+    if obs_per_dof <= 1.0:
+        return 0.01
+    elif obs_per_dof <= 2.0:
+        return 0.01 + (obs_per_dof - 1.0) * 0.04
+    elif obs_per_dof <= 5.0:
+        return 0.05 + (obs_per_dof - 2.0) / 3.0 * 0.45
+    else:
+        return min(3.0, 0.5 + (obs_per_dof - 5.0) / 10.0 * 2.5)
+
+
 def _evaluate_single_condition(
     original: np.ndarray,
     observed: np.ndarray,
@@ -86,6 +99,22 @@ def _evaluate_single_condition(
     seed: int,
 ) -> list[dict]:
     """Evaluate all imputation methods for a single condition."""
+    n = original.shape[0]
+    n_upper = n * (n - 1) // 2
+    n_observed = int(fraction_retained * n_upper)
+    dof = n * rank
+    obs_per_dof = n_observed / dof
+
+    base_record = {
+        "dataset": dataset_idx,
+        "fraction_retained": fraction_retained,
+        "replicate": replicate,
+        "n": n,
+        "n_observed": n_observed,
+        "dof": dof,
+        "obs_per_dof": obs_per_dof,
+    }
+
     records = []
 
     # Mean imputation
@@ -93,74 +122,41 @@ def _evaluate_single_condition(
     mean_filled = _impute_symmetric(mean_imputer, observed, original)
     mse_mean = float(np.mean((mean_filled[mask] - original[mask]) ** 2))
     r2_mean = float(r2_score(original[mask], mean_filled[mask]))
-    records.append(
-        {
-            "dataset": dataset_idx,
-            "method": "Mean",
-            "fraction_retained": fraction_retained,
-            "replicate": replicate,
-            "mse": mse_mean,
-            "r2": r2_mean,
-        }
-    )
+    records.append({**base_record, "method": "Mean", "mse": mse_mean, "r2": r2_mean})
 
     # Median imputation
     median_imputer = SimpleImputer(strategy="median")
     median_filled = _impute_symmetric(median_imputer, observed, original)
     mse_median = float(np.mean((median_filled[mask] - original[mask]) ** 2))
     r2_median = float(r2_score(original[mask], median_filled[mask]))
-    records.append(
-        {
-            "dataset": dataset_idx,
-            "method": "Median",
-            "fraction_retained": fraction_retained,
-            "replicate": replicate,
-            "mse": mse_median,
-            "r2": r2_median,
-        }
-    )
+    records.append({**base_record, "method": "Median", "mse": mse_median, "r2": r2_median})
 
     # KNN imputation
     knn_imputer = KNNImputer()
     knn_filled = _impute_symmetric(knn_imputer, observed, original)
     mse_knn = float(np.mean((knn_filled[mask] - original[mask]) ** 2))
     r2_knn = float(r2_score(original[mask], knn_filled[mask]))
-    records.append(
-        {
-            "dataset": dataset_idx,
-            "method": "KNN",
-            "fraction_retained": fraction_retained,
-            "replicate": replicate,
-            "mse": mse_knn,
-            "r2": r2_knn,
-        }
-    )
+    records.append({**base_record, "method": "KNN", "mse": mse_knn, "r2": r2_knn})
 
-    # SRF imputation
+    # SRF imputation with adaptive rho
+    adaptive_rho = _get_adaptive_rho(obs_per_dof)
+    max_outer = 200 if obs_per_dof <= 2.0 else 100
     srf_imputer = SRF(
         rank=rank,
         random_state=seed + 5,
-        max_outer=100,
+        max_outer=max_outer,
         max_inner=500,
-        tol=0.0,
+        tol=1e-5,
         init="random_sqrt",
         verbose=0,
         bounds=(0.0, 1.0),
         missing_values=np.nan,
+        rho=adaptive_rho,
     )
     srf_filled = _impute_symmetric(srf_imputer, observed, original)
     mse_srf = float(np.mean((srf_filled[mask] - original[mask]) ** 2))
     r2_srf = float(r2_score(original[mask], srf_filled[mask]))
-    records.append(
-        {
-            "dataset": dataset_idx,
-            "method": "SRF",
-            "fraction_retained": fraction_retained,
-            "replicate": replicate,
-            "mse": mse_srf,
-            "r2": r2_srf,
-        }
-    )
+    records.append({**base_record, "method": "SRF", "mse": mse_srf, "r2": r2_srf})
 
     return records
 
@@ -194,15 +190,11 @@ def run(cfg: DictConfig) -> None:
     log.info(f"Kernel: {cfg.kernel}")
     log.info(f"Fraction retained: {list(cfg.fraction_retained)}")
 
-    # Set up output directory
-    output_dir = Path(cfg.output_dir)
+    output_dir = Path(cfg.data_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    log.info(f"Outputs: {output_dir}")
 
-    # Initialize RNG
     rng = np.random.default_rng(cfg.seed)
 
-    # Generate datasets
     log.info(f"Generating {cfg.n_datasets} datasets...")
     dataset_seeds = rng.integers(0, 1_000_000, size=cfg.n_datasets)
     datasets = Parallel(n_jobs=cfg.n_jobs)(
@@ -210,7 +202,6 @@ def run(cfg: DictConfig) -> None:
         for seed in dataset_seeds
     )
 
-    # Build task list
     tasks = []
     mask_seed = int(rng.integers(0, 1_000_000))
     for dataset_idx, similarity in enumerate(datasets):
@@ -227,24 +218,15 @@ def run(cfg: DictConfig) -> None:
                     )
                 )
 
-    # Run imputation tasks
     log.info(f"Running {len(tasks)} imputation tasks...")
     results = Parallel(n_jobs=cfg.n_jobs)(
         delayed(_process_task)(sim, idx, frac, rep, rank, seed)
         for sim, idx, frac, rep, rank, seed in tasks
     )
 
-    # Aggregate results
     records = [record for result in results for record in result]
     df = pd.DataFrame(records)
 
-    # Save results
-    results_path = output_dir / "imputation_results.csv"
-    df.to_csv(results_path, index=False)
-    log.info(f"Saved results to {results_path}")
-
-    # Create plot
-    log.info("Creating plot...")
-    create_imputation_r2_plot(df, output_dir)
-
-    log.info("Imputation analysis complete")
+    csv_path = output_dir / "imputation.csv"
+    df.to_csv(csv_path, index=False)
+    log.info(f"Saved {csv_path}")
