@@ -26,7 +26,7 @@ sys.path.insert(0, str(project_root))
 log = logging.getLogger(__name__)
 
 # Parameters that trigger parallel sweeps when given as lists
-SWEEP_PARAMS = {"dataset", "seed"}
+SWEEP_PARAMS = {"dataset", "seed", "subject_id", "percentage"}
 
 
 def expand_sweep(cfg: DictConfig) -> list[DictConfig]:
@@ -86,13 +86,30 @@ def main(cfg: DictConfig) -> None:
         raise ValueError("task not set in config")
 
     # Import task module
-    module_path = f"experiments.{exp_name}.{task_name}"
-    try:
-        task_module = importlib.import_module(module_path)
-    except ImportError as e:
-        log.error(f"Could not import: {module_path}")
-        log.error(f"Ensure experiments/{exp_name}/{task_name}.py exists with run(cfg)")
-        raise e
+    # If _module_path is provided (by submit script), use it directly
+    # Otherwise fall back to deriving from experiment_name/task
+    module_path = cfg.get("_module_path")
+    if module_path:
+        module_paths = [module_path]
+    else:
+        # Legacy: derive from config (works when experiment_name/task match module structure)
+        module_paths = [
+            f"experiments.{exp_name}.{task_name}",  # Nested structure
+            f"experiments.{exp_name}",  # Flat structure
+        ]
+
+    task_module = None
+    for mp in module_paths:
+        try:
+            candidate = importlib.import_module(mp)
+            if hasattr(candidate, "run"):
+                task_module = candidate
+                break
+        except ImportError:
+            continue
+    if task_module is None:
+        log.error(f"Could not import task module with run(). Tried: {module_paths}")
+        raise ImportError(f"No module found for experiment={exp_name}, task={task_name}")
 
     # Expand sweeps
     configs = expand_sweep(cfg)

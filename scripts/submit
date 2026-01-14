@@ -102,14 +102,23 @@ def main():
     experiment_name = None
     task_name = None
 
-    # Detect experiments/<exp>/<task>.py structure
+    # Detect experiment structure:
+    # - experiments/<task>.py → configs/<task>.yaml (flat)
+    # - experiments/<exp>/<task>.py → configs/<exp>/<task>.yaml (nested)
     parts = original_script.parts
     if "experiments" in parts:
         try:
             exp_idx = parts.index("experiments")
-            experiment_name = parts[exp_idx + 1]
-            if original_script.suffix == ".py" and original_script.parent.name == experiment_name:
+            remaining = parts[exp_idx + 1:]
+            if len(remaining) == 1 and remaining[0].endswith(".py"):
+                # Flat: experiments/<task>.py
+                experiment_name = original_script.stem
                 task_name = original_script.stem
+            elif len(remaining) >= 2:
+                # Nested: experiments/<exp>/<task>.py
+                experiment_name = remaining[0]
+                if original_script.suffix == ".py" and original_script.parent.name == experiment_name:
+                    task_name = original_script.stem
         except (ValueError, IndexError):
             pass
 
@@ -139,15 +148,28 @@ def main():
 
     # --- Foreground Mode ---
     if use_hydra:
-        # Hydra task: use run_task.py with config from configs/<exp>/<task>.yaml
-        config_path = project_root / "configs" / experiment_name
-        config_name = task_name
+        # Hydra task: resolve config path
+        # Flat: configs/<task>.yaml | Nested: configs/experiment/<exp>/<task>.yaml
+        if experiment_name == task_name:
+            # Flat structure
+            config_path = project_root / "configs"
+            config_name = task_name
+        else:
+            # Nested structure
+            config_path = project_root / "configs" / "experiment" / experiment_name
+            config_name = task_name
 
         if not (config_path / f"{config_name}.yaml").exists():
             print(f"⚠️  Config not found: {config_path / f'{config_name}.yaml'}")
-            print(f"   Creating from template...")
-            # Could auto-generate, for now just warn
             sys.exit(1)
+
+        # Determine module path from file structure
+        if experiment_name == task_name:
+            # Flat: experiments/<task>.py → experiments.<task>
+            module_path = f"experiments.{experiment_name}"
+        else:
+            # Nested: experiments/<exp>/<task>.py → experiments.<exp>.<task>
+            module_path = f"experiments.{experiment_name}.{task_name}"
 
         cmd = [
             "poetry", "run", "python",
@@ -156,6 +178,7 @@ def main():
             f"--config-name={config_name}",
             f"hydra.searchpath=[file://{project_root}/configs]",
             f"project_root={project_root}",
+            f"+_module_path={module_path}",
         ]
         cmd.extend(run_args)
 
