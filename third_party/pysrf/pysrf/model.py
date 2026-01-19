@@ -528,9 +528,9 @@ class SRF(TransformerMixin, BaseEstimator):
         x_obs = x[mask]
         x_hat_obs = x_hat[mask]
 
-        # Loss-specific data fit term
+        # Loss-specific data fit term (use x_hat for objective, v for ADMM constraint)
         if self.loss == "frobenius":
-            data_fit = np.sum((x_obs - v[mask]) ** 2)
+            data_fit = np.sum((x_obs - x_hat_obs) ** 2)
         elif self.loss == "kullback-leibler":
             v_obs = np.clip(v[mask], 1e-10, np.inf)
             data_fit = np.sum(x_obs * np.log(x_obs / v_obs) - x_obs + v_obs)
@@ -598,14 +598,15 @@ class SRF(TransformerMixin, BaseEstimator):
             w = _update_w_impl(x, w, max_iter=self.max_inner, tol=self.tol)
             x_hat = w @ w.T
 
-            metrics = self._compute_metrics(x, x_hat, x_hat, lam=None)
+            # For complete data: v=x (original), so primal_residual = x - x_hat
+            metrics = self._compute_metrics(x, x, x_hat, lam=None)
 
             for key, value in metrics.items():
                 history[key].append(value)
 
             self._print_metrics(i, metrics)
 
-            if self._check_convergence(metrics, x_hat, x_hat, lam=None):
+            if self._check_convergence(metrics, x, x_hat, lam=None):
                 if self.verbose > 0:
                     print(f"\nConverged at iteration {i}")
                 break

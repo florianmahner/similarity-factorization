@@ -1,6 +1,0 @@
-# Default placeholder - specify experiment=<name> to override
-experiment_name: "default"
-task: "none"
-
-common:
-  seed: 42

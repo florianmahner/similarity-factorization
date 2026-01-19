@@ -36,7 +36,7 @@ description = "Happy Eyeballs for asyncio"
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
-files = [
+files = [hy d
     {file = "aiohappyeyeballs-2.6.1-py3-none-any.whl", hash = "sha256:f349ba8f4b75cb25c99c5c2d84e997e485204d2902a9597802b0371f09331fb8"},
     {file = "aiohappyeyeballs-2.6.1.tar.gz", hash = "sha256:c3f9d0113123803ccadfdf3f0faa505bc78e6a72d1cc4806cbd719826e943558"},
 ]
@@ -2792,6 +2792,27 @@ files = [
 ]
 
 [[package]]
+name = "linkify-it-py"
+version = "2.0.3"
+description = "Links recognition library with FULL unicode support."
+optional = false
+python-versions = ">=3.7"
+groups = ["dev"]
+files = [
+    {file = "linkify-it-py-2.0.3.tar.gz", hash = "sha256:68cda27e162e9215c17d786649d1da0021a451bdc436ef9e0fa0ba5234b9b048"},
+    {file = "linkify_it_py-2.0.3-py3-none-any.whl", hash = "sha256:6bcbc417b0ac14323382aef5c5192c0075bf8a9d6b41820a2b66371eac6b6d79"},
+]
+
+[package.dependencies]
+uc-micro-py = "*"
+
+[package.extras]
+benchmark = ["pytest", "pytest-benchmark"]
+dev = ["black", "flake8", "isort", "pre-commit", "pyproject-flake8"]
+doc = ["myst-parser", "sphinx", "sphinx-book-theme"]
+test = ["coverage", "pytest", "pytest-cov"]
+
+[[package]]
 name = "llvmlite"
 version = "0.44.0"
 description = "lightweight wrapper around basic LLVM functionality"
@@ -3016,13 +3037,14 @@ version = "4.0.0"
 description = "Python port of markdown-it. Markdown parsing, done right!"
 optional = false
 python-versions = ">=3.10"
-groups = ["main"]
+groups = ["main", "dev"]
 files = [
     {file = "markdown_it_py-4.0.0-py3-none-any.whl", hash = "sha256:87327c59b172c5011896038353a81343b6754500a08cd7a4973bb48c6d578147"},
     {file = "markdown_it_py-4.0.0.tar.gz", hash = "sha256:cb0a2b4aa34f932c007117b194e945bd74e0ec24133ceb5bac59009cda1cb9f3"},
 ]
 
 [package.dependencies]
+linkify-it-py = {version = ">=1,<3", optional = true, markers = "extra == \"linkify\""}
 mdurl = ">=0.1,<1.0"
 
 [package.extras]
@@ -3252,7 +3274,7 @@ version = "0.5.0"
 description = "Collection of plugins for markdown-it-py"
 optional = false
 python-versions = ">=3.10"
-groups = ["main"]
+groups = ["main", "dev"]
 files = [
     {file = "mdit_py_plugins-0.5.0-py3-none-any.whl", hash = "sha256:07a08422fc1936a5d26d146759e9155ea466e842f5ab2f7d2266dd084c8dab1f"},
     {file = "mdit_py_plugins-0.5.0.tar.gz", hash = "sha256:f4918cb50119f50446560513a8e311d574ff6aaed72606ddae6d35716fe809c6"},
@@ -3272,7 +3294,7 @@ version = "0.1.2"
 description = "Markdown URL utilities"
 optional = false
 python-versions = ">=3.7"
-groups = ["main"]
+groups = ["main", "dev"]
 files = [
     {file = "mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8"},
     {file = "mdurl-0.1.2.tar.gz", hash = "sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba"},
@@ -5706,7 +5728,7 @@ version = "14.2.0"
 description = "Render rich text, tables, progress bars, syntax highlighting, markdown and more to the terminal"
 optional = false
 python-versions = ">=3.8.0"
-groups = ["main"]
+groups = ["main", "dev"]
 files = [
     {file = "rich-14.2.0-py3-none-any.whl", hash = "sha256:76bc51fe2e57d2b1be1f96c524b890b816e334ab4c1e45888799bfaab0021edd"},
     {file = "rich-14.2.0.tar.gz", hash = "sha256:73ff50c7c0c1c77c8243079283f4edb376f0f6442433aecb8ce7e6d0b92d1fe4"},
@@ -5996,6 +6018,60 @@ examples = ["matplotlib (>=3.5.0)", "pandas (>=1.4.0)", "plotly (>=5.14.0)", "po
 install = ["joblib (>=1.2.0)", "numpy (>=1.22.0)", "scipy (>=1.8.0)", "threadpoolctl (>=3.1.0)"]
 maintenance = ["conda-lock (==3.0.1)"]
 tests = ["matplotlib (>=3.5.0)", "mypy (>=1.15)", "numpydoc (>=1.2.0)", "pandas (>=1.4.0)", "polars (>=0.20.30)", "pooch (>=1.6.0)", "pyamg (>=4.2.1)", "pyarrow (>=12.0.0)", "pytest (>=7.1.2)", "pytest-cov (>=2.9.0)", "ruff (>=0.11.7)", "scikit-image (>=0.19.0)"]
+
+[[package]]
+name = "scikit-learn-extra"
+version = "0.3.0"
+description = "A set of tools for scikit-learn."
+optional = false
+python-versions = ">=3.6"
+groups = ["main"]
+files = [
+    {file = "scikit-learn-extra-0.3.0.tar.gz", hash = "sha256:7912d43384470d77609e53819d0291967f21010e5c3a3847f9026fc02f9c7893"},
+    {file = "scikit_learn_extra-0.3.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:44654b08cd142ddaa044ffc51d84f31ea3caa3f7b53e3d0024303a38150488cb"},
+    {file = "scikit_learn_extra-0.3.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ec82da4c00423b08436d753f319ab9ec136688be2961274d23e73f9221fdbbf9"},
+    {file = "scikit_learn_extra-0.3.0-cp310-cp310-win_amd64.whl", hash = "sha256:a0e4e79a120e6c8d29f504106160be29c3b06581ea4cb56f4b15ba4c73c7e9ec"},
+    {file = "scikit_learn_extra-0.3.0-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:8a39e141e060a61c951d9a14c72039b40bb5cd7d32a794b0b20470789d751214"},
+    {file = "scikit_learn_extra-0.3.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:91878f079da2d81b989c0bc3019befc7a3228fee29384065d06badc4ca60f4ec"},
+    {file = "scikit_learn_extra-0.3.0-cp311-cp311-win_amd64.whl", hash = "sha256:2cfadf9b6dbae0803db32cf477aff8a4ba5c15244ffd30d6312df2ef7043e16a"},
+    {file = "scikit_learn_extra-0.3.0-cp36-cp36m-macosx_10_9_x86_64.whl", hash = "sha256:837c6805f1948bab0172ff85470fbf568cfb56e8b6a371b892c01f80e5064b67"},
+    {file = "scikit_learn_extra-0.3.0-cp36-cp36m-manylinux1_i686.whl", hash = "sha256:cf2cb09d1fa100a9c8ff8eb3561f69af3c73d94191652873521039030519a646"},
+    {file = "scikit_learn_extra-0.3.0-cp36-cp36m-manylinux1_x86_64.whl", hash = "sha256:8df4782c79cf8c0125523d48e87f00ff8e001004e4ed57743e983f02b10a63cf"},
+    {file = "scikit_learn_extra-0.3.0-cp36-cp36m-manylinux2010_i686.whl", hash = "sha256:9ee6812725b706ae53818845718050c439cc3e02031dc81ed72d6a2679c3f694"},
+    {file = "scikit_learn_extra-0.3.0-cp36-cp36m-manylinux2010_x86_64.whl", hash = "sha256:15681200d239bd414ea616506c7be7c97f33abb88ade944e7a225b42b73bbfa8"},
+    {file = "scikit_learn_extra-0.3.0-cp36-cp36m-win32.whl", hash = "sha256:589f11733ce0197bd46189f6f9013696b8f43f85fc66935a90a918cb7965ca1b"},
+    {file = "scikit_learn_extra-0.3.0-cp36-cp36m-win_amd64.whl", hash = "sha256:265113d3280c17261f4598b2d4277a17e1398076cc5330c6d1fc1b6664c15ea8"},
+    {file = "scikit_learn_extra-0.3.0-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:911435d6fb5adbf1883f84f84e5d2cf1ab9e8131da5966097e4294175387e4d4"},
+    {file = "scikit_learn_extra-0.3.0-cp37-cp37m-manylinux1_i686.whl", hash = "sha256:f892e0ab363735e0e2322a716a924bd7bdecf8397be109234fdf17a5024d933f"},
+    {file = "scikit_learn_extra-0.3.0-cp37-cp37m-manylinux1_x86_64.whl", hash = "sha256:5fff5725d5688242b0e61aefdf79961045016ff0e482164c72b8740f64487325"},
+    {file = "scikit_learn_extra-0.3.0-cp37-cp37m-manylinux2010_i686.whl", hash = "sha256:53c07c616b6acb775c365a0df0ca360a0c29c5570e344ca66f3f0986dca3fbcd"},
+    {file = "scikit_learn_extra-0.3.0-cp37-cp37m-manylinux2010_x86_64.whl", hash = "sha256:6c34635914cb1d5274891011c364595141fb0b2ecc93c84b8d8cdf086341c225"},
+    {file = "scikit_learn_extra-0.3.0-cp37-cp37m-win32.whl", hash = "sha256:2f694a2304c5dc31f981e443106ec68c7fe4ca7b7af8145218166078ef27c2ca"},
+    {file = "scikit_learn_extra-0.3.0-cp37-cp37m-win_amd64.whl", hash = "sha256:4627f65d50efe8a71165d8917467fda9ff40644c336da5c40a5c4b75633e88d4"},
+    {file = "scikit_learn_extra-0.3.0-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:3c619d66951b7fd0b276d20af19ad4e5d3018219d1337c26a4f72643823798fe"},
+    {file = "scikit_learn_extra-0.3.0-cp38-cp38-manylinux1_i686.whl", hash = "sha256:05cf853c4577f87f2b286b1d1adc921e0de1d0cf313702b2f48ad5fea8d81ea2"},
+    {file = "scikit_learn_extra-0.3.0-cp38-cp38-manylinux1_x86_64.whl", hash = "sha256:1a64a752c59a12d7f477a7bdae636a188e7c32933d463d006bf0af7731506562"},
+    {file = "scikit_learn_extra-0.3.0-cp38-cp38-manylinux2010_i686.whl", hash = "sha256:b8da5f9c9a184683df085b6bb55264870ed6a9f3f5e0790af1badfe34764da63"},
+    {file = "scikit_learn_extra-0.3.0-cp38-cp38-manylinux2010_x86_64.whl", hash = "sha256:1110b67d62f8be9edbade232c40eab3a5458e8c1f19e6afb3f2a685dca4f3cf1"},
+    {file = "scikit_learn_extra-0.3.0-cp38-cp38-win32.whl", hash = "sha256:e7f9eef0316d7ad8cccafc639aa1b20b1fe7e79cfe802c338455c561f749d548"},
+    {file = "scikit_learn_extra-0.3.0-cp38-cp38-win_amd64.whl", hash = "sha256:60780faa1b80eddf9e617804cb19d87e22718080da61aefd38d1c01cdc938634"},
+    {file = "scikit_learn_extra-0.3.0-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:b2ee8cb4bcb5ba8e632e8d7e7400eca5eaa8ed05a7905ba2de61618c036afc37"},
+    {file = "scikit_learn_extra-0.3.0-cp39-cp39-manylinux1_i686.whl", hash = "sha256:ebfc1938c2deb1dd10c43394ac40bf4d6b2814428e2a984ec71c054e8dd5e592"},
+    {file = "scikit_learn_extra-0.3.0-cp39-cp39-manylinux1_x86_64.whl", hash = "sha256:8041adcad0cc1b7d6c5b8485fb0cfc849e9db84c588425eee8781186581f9dce"},
+    {file = "scikit_learn_extra-0.3.0-cp39-cp39-manylinux2010_i686.whl", hash = "sha256:0986559451a027dabd4bb9781a9621c5bfde10bd477001c1f60718b2f41900b9"},
+    {file = "scikit_learn_extra-0.3.0-cp39-cp39-manylinux2010_x86_64.whl", hash = "sha256:f79b071577d2895114e40b3df5f189555259852d2d796ba30f17535f9be6ac6f"},
+    {file = "scikit_learn_extra-0.3.0-cp39-cp39-win32.whl", hash = "sha256:c3061f62eab8b1b5ab62f74888121affeeca1abadf2d5b6a817aecad5b984471"},
+    {file = "scikit_learn_extra-0.3.0-cp39-cp39-win_amd64.whl", hash = "sha256:afc6a0dce83487f95dd288368bf09fbd2d23483389840e2369302455404180d6"},
+]
+
+[package.dependencies]
+numpy = ">=1.13.3"
+scikit-learn = ">=0.23.0"
+scipy = ">=0.19.1"
+
+[package.extras]
+docs = ["matplotlib", "numpydoc", "pillow", "sphinx", "sphinx-gallery", "sphinx-rtd-theme"]
+tests = ["pytest", "pytest-cov"]
 
 [[package]]
 name = "scipy"
@@ -6476,6 +6552,29 @@ test = ["pre-commit", "pytest (>=7.0)", "pytest-timeout"]
 typing = ["mypy (>=1.6,<2.0)", "traitlets (>=5.11.1)"]
 
 [[package]]
+name = "textual"
+version = "7.2.0"
+description = "Modern Text User Interface framework"
+optional = false
+python-versions = "<4.0,>=3.9"
+groups = ["dev"]
+files = [
+    {file = "textual-7.2.0-py3-none-any.whl", hash = "sha256:2624077f02dbd504beea9a24a943770f954f500a5f29a0bfa83465c52fa3ea1c"},
+    {file = "textual-7.2.0.tar.gz", hash = "sha256:5355f2dc16fbdc452a714dee2e440125e33b82373b3032cb53bea96e7019fa0b"},
+]
+
+[package.dependencies]
+markdown-it-py = {version = ">=2.1.0", extras = ["linkify"]}
+mdit-py-plugins = "*"
+platformdirs = ">=3.6.0,<5"
+pygments = ">=2.19.2,<3.0.0"
+rich = ">=14.2.0"
+typing-extensions = ">=4.4.0,<5.0.0"
+
+[package.extras]
+syntax = ["tree-sitter (>=0.25.0) ; python_version >= \"3.10\"", "tree-sitter-bash (>=0.23.0) ; python_version >= \"3.10\"", "tree-sitter-css (>=0.23.0) ; python_version >= \"3.10\"", "tree-sitter-go (>=0.23.0) ; python_version >= \"3.10\"", "tree-sitter-html (>=0.23.0) ; python_version >= \"3.10\"", "tree-sitter-java (>=0.23.0) ; python_version >= \"3.10\"", "tree-sitter-javascript (>=0.23.0) ; python_version >= \"3.10\"", "tree-sitter-json (>=0.24.0) ; python_version >= \"3.10\"", "tree-sitter-markdown (>=0.3.0) ; python_version >= \"3.10\"", "tree-sitter-python (>=0.23.0) ; python_version >= \"3.10\"", "tree-sitter-regex (>=0.24.0) ; python_version >= \"3.10\"", "tree-sitter-rust (>=0.23.0) ; python_version >= \"3.10\"", "tree-sitter-sql (>=0.3.11) ; python_version >= \"3.10\"", "tree-sitter-toml (>=0.6.0) ; python_version >= \"3.10\"", "tree-sitter-xml (>=0.7.0) ; python_version >= \"3.10\"", "tree-sitter-yaml (>=0.6.0) ; python_version >= \"3.10\""]
+
+[[package]]
 name = "threadpoolctl"
 version = "3.6.0"
 description = "threadpoolctl"
@@ -6929,6 +7028,21 @@ files = [
     {file = "tzdata-2025.2-py2.py3-none-any.whl", hash = "sha256:1a403fada01ff9221ca8044d701868fa132215d84beb92242d9acd2147f667a8"},
     {file = "tzdata-2025.2.tar.gz", hash = "sha256:b60a638fcc0daffadf82fe0f57e53d06bdec2f36c4df66280ae79bce6bd6f2b9"},
 ]
+
+[[package]]
+name = "uc-micro-py"
+version = "1.0.3"
+description = "Micro subset of unicode data files for linkify-it-py projects."
+optional = false
+python-versions = ">=3.7"
+groups = ["dev"]
+files = [
+    {file = "uc-micro-py-1.0.3.tar.gz", hash = "sha256:d321b92cff673ec58027c04015fcaa8bb1e005478643ff4a500882eaab88c48a"},
+    {file = "uc_micro_py-1.0.3-py3-none-any.whl", hash = "sha256:db1dffff340817673d7b466ec86114a9dc0e9d4d9b5ba229d9d60e5c12600cd5"},
+]
+
+[package.extras]
+test = ["coverage", "pytest", "pytest-cov"]
 
 [[package]]
 name = "uri-template"
@@ -7591,4 +7705,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<3.14"
-content-hash = "8f18fc4a593f82683ceb3904dbdb6e5bfe171193b03e199f3a5816cc5bc4eca8"
+content-hash = "debb26085a5c9e58e57bdbf171a873c6eeb860fcb4b3eb6a67b0beb8bb43493c"

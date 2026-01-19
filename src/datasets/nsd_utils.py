@@ -148,20 +148,17 @@ def load_nsd_betas(
         - 1
     )
 
-    unique_trials_and_indices = {}
-    for i, trial in enumerate(trial_ordering):
-        if trial not in unique_trials_and_indices:
-            unique_trials_and_indices[trial] = [i]
-        else:
-            unique_trials_and_indices[trial].append(i)
+    # Use sorted unique stimulus IDs (standard approach, matches Johannes's implementation)
+    extraction_indices = np.unique(trial_ordering)
 
     averaged_betas = []
     trials_with_betas = []
-    for trial, indices in unique_trials_and_indices.items():
-        stim_indices = [i for i in indices if i < betas.shape[1]]
+    for unique_stim_id in extraction_indices:
+        stim_indices = np.where(trial_ordering == unique_stim_id)[0]
+        stim_indices = [i for i in stim_indices if i < betas.shape[1]]
         if len(stim_indices) > 0:
             averaged_betas.append(np.nanmean(betas[:, stim_indices], axis=1))
-            trials_with_betas.append(trial)
+            trials_with_betas.append(unique_stim_id)
     averaged_betas = np.array(averaged_betas)
 
     return averaged_betas, np.array(trials_with_betas)
@@ -218,7 +215,9 @@ def load_nsd_data(
         raise ValueError(f"Subject {subject_id} not found. Available: {subjects}")
 
     roi = get_roi(subject_id, roi_name, nsd_dir, space)
-    roi_indices = roi == 5 if roi_name == "streams" else roi
+    # For streams ROI, use value 5 (ventral stream). For others, use roi > 0
+    # (some ROIs like nsdgeneral have -1 for excluded regions)
+    roi_indices = roi == 5 if roi_name == "streams" else roi > 0
 
     betas, trials_with_betas = load_nsd_betas(
         subject_id, zscore_betas, nsd_dir, space, voxel_indices=roi_indices

@@ -461,6 +461,85 @@ def _plot_srf_performance(output_dir: Path) -> None:
     save_figure(fig, output_dir / "srf_performance.pdf")
 
 
+def _plot_rank_detection_by_alpha(df: pd.DataFrame, output_dir: Path) -> None:
+    """Median selected rank with IQR ribbon, by alpha."""
+    df = df[df["alpha"] != 5.0].copy()  # Keep 0.1, 1.0, 10.0
+
+    summary = df.groupby(["true_rank", "alpha"])["selected_rank"].agg(
+        ["median", lambda x: x.quantile(0.25), lambda x: x.quantile(0.75)]
+    ).reset_index()
+    summary.columns = ["true_rank", "alpha", "median", "q25", "q75"]
+
+    fig, ax = create_figure("single")
+
+    alpha_colors = {0.1: CMAP[0], 1.0: CMAP[1], 10.0: CMAP[2]}
+
+    ax.plot([0, 32], [0, 32], "--", color=GRAY["light"], lw=1.5, zorder=0)
+    ax.text(28, 26, "identity", fontsize=7, color=GRAY["medium"], ha="right")
+
+    for alpha in [0.1, 1.0, 10.0]:
+        subset = summary[summary["alpha"] == alpha].sort_values("true_rank")
+        ax.plot(subset["true_rank"], subset["median"], "o-",
+                color=alpha_colors[alpha], markersize=4, linewidth=1.5,
+                label=f"{alpha}")
+        ax.fill_between(
+            subset["true_rank"],
+            subset["q25"],
+            subset["q75"],
+            color=alpha_colors[alpha], alpha=0.2, linewidth=0,
+        )
+
+    ax.set_xlabel("True rank")
+    ax.set_ylabel("Selected rank")
+    ax.set_xlim(0, 32)
+    ax.set_ylim(0, 38)
+    ax.legend(frameon=False, loc="upper left", fontsize=7, title=r"$\alpha$",
+              title_fontsize=8)
+    despine(ax)
+
+    save_figure(fig, output_dir / "rank_detection_by_alpha.pdf")
+
+
+def _plot_rank_detection_by_snr(df: pd.DataFrame, output_dir: Path) -> None:
+    """Median selected rank with IQR ribbon, by SNR."""
+    df = df[df["alpha"] != 5.0].copy()  # Keep 0.1, 1.0, 10.0
+
+    summary = df.groupby(["true_rank", "snr"])["selected_rank"].agg(
+        ["median", lambda x: x.quantile(0.25), lambda x: x.quantile(0.75)]
+    ).reset_index()
+    summary.columns = ["true_rank", "snr", "median", "q25", "q75"]
+
+    fig, ax = create_figure("single")
+
+    snrs = [0.4, 0.6, 0.8, 1.0]
+    snr_colors = {0.4: GRAY["medium"], 0.6: CMAP[2], 0.8: CMAP[1], 1.0: CMAP[0]}
+
+    ax.plot([0, 32], [0, 32], "--", color=GRAY["light"], lw=1.5, zorder=0)
+    ax.text(28, 26, "identity", fontsize=7, color=GRAY["medium"], ha="right")
+
+    for snr in snrs:
+        subset = summary[summary["snr"] == snr].sort_values("true_rank")
+        ax.plot(subset["true_rank"], subset["median"], "o-",
+                color=snr_colors[snr], markersize=4, linewidth=1.5,
+                label=f"{snr}")
+        ax.fill_between(
+            subset["true_rank"],
+            subset["q25"],
+            subset["q75"],
+            color=snr_colors[snr], alpha=0.2, linewidth=0,
+        )
+
+    ax.set_xlabel("True rank")
+    ax.set_ylabel("Selected rank")
+    ax.set_xlim(0, 32)
+    ax.set_ylim(0, 38)
+    ax.legend(frameon=False, loc="upper left", fontsize=7, title="SNR",
+              title_fontsize=8)
+    despine(ax)
+
+    save_figure(fig, output_dir / "rank_detection_by_snr.pdf")
+
+
 def _plot_stability(output_dir: Path) -> None:
     """Plot stability (cophenetic correlation) vs alpha."""
     from joblib import Parallel, delayed
@@ -561,16 +640,8 @@ def main():
     csv = DATA_DIR / "rank_detection.csv"
     if csv.exists():
         df = pd.read_csv(csv)
-        df_snr1 = df[df["snr"] == 1.0]
-        if not df_snr1.empty:
-            _plot_rank_scatter(
-                df_snr1, "alpha", r"$\alpha$", output_dir, "rank_detection_by_alpha.pdf"
-            )
-        df_alpha1 = df[df["alpha"] == 1.0]
-        if not df_alpha1.empty:
-            _plot_rank_scatter(
-                df_alpha1, "snr", "SNR", output_dir, "rank_detection_by_snr.pdf"
-            )
+        _plot_rank_detection_by_alpha(df, output_dir)
+        _plot_rank_detection_by_snr(df, output_dir)
         print("rank_detection: 2 plots")
 
     # Imputation (1 plot)

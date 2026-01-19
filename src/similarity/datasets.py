@@ -27,9 +27,8 @@ def build_neural_rsm(cfg: DictConfig, subject_id: int | None = None) -> np.ndarr
 
 def build_neural_features(cfg: DictConfig, subject_id: int | None = None) -> np.ndarray:
     """Build RSM from neural features by computing similarity."""
-    loader_kwargs = OmegaConf.to_container(
-        cfg.get("loader_kwargs", {}), resolve=True
-    )
+    raw_kwargs = cfg.get("loader_kwargs", {})
+    loader_kwargs = OmegaConf.to_container(raw_kwargs, resolve=True) if raw_kwargs else {}
     if subject_id is not None:
         loader_kwargs["subject_id"] = subject_id
 
@@ -52,12 +51,8 @@ def build_feature_file(cfg: DictConfig, subject_id: int | None = None) -> np.nda
     features = np.load(path / cfg.features_file)
 
     if "filter_file" in cfg:
-        info = pd.read_csv(
-            cfg.filter_file, dtype={cfg.filter_column: str}
-        )
-        mask = info[cfg.filter_column].str.contains(
-            cfg.filter_pattern
-        )
+        info = pd.read_csv(cfg.filter_file, dtype={cfg.filter_column: str})
+        mask = info[cfg.filter_column].str.contains(cfg.filter_pattern)
         features = features[mask.values, :]
 
     similarity_fn = cfg.get("similarity_fn", "gaussian_kernel")
@@ -65,10 +60,11 @@ def build_feature_file(cfg: DictConfig, subject_id: int | None = None) -> np.nda
 
 
 def build_triplet(cfg: DictConfig, subject_id: int | None = None) -> np.ndarray:
-    """Build RSM from triplet data."""
+    """Build RSM from triplet data with Laplace smoothing."""
     path = Path(cfg.get("path"))
     triplets, _ = load_triplets(path, number=cfg.triplet_number)
-    return compute_similarity_matrix_from_triplets(cfg.n_objects, triplets)
+    alpha = cfg.get("alpha", 1.0)
+    return compute_similarity_matrix_from_triplets(cfg.n_objects, triplets, alpha=alpha)
 
 
 def build_graph(cfg: DictConfig, subject_id: int | None = None) -> np.ndarray:
@@ -88,16 +84,35 @@ def build_graph(cfg: DictConfig, subject_id: int | None = None) -> np.ndarray:
     return adjacency
 
 
+def build_word_association(
+    cfg: DictConfig, subject_id: int | None = None
+) -> np.ndarray:
+    """Build PPMI similarity matrix from word association data (SWOW)."""
+    ds = load_dataset(
+        cfg.name,
+        root=cfg.get("path"),
+        use_all_responses=cfg.get("use_all_responses", False),
+        top_n_words=cfg.get("top_n_words"),
+        min_word_length=cfg.get("min_word_length", 1),
+        symmetrization=cfg.get("symmetrization", "geometric_mean"),
+        bidirectional_only=cfg.get("bidirectional_only", False),
+    )
+    return ds.rsm
+
+
 DATASET_HANDLERS: dict[str, Callable] = {
     "neural_rsm": build_neural_rsm,
     "neural_features": build_neural_features,
     "feature_file": build_feature_file,
     "triplet": build_triplet,
     "graph": build_graph,
+    "word_association": build_word_association,
 }
 
 
-def dispatch_dataset_builder(cfg: DictConfig, subject_id: int | None = None) -> np.ndarray:
+def dispatch_dataset_builder(
+    cfg: DictConfig, subject_id: int | None = None
+) -> np.ndarray:
     """
     Dispatch the appropriate builder based on dataset config type.
 

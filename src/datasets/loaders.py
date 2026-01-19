@@ -7,14 +7,8 @@ from pathlib import Path
 
 import numpy as np
 from scipy.io import loadmat
-from sklearn.datasets import (
-    fetch_20newsgroups,
-    load_breast_cancer,
-    load_diabetes,
-    load_digits,
-    load_iris,
-    load_wine,
-)
+from sklearn import datasets as sklearn_datasets
+from sklearn.datasets import fetch_20newsgroups
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 from tools.rsa import compute_similarity
@@ -24,6 +18,7 @@ from .nsd_utils import (
     get_available_subjects,
     load_nsd_data,
 )
+from .swow import load_swow_ppmi
 
 ndarray = np.ndarray
 
@@ -151,12 +146,9 @@ def load_peterson(root: str | None = None, variant: str = "animals") -> DatasetR
     DatasetResult
         Dataset with rsm
     """
-    root = Path(root)
+    root = Path(root) / variant
 
-    rsm_file = root / "rsm.npy"
-    if rsm_file.exists():
-        rsm = np.load(rsm_file)
-
+    rsm = np.ascontiguousarray(np.load(root / "rsm.npy"))
     images = sorted(glob(f"{root}/images/*.png"))
 
     return DatasetResult(
@@ -225,7 +217,7 @@ def _get_monkey_channel_mask(monkey_type: str, roi: str | None = None):
 def load_things_monkey(
     root: str | None = None,
     monkey_type: str = "F",
-    roi: str | None = "it",
+    roi: str = "it",
     min_reliab: float = 0.6,
 ) -> DatasetResult:
     """
@@ -234,10 +226,10 @@ def load_things_monkey(
     Parameters
     ----------
     root : str, optional
-        Path to monkey data directory
+        Path to monkey data directory (default: /SSD/fmahner/macaque_florian/22k)
     monkey_type : str, default='F'
         Monkey identifier ('F' or 'N')
-    roi : str, optional, default='it'
+    roi : str, default='it'
         ROI name ('v1', 'v4', 'it')
     min_reliab : float, default=0.6
         Minimum reliability threshold for channels
@@ -245,12 +237,17 @@ def load_things_monkey(
     Returns
     -------
     DatasetResult
-        Dataset with neural data, rsm, filenames
+        Dataset with neural data, filenames
     """
     import h5py
 
-    root = Path(root)
-    mat_path = root / "THINGS_normMUA_raw.mat"
+    if root is None:
+        root = Path("/SSD/fmahner/macaque_florian/22k")
+    else:
+        root = Path(root)
+
+    data_dir = root / monkey_type.lower()
+    mat_path = data_dir / "THINGS_normMUA_raw.mat"
 
     with h5py.File(mat_path, "r") as f:
         data_key = f"data_{roi}"
@@ -263,26 +260,85 @@ def load_things_monkey(
         reliab_mask = reliab >= min_reliab
         data = data[:, reliab_mask]
 
-    rsm = compute_similarity(data, data, "gaussian_kernel")
+    filenames = np.loadtxt(data_dir / "index_to_image.txt", dtype=str)
 
     return DatasetResult(
         name="things-monkey-22k",
         data=data,
+        rsm=None,
+        metadata={
+            "filenames": filenames,
+            "monkey_type": monkey_type,
+            "roi": roi,
+            "n_channels": data.shape[1],
+        },
+    )
+
+
+def load_things_monkey_2k(
+    root: str | None = None,
+    recording: str = "N_combined",
+    roi: str = "it",
+) -> DatasetResult:
+    """
+    Load preprocessed THINGS monkey 2k data (1854 stimuli).
+
+    Parameters
+    ----------
+    root : str, optional
+        Path to processed data directory
+    recording : str, default='N_combined'
+        Recording to load: 'N1', 'N2', 'F', or 'N_combined'
+    roi : str, default='it'
+        ROI name ('v1', 'v4', 'it')
+
+    Returns
+    -------
+    DatasetResult
+        Dataset with neural data (n_stimuli, n_channels), stimuli names
+    """
+    if root is None:
+        root = Path(__file__).parent.parent.parent / "data" / "things-monkey" / "2k" / "processed"
+    else:
+        root = Path(root)
+
+    path = root / "final" / f"{recording}_{roi}.npz"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Processed data not found: {path}\n"
+            f"Run preprocessing first: experiments/preprocessing/monkey_2k/"
+        )
+
+    data = np.load(path)
+    neural_data = data["data"]
+    rsm = data["rsm"]
+    stimuli = data["stimuli"]
+    reliability = data["reliability"]
+
+    return DatasetResult(
+        name="things-monkey-2k",
+        data=neural_data,
         rsm=rsm,
-        metadata={"it": data},
+        metadata={
+            "stimuli": stimuli,
+            "reliability": reliability,
+            "recording": recording,
+            "roi": roi,
+            "n_channels": neural_data.shape[1],
+        },
     )
 
 
 def load_iris(root: str | None = None) -> DatasetResult:
     """Load Iris dataset."""
-    iris = load_iris()
+    iris = sklearn_datasets.load_iris()
     rsm = np.corrcoef(iris.data)
     return DatasetResult(name="iris", data=iris.data, targets=iris.target, rsm=rsm)
 
 
 def load_diabetes(root: str | None = None) -> DatasetResult:
     """Load Diabetes dataset."""
-    diabetes = load_diabetes(as_frame=True)
+    diabetes = sklearn_datasets.load_diabetes(as_frame=True)
     return DatasetResult(
         name="diabetes",
         data=diabetes.data.to_numpy(),
@@ -292,20 +348,20 @@ def load_diabetes(root: str | None = None) -> DatasetResult:
 
 def load_digits(root: str | None = None) -> DatasetResult:
     """Load Digits dataset."""
-    digits = load_digits()
+    digits = sklearn_datasets.load_digits()
     return DatasetResult(name="digits", data=digits.data, targets=digits.target)
 
 
 def load_wine(root: str | None = None) -> DatasetResult:
     """Load Wine dataset."""
-    wine = load_wine()
+    wine = sklearn_datasets.load_wine()
     rsm = np.corrcoef(wine.data)
     return DatasetResult(name="wine", data=wine.data, targets=wine.target, rsm=rsm)
 
 
 def load_breast_cancer(root: str | None = None) -> DatasetResult:
     """Load Breast Cancer dataset."""
-    cancer = load_breast_cancer()
+    cancer = sklearn_datasets.load_breast_cancer()
     return DatasetResult(name="breast_cancer", data=cancer.data, targets=cancer.target)
 
 
@@ -432,12 +488,61 @@ def load_swow_data_paper_format(data_dir, use_all_responses=True):
     return df
 
 
+def load_swow(
+    root: str | None = None,
+    use_all_responses: bool = False,
+    top_n_words: int | None = None,
+    min_word_length: int = 1,
+    symmetrization: str = "geometric_mean",
+    bidirectional_only: bool = False,
+) -> DatasetResult:
+    """
+    Load SWOW word association data as PPMI similarity matrix.
+
+    Parameters
+    ----------
+    root : str
+        Path to SWOW data directory
+    use_all_responses : bool
+        If True, use R123 (all responses). If False, use R1 only.
+    top_n_words : int | None
+        Keep only top N words by degree (None = all)
+    min_word_length : int
+        Minimum word length filter
+    symmetrization : str
+        Method to symmetrize: 'sum', 'mean', 'geometric_mean'
+    bidirectional_only : bool
+        If True, keep only bidirectional edges
+
+    Returns
+    -------
+    DatasetResult
+        Dataset with PPMI matrix as rsm and vocabulary in metadata
+    """
+    root = Path(root)
+    ppmi_matrix, vocabulary, metadata = load_swow_ppmi(
+        root,
+        use_all_responses=use_all_responses,
+        top_n_words=top_n_words,
+        min_word_length=min_word_length,
+        symmetrization=symmetrization,
+        bidirectional_only=bidirectional_only,
+    )
+    return DatasetResult(
+        name="swow",
+        rsm=ppmi_matrix,
+        metadata={"vocabulary": vocabulary, **metadata},
+    )
+
+
 DATASETS = {
     "mur92": load_mur92,
     "cichy118": load_cichy118,
     "peterson-animals": lambda **kwargs: load_peterson(variant="animals", **kwargs),
     "peterson-various": lambda **kwargs: load_peterson(variant="various", **kwargs),
     "nsd": load_nsd,
+    "swow": load_swow,
+    "things-monkey-2k": load_things_monkey_2k,
     "things-monkey-22k": load_things_monkey,
     "iris": load_iris,
     "diabetes": load_diabetes,

@@ -1,9 +1,11 @@
 # @package hydra.job_logging
-# Production logging: writes to daily log file in logs/
+# All logging goes to .status/log in the output directory.
+# Uses custom handler that creates .status/ directory if needed.
 version: 1
+
 formatters:
   detailed:
-    format: "[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s"
+    format: "[%(asctime)s][%(name)s][%(levelname)s] - %(message)s"
     datefmt: "%Y-%m-%d %H:%M:%S"
 
 handlers:
@@ -12,15 +14,14 @@ handlers:
     formatter: detailed
     stream: ext://sys.stdout
 
-  daily_file:
-    class: src.utils.log_handler.DirectoryFileHandler
+  file:
+    class: src.utils.logging.StatusFileHandler
     formatter: detailed
-    # Logs to logs/YYMMDD/HHMMSS_experiment_task.log
-    filename: ${hydra:runtime.cwd}/logs/${now:%y%m%d}/${now:%H%M%S}_${experiment_name}_${task}.log
-    mode: w  # New file per run
+    filename: .status/log
+    mode: a
 
 root:
-  handlers: [console, daily_file]
+  handlers: [console, file]
   level: INFO
 
 disable_existing_loggers: false

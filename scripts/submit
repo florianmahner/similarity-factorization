@@ -6,18 +6,25 @@ Usage:
     ./submit <script_path> [overrides...] [--bg]
 
 Examples:
+    # Experiments (Hydra-based)
     ./submit experiments/ppi/link_prediction.py                    # Run task
     ./submit experiments/ppi/link_prediction.py dataset=huri       # Override
     ./submit experiments/ppi/link_prediction.py --bg               # Background
-    ./submit experiments/ppi/plot.py                               # Standalone script
+
+    # Sandbox (standalone scripts)
+    ./submit sandbox/nsd/consensus_test/run.py --bg                # Timestamped output
+    ./submit sandbox/nsd/consensus_test/run.py name=v2 --bg        # With suffix
 
 Config loading:
     experiments/ppi/link_prediction.py  →  configs/ppi/link_prediction.yaml
+    sandbox/nsd/test/run.py             →  sandbox/nsd/test/outputs/<timestamp>/
 """
 
+import json
 import sys
 import subprocess
 import shutil
+from datetime import datetime
 from pathlib import Path
 import os
 import shlex
@@ -41,8 +48,87 @@ def is_hydra_task(script_path: Path) -> bool:
         return False
 
 
+def is_sandbox_script(script_path: Path) -> bool:
+    """Check if script is in sandbox directory."""
+    return "sandbox" in script_path.parts
+
+
+def get_sandbox_output_dir(script_path: Path, name_suffix: str | None = None) -> Path:
+    """Create timestamped output directory for sandbox script."""
+    # Find sandbox base (parent of run.py, should contain outputs/)
+    sandbox_base = script_path.parent
+    outputs_dir = sandbox_base / "outputs"
+
+    # Create flat timestamp folder
+    timestamp = datetime.now().strftime("%y%m%d_%H%M%S")
+    if name_suffix:
+        folder_name = f"{timestamp}_{name_suffix}"
+    else:
+        folder_name = timestamp
+
+    output_dir = outputs_dir / folder_name
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Update 'latest' symlink
+    latest_link = outputs_dir / "latest"
+    if latest_link.is_symlink():
+        latest_link.unlink()
+    elif latest_link.exists():
+        latest_link.unlink()
+    latest_link.symlink_to(folder_name)
+
+    return output_dir
+
+
+def init_sandbox_job_status(output_dir: Path, script: Path, args: list[str]) -> None:
+    """Initialize job.json for sandbox script tracking.
+
+    The log file is always .status/log relative to the output directory.
+    """
+    status_dir = output_dir / ".status"
+    status_dir.mkdir(exist_ok=True)
+
+    job_data = {
+        "name": f"sandbox_{script.parent.name}",
+        "script": str(script),
+        "args": args,
+        "started": datetime.now().isoformat(),
+        "ended": None,
+        "status": "running",
+        "pid": os.getpid(),
+        "output_dir": str(output_dir),
+        "log_file": str(status_dir / "log"),
+        "error": None,
+        "signal": None,
+    }
+
+    (status_dir / "job.json").write_text(json.dumps(job_data, indent=2))
+
+
+def update_sandbox_job_status(output_dir: Path, status: str, error: str | None = None) -> None:
+    """Update job.json status after completion."""
+    job_file = output_dir / ".status" / "job.json"
+    if not job_file.exists():
+        return
+
+    try:
+        data = json.loads(job_file.read_text())
+        data["status"] = status
+        data["ended"] = datetime.now().isoformat()
+        if error:
+            data["error"] = error
+        job_file.write_text(json.dumps(data, indent=2))
+    except Exception:
+        pass
+
+
+def has_job_tracking(directory: Path) -> bool:
+    """Check if directory has job tracking (don't delete tracked jobs)."""
+    return (directory / ".status" / "job.json").exists()
+
+
 def cleanup_empty_runs(base_output_dir):
-    """Deletes folders that contain ONLY logs."""
+    """Deletes folders that contain ONLY logs. Skips tracked jobs (have .status/job.json)."""
     if not base_output_dir.exists():
         return
 
@@ -54,15 +140,24 @@ def cleanup_empty_runs(base_output_dir):
         if not current_dir.exists():
             continue
 
+        # Skip hidden directories and their parents
+        if current_dir.name.startswith("."):
+            continue
+
+        # Skip directories with job tracking (keep for history)
+        if has_job_tracking(current_dir):
+            continue
+
         has_artifacts = False
         for f in files:
-            if f.endswith(".log") or f == ".hydra":
+            if f.endswith(".log"):
                 continue
             has_artifacts = True
             break
 
         has_valid_subdirs = any(
-            d.is_dir() and d.name != ".hydra" for d in current_dir.iterdir()
+            d.is_dir() and d.name not in (".hydra", ".status")
+            for d in current_dir.iterdir()
         )
 
         if not has_artifacts and not has_valid_subdirs:
@@ -84,10 +179,13 @@ def main():
     script_arg = None
     run_args = []
     is_bg = False
+    name_suffix = None  # For sandbox: name=xxx
 
     for arg in sys.argv[1:]:
         if arg == "--bg":
             is_bg = True
+        elif arg.startswith("name="):
+            name_suffix = arg.split("=", 1)[1]
         elif script_arg is None and not arg.startswith("-"):
             script_arg = arg
         else:
@@ -101,6 +199,7 @@ def main():
     original_script = Path(script_arg).resolve()
     experiment_name = None
     task_name = None
+    is_sandbox = is_sandbox_script(original_script)
 
     # Detect experiment structure:
     # - experiments/<task>.py → configs/<task>.yaml (flat)
@@ -126,7 +225,12 @@ def main():
     use_hydra = experiment_name and task_name and is_hydra_task(original_script)
 
     # Build session name for background mode
-    if experiment_name and task_name:
+    if is_sandbox:
+        # sandbox/group/name/run.py -> sandbox_group_name
+        sandbox_idx = parts.index("sandbox")
+        sandbox_parts = parts[sandbox_idx + 1:-1]  # Exclude "sandbox" and "run.py"
+        session_name = "sandbox_" + "_".join(sandbox_parts)
+    elif experiment_name and task_name:
         session_name = f"{experiment_name}_{task_name}"
     else:
         session_name = original_script.stem
@@ -135,18 +239,74 @@ def main():
     if is_bg:
         submit_script = Path(__file__).resolve()
         safe_args = [str(submit_script), script_arg] + run_args
+        if name_suffix:
+            safe_args.append(f"name={name_suffix}")
         cmd_str = " ".join(shlex.quote(a) for a in safe_args)
 
-        print(f"🚀 Launching in background screen: {session_name}")
+        print(f"🚀 Launching in background: {session_name}")
         print(f"   Command: {cmd_str}")
-        subprocess.run([
-            "screen", "-dmS", session_name, "bash", "-c",
-            f"{cmd_str}; echo 'Done. Press Enter.'; read",
-        ])
-        print(f"✅ Started. Attach: screen -r {session_name}")
+
+        # Start background process with stdout/stderr to /dev/null
+        # The real log is captured in .status/log by run_task.py
+        with open(os.devnull, "w") as devnull:
+            proc = subprocess.Popen(
+                ["bash", "-c", cmd_str],
+                stdout=devnull, stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+
+        print(f"✅ Started (PID: {proc.pid})")
+        print(f"   Status: ./scripts/jobs or dash")
         sys.exit(0)
 
-    # --- Foreground Mode ---
+    # --- Foreground Mode: Sandbox ---
+    if is_sandbox:
+        # Create timestamped output directory
+        output_dir = get_sandbox_output_dir(original_script, name_suffix)
+
+        # Set up environment
+        env = os.environ.copy()
+        env["SANDBOX_OUTPUT_DIR"] = str(output_dir)
+
+        init_sandbox_job_status(output_dir, original_script, run_args)
+
+        # Log file in .status/log
+        log_file = output_dir / ".status" / "log"
+
+        cmd = ["poetry", "run", "python", str(original_script)] + run_args
+
+        print(f"🧪 Running sandbox: {original_script.parent.name}")
+        print(f"   Output: {output_dir}")
+
+        try:
+            # Capture stdout/stderr to .status/log while showing on terminal
+            with open(log_file, "w") as lf:
+                process = subprocess.Popen(
+                    cmd, cwd=project_root, env=env,
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True, bufsize=1
+                )
+                # Tee output to both terminal and log file
+                for line in process.stdout:
+                    print(line, end="")
+                    lf.write(line)
+                    lf.flush()
+                process.wait()
+                result_code = process.returncode
+
+            if result_code == 0:
+                update_sandbox_job_status(output_dir, "completed")
+                print(f"✅ Completed. Output: {output_dir}")
+            else:
+                update_sandbox_job_status(output_dir, "failed", f"Exit code: {result_code}")
+                print(f"❌ Failed with exit code {result_code}")
+        except Exception as e:
+            update_sandbox_job_status(output_dir, "failed", str(e))
+            print(f"❌ Error: {e}")
+
+        return
+
+    # --- Foreground Mode: Hydra ---
     if use_hydra:
         # Hydra task: resolve config path
         # Flat: configs/<task>.yaml | Nested: configs/experiment/<exp>/<task>.yaml

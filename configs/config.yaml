@@ -1,5 +1,0 @@
-# Main Entry Point (Wrapper)
-# This file exists to allow standard "python run.py" calls to default to base.
-defaults:
-  - base
-  - _self_

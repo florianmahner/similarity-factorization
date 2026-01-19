@@ -2,6 +2,21 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## CRITICAL: Running Scripts
+
+**NEVER run Python scripts directly with `poetry run python`.** Always use the submit script:
+
+```bash
+# Correct - ALWAYS use this:
+./scripts/submit sandbox/simulation/example/run.py --bg
+./scripts/submit experiments/rsa_comparison/spose.py --bg
+
+# WRONG - Never do this:
+poetry run python sandbox/simulation/example/run.py  # ❌ FORBIDDEN
+```
+
+This ensures proper job tracking, logging, and output directory management.
+
 ## Project Overview
 
 **Similarity-based Representation Factorization (SRF)** - Tools for modeling representations in minds, brains, and machines using symmetric non-negative matrix factorization with ADMM optimization.
@@ -12,19 +27,65 @@ Core library: `pysrf` (in `third_party/pysrf/`) - provides `SRF` model, cross-va
 
 | Location | Purpose | Outputs |
 |----------|---------|---------|
-| `sandbox/<name>/` | Exploratory work, AI-generated code | Local: `sandbox/<name>/outputs/` |
-| `experiments/<name>/` | Stable, versioned experiments | Central: `outputs/experiments/<name>/` |
+| `sandbox/<group>/<name>/` | Exploratory, iterative work | `sandbox/<group>/<name>/outputs/<timestamp>/` |
+| `experiments/<domain>/` | Stable, versioned experiments | `outputs/experiments/<domain>/<task>/` |
 
 ### Sandbox Structure
+
+Sandbox experiments are organized by domain and tracked via `./scripts/submit`:
+
 ```
-sandbox/my_experiment/
-├── run.py              # Main runner
-├── config.yaml         # Minimal config (inherits /base)
-├── plot.py             # Optional plotting script
-└── outputs/            # Local timestamped outputs
+sandbox/
+├── nsd/                    # Neural data (NSD)
+│   └── consensus_test/
+│       ├── run.py          # Main script (uses OUTPUT_DIR from env)
+│       ├── plot.py         # Optional plotting
+│       └── outputs/
+│           ├── 260115_113230/        # Flat timestamp
+│           │   ├── .status/
+│           │   │   ├── job.json      # Job tracking
+│           │   │   └── log           # All output
+│           │   └── <results>
+│           ├── 260116_091500_v2/     # With optional suffix
+│           └── latest -> 260116_091500_v2  # Symlink
+├── things/                 # THINGS behavioral
+├── ppi/                    # Graph/network
+├── simulation/             # Method validation
+├── semantic/               # Word embeddings
+└── _archive/               # Old/unused experiments
 ```
 
-### Experiment Structure (Flattened)
+**Running sandbox experiments:**
+```bash
+./scripts/submit sandbox/nsd/consensus_test/run.py --bg           # → outputs/260116_102500/
+./scripts/submit sandbox/nsd/consensus_test/run.py name=v2 --bg   # → outputs/260116_102500_v2/
+```
+
+**Sandbox script pattern:**
+```python
+"""Brief description of experiment."""
+from src.utils import get_output_dir
+
+OUTPUT_DIR = get_output_dir()
+
+def main():
+    # Save outputs to OUTPUT_DIR
+    ...
+
+if __name__ == "__main__":
+    main()
+```
+
+**Creating a new sandbox experiment:**
+1. Create folder: `sandbox/<group>/<name>/`
+2. Add `run.py` with the pattern above
+3. Run: `./scripts/submit sandbox/<group>/<name>/run.py --bg`
+4. Monitor: `dash`
+
+### Experiment Structure (Stable)
+
+Stable experiments use Hydra configs and `run(cfg)` pattern:
+
 ```
 experiments/ppi/
 ├── __init__.py
@@ -38,18 +99,15 @@ experiments/ppi/
 ## Commands
 
 ```bash
-# Run sandbox experiments
-./scripts/submit sandbox/my_experiment/run.py
-
-# Run stable experiments
+# Run experiments (foreground)
 ./scripts/submit experiments/ppi/link_prediction.py
+./scripts/submit experiments/consensus.py dataset=nsd subject_id=1
 
-# Mode flags
-./scripts/submit <script> -s              # Force sandbox mode (local outputs)
-./scripts/submit <script> -e              # Force experiment mode (central outputs)
+# Run experiments (background)
+./scripts/submit experiments/ppi/link_prediction.py --bg
 
-# Background execution
-./scripts/submit <script> --bg
+# Config overrides
+./scripts/submit experiments/consensus.py dataset=swow n_jobs=64
 
 # SLURM submission
 ./scripts/submit <script> hydra/launcher=slurm
@@ -58,32 +116,97 @@ experiments/ppi/
 poetry run pytest tests/
 ```
 
+## Job Monitoring
+
+### Dashboard (`dash`)
+
+Interactive terminal dashboard for monitoring experiments:
+
+```bash
+dash                    # Launch dashboard (alias configured in ~/.zshrc)
+./scripts/dash          # Or run directly
+```
+
+| Key | Action |
+|-----|--------|
+| `←→` | Switch columns (Running/Completed/Failed) |
+| `↑↓` | Navigate jobs |
+| `l` | View log in pager |
+| `t` | Tail log (live follow) |
+| `o` | Open output directory in yazi |
+| `K` | Kill job |
+| `D` | Delete job and output directory |
+| `r` | Refresh |
+| `q` | Quit |
+
+### Jobs CLI (`jobs`)
+
+```bash
+./scripts/jobs              # List all jobs
+./scripts/jobs -a           # Active (running) only
+./scripts/jobs -f           # Failed only
+./scripts/jobs -c           # Completed only
+./scripts/jobs <name>       # Show job details
+./scripts/jobs <name> --tail   # Tail log file
+```
+
+### Job Tracking
+
+All jobs (both `--bg` and foreground) create tracking files in `.status/`:
+
+```
+outputs/experiments/<name>/<task>/
+├── .status/
+│   ├── job.json          # Status, PID, timing, args
+│   └── log               # All output (logging + stdout/stderr)
+├── .hydra/               # Hydra config snapshot
+└── <outputs>             # Experiment outputs
+```
+
+Job statuses: `running`, `completed`, `failed`, `aborted`, `dead`
+
+Logs are stored alongside job outputs in `.status/log` (not in a separate directory).
+
 ## Directory Structure
 
 ```
+scripts/
+├── submit               # Job submission (./scripts/submit <script> [--bg])
+├── dash                 # Interactive dashboard (curses-based)
+├── jobs                 # Job status CLI
+└── run_task.py          # Hydra task runner (called by submit)
+
 sandbox/                 # Exploratory work (outputs stay local)
 ├── <name>/run.py
 
 experiments/             # Stable experiments (flattened structure)
 ├── <name>/*.py          # Task files and utilities at same level
 
-outputs/                 # Central outputs for experiments
+outputs/
 └── experiments/<name>/<task>/
+    ├── .status/
+    │   ├── job.json     # Job tracking (status, PID, timing)
+    │   └── log          # All output (logging + stdout/stderr)
+    ├── .hydra/          # Hydra config snapshot
+    └── <outputs>
 
 configs/
-├── base.yaml            # Global defaults
-├── experiment/*.yaml    # Experiment-specific configs
-├── mode/
-│   ├── sandbox.yaml     # Local outputs (./outputs/...)
-│   └── experiment.yaml  # Central outputs (${project_root}/outputs/...)
-├── launcher/{local,slurm}.yaml
-└── paths/local.yaml
+├── base.yaml            # Global defaults (inherited by all)
+├── consensus.yaml       # Consensus embedding generation
+├── estimate_bounds.yaml # Sampling bounds estimation
+├── dataset/             # Dataset definitions (nsd, swow, things_*, ...)
+├── experiment/          # Experiment-specific configs
+│   ├── ppi/
+│   ├── simulation/
+│   ├── things_behavior/
+│   └── ...
+└── paths/local.yaml     # Local paths (data_dir, etc.)
 
 src/
 ├── similarity/          # Dataset builders, similarity computation
 ├── datasets/            # Data loaders (NSD, THINGS, etc.)
 ├── tools/               # RSA, metrics, stats
-└── utils/               # IO, plotting, graphs, simulation
+└── utils/               # IO, plotting, figure_theme
 
 third_party/
 ├── pysrf/               # Core SRF algorithm (local editable install)
@@ -110,19 +233,39 @@ Loss functions: `frobenius`, `kullback-leibler`, `bce`
 
 ## Experiments
 
-Key domains in `experiments/`:
-- `ppi/` - Protein-protein interaction networks
-- `word_association/` - Semantic embeddings from behavioral data
-- `things_behavior/` - Object similarity judgments
-- `simulation/` - Synthetic data benchmarks
-- `bounds/` - Sampling bounds estimation
+### Top-level experiments (flat config)
+
+| Experiment | Config | Description |
+|------------|--------|-------------|
+| `consensus.py` | `consensus.yaml` | Generate consensus embeddings with CV rank selection |
+| `estimate_bounds.py` | `estimate_bounds.yaml` | Estimate sampling bounds for datasets |
+| `plot_dimensions.py` | `plot_dimensions.yaml` | Visualize embedding dimensions |
+
+Usage: `./scripts/submit experiments/consensus.py dataset=nsd subject_id=1`
+
+### Nested experiments (experiment-specific configs)
+
+| Domain | Key tasks |
+|--------|-----------|
+| `ppi/` | `link_prediction`, `node_classification` |
+| `simulation/` | `rank_detection`, `imputation`, `interpretability` |
+| `things_behavior/` | `coherence`, `low_data`, `pairwise` |
+| `rsa_comparison/` | `factorial`, `spose` |
+| `swow/` | `predict_behavioral_properties` |
+
+Usage: `./scripts/submit experiments/things_behavior/coherence.py`
+
+### Datasets (via `dataset=` override)
+
+Available in `configs/dataset/`: `nsd`, `swow`, `things_behavior`, `things_monkey_22k`, `mur92`, `cichy118`, `peterson`, `peterson_animals`, `peterson_various`, `vit`
 
 ## Coding Standards
 
+- **Reuse existing code**: ALWAYS search `src/` first before writing new utilities (e.g., `gaussian_kernel_similarity` in `src/tools/metrics.py`)
 - **Paths**: Always use `pathlib.Path`, reference data via `cfg.data_dir`
 - **Outputs**: Use `Path.cwd()` (Hydra changes to output dir)
 - **Parallelism**: `joblib.Parallel` locally, `hydra/launcher=slurm` for cluster
-- **Plotting**: `seaborn`/`matplotlib`, save ONLY as `.pdf` (no PNG/SVG)
+- **Plotting**: `seaborn`/`matplotlib`, save as `.pdf` for experiments, `.png` for sandbox
 
 ## Figure Theme (`src/utils/figure_theme.py`)
 
@@ -168,6 +311,11 @@ ax2 = ax1.twinx()
 ax2.set_ylabel("Right metric", color=CMAP[0])
 ```
 
+**Sandbox plots** - save as PNG (not PDF):
+```python
+fig.savefig(OUTPUT_DIR / "plot.png", dpi=300, bbox_inches='tight', facecolor='white')
+```
+
 ## SRF Usage Notes
 
 When using SRF for imputation with missing data, use **adaptive rho** based on sampling ratio:
@@ -175,6 +323,41 @@ When using SRF for imputation with missing data, use **adaptive rho** based on s
 - For sparse data (ratio < 2): use `rho=0.01-0.05`
 - For moderate data (ratio 2-5): use `rho=0.05-0.5`
 - For dense data (ratio > 5): use `rho=0.5-3.0`
+
+## Consensus Embeddings
+
+For stable, interpretable embeddings, use `AlignedConsensus` with `aggregation="select"`:
+
+```python
+from sklearn.pipeline import Pipeline
+from pysrf import SRF
+from pysrf.consensus import EnsembleEmbedding, AlignedConsensus
+
+pipeline = Pipeline([
+    ("ensemble", EnsembleEmbedding(SRF(rank=k), n_runs=50, n_jobs=-1)),
+    ("consensus", AlignedConsensus(rank=k, aggregation="select")),
+])
+embedding = pipeline.fit_transform(similarity)
+```
+
+**Why "select" not "mean/median"?** The factorization constraint is quadratic (`S ≈ WW^T`), but averaging is linear. Averaging breaks the factorization structure and destroys sparsity:
+- W₁W₁ᵀ ≈ S ✓
+- W₂W₂ᵀ ≈ S ✓  
+- But: ((W₁+W₂)/2)((W₁+W₂)/2)ᵀ ≠ S (cross-terms break it)
+
+**Aggregation methods:**
+| Method | Use Case |
+|--------|----------|
+| `"select"` | **Recommended** — returns most central run, preserves interpretability |
+| `"refine"` | Optimizes reconstruction at cost of sparsity |
+| `"median"` | Stability analysis only (breaks factorization) |
+
+**Agreement scores** (from `consensus.agreement_scores_`):
+- **>0.9**: Stable — runs converge to same solution
+- **0.7-0.9**: Some variability — consider more runs
+- **<0.7**: Unreliable — multiple local minima
+
+**Note on local minima:** Symmetric NMF has only permutation ambiguity (no rotation), but it's still non-convex. Different initializations CAN find genuinely different factorizations, not just permuted versions. High agreement scores indicate runs found the same basin.
 
 ## Data
 

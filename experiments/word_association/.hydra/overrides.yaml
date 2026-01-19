@@ -1,4 +1,0 @@
-- +experiment=word_association
-- mode=production
-- project_root=/LOCAL/fmahner/similarity-factorization
-- task=predict_behavioral_properties

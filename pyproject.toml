@@ -61,6 +61,7 @@ tensorflow = "^2.20.0"
 open-clip-torch = "^3.2.0"
 mat73 = "^0.65"
 cairosvg = "^2.8.2"
+scikit-learn-extra = "^0.3.0"
 
 
 
@@ -71,6 +72,7 @@ jupyterlab = "^4.0.0"
 black = "^25.1.0"
 autopep8 = "^2.3.2"
 nbformat = "^5.10.4"
+textual = "^7.2.0"
 
 [build-system]
 requires = ["poetry-core"]

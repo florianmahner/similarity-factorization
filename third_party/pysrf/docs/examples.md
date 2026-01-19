@@ -57,11 +57,11 @@ print(f"Best rank: {cv.best_params_['rank']}")
 print(f"Best score: {cv.best_score_:.4f}")
 ```
 
-## Ensemble and Consensus Clustering
+## Ensemble and Consensus Embedding
 
 ```python
-from sklearn import pipeline
-from pysrf.consensus import EnsembleEmbedding, ClusterEmbedding
+from sklearn.pipeline import Pipeline
+from pysrf.consensus import EnsembleEmbedding, AlignedConsensus
 from pysrf import SRF, cross_val_score
 
 # 1. Rank selection
@@ -72,16 +72,20 @@ cv = cross_val_score(
     n_repeats=5,
     n_jobs=-1,
 )
+best_rank = cv.best_params_["rank"]
 
-# 2. Stable ensemble + consensus clustering
-pipe = pipeline.Pipeline(
-    [
-        ("ensemble", EnsembleEmbedding(SRF(cv.best_params_), n_runs=50)),
-        ("cluster", ClusterEmbedding(min_clusters=2, max_clusters=6, step=1)),
-    ]
-)
+# 2. Stable ensemble + aligned consensus
+# Use aggregation="select" for interpretable embeddings (recommended)
+pipe = Pipeline([
+    ("ensemble", EnsembleEmbedding(SRF(rank=best_rank), n_runs=50, n_jobs=-1)),
+    ("consensus", AlignedConsensus(rank=best_rank, aggregation="select")),
+])
 
 consensus_embedding = pipe.fit_transform(s)
+
+# Check stability
+consensus = pipe.named_steps["consensus"]
+print(f"Agreement scores: {consensus.agreement_scores_}")  # High (>0.9) = stable
 ```
 
 ## Value Bounds

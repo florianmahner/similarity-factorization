@@ -1,12 +1,153 @@
 import numpy as np
 from dataclasses import dataclass
 from numpy.random import Generator
-from utils.helpers import add_noise_with_snr, add_positive_noise_with_snr
-from tools.rsa import compute_similarity
 
 RNG = np.random.default_rng(0)
 
 Array = np.ndarray
+
+
+# =============================================================================
+# Gaussian Tuning Function Model
+# =============================================================================
+
+
+def generate_stimulus_positions(
+    n_objects: int,
+    n_dims: int,
+    rng: Generator | int | None = None,
+) -> np.ndarray:
+    """Generate random stimulus positions in [0, 1]^K space.
+
+    Parameters
+    ----------
+    n_objects : int
+        Number of stimuli/objects.
+    n_dims : int
+        Number of latent dimensions.
+    rng : Generator | int | None
+        Random number generator or seed.
+
+    Returns
+    -------
+    positions : np.ndarray
+        (n_objects, n_dims) array of stimulus positions in [0, 1].
+    """
+    rng = rng if isinstance(rng, Generator) else np.random.default_rng(rng)
+    return rng.uniform(0, 1, size=(n_objects, n_dims))
+
+
+def gaussian_tuning_response(
+    positions: np.ndarray,
+    n_neurons_per_dim: int = 10,
+    tuning_width: float = 0.15,
+) -> np.ndarray:
+    """Compute neural population response using Gaussian tuning curves.
+
+    Each dimension has n_neurons_per_dim neurons with preferred stimuli
+    evenly spaced in [0, 1]. Each neuron responds with a Gaussian centered
+    at its preferred stimulus.
+
+    Parameters
+    ----------
+    positions : np.ndarray
+        (n_objects, n_dims) stimulus positions in [0, 1].
+    n_neurons_per_dim : int
+        Number of neurons per dimension.
+    tuning_width : float
+        Standard deviation of Gaussian tuning curves.
+
+    Returns
+    -------
+    responses : np.ndarray
+        (n_objects, n_dims * n_neurons_per_dim) population response.
+    """
+    n_objects, n_dims = positions.shape
+    n_neurons_total = n_dims * n_neurons_per_dim
+
+    # Preferred stimuli evenly spaced in [0, 1]
+    preferred = np.linspace(0, 1, n_neurons_per_dim)
+
+    responses = np.zeros((n_objects, n_neurons_total))
+    for d in range(n_dims):
+        for j, pref in enumerate(preferred):
+            neuron_idx = d * n_neurons_per_dim + j
+            # Gaussian tuning: r = exp(-(x - pref)^2 / (2 * sigma^2))
+            responses[:, neuron_idx] = np.exp(
+                -((positions[:, d] - pref) ** 2) / (2 * tuning_width**2)
+            )
+    return responses
+
+
+def generate_tuning_simulation(
+    n_objects: int = 100,
+    n_dims: int = 4,
+    n_neurons_per_dim: int = 10,
+    tuning_width: float = 0.15,
+    snr: float = 1.0,
+    similarity: str = "correlation",
+    rng: Generator | int | None = None,
+) -> dict:
+    """Generate simulation data using Gaussian tuning function model.
+
+    Parameters
+    ----------
+    n_objects : int
+        Number of stimuli.
+    n_dims : int
+        Number of latent dimensions (ground truth).
+    n_neurons_per_dim : int
+        Number of neurons encoding each dimension.
+    tuning_width : float
+        Width of Gaussian tuning curves (smaller = sharper tuning).
+    snr : float
+        Signal-to-noise ratio for response noise (1.0 = no noise).
+    similarity : str
+        How to compute similarity: "correlation" or "dot".
+    rng : Generator | int | None
+        Random number generator or seed.
+
+    Returns
+    -------
+    dict with keys:
+        - positions: (n_objects, n_dims) ground truth stimulus positions
+        - responses: (n_objects, n_neurons) population responses
+        - similarity: (n_objects, n_objects) similarity matrix
+    """
+    from src.utils.helpers import add_positive_noise_with_snr
+
+    rng = rng if isinstance(rng, Generator) else np.random.default_rng(rng)
+
+    # Generate ground truth positions
+    positions = generate_stimulus_positions(n_objects, n_dims, rng)
+
+    # Compute population response
+    responses = gaussian_tuning_response(positions, n_neurons_per_dim, tuning_width)
+
+    # Add noise to responses
+    if snr < 1.0:
+        responses = add_positive_noise_with_snr(responses, snr, rng)
+
+    # Compute similarity
+    if similarity == "correlation":
+        responses_centered = responses - responses.mean(axis=1, keepdims=True)
+        norms = np.linalg.norm(responses_centered, axis=1, keepdims=True)
+        norms = np.maximum(norms, 1e-9)
+        responses_normed = responses_centered / norms
+        S = responses_normed @ responses_normed.T
+    else:  # dot product
+        S = responses @ responses.T
+
+    return {
+        "positions": positions,
+        "responses": responses,
+        "similarity": S,
+    }
+
+
+# =============================================================================
+# Original simulation functions
+# =============================================================================
 
 
 def simulation(

@@ -10,9 +10,13 @@ Usage:
     ./scripts/submit experiments/ppi/link_prediction.py dataset=huri
 """
 
+import json
 import logging
 import importlib
+import os
+import signal
 import sys
+from datetime import datetime
 from itertools import product
 from pathlib import Path
 
@@ -23,10 +27,78 @@ from omegaconf import DictConfig, OmegaConf
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
+from src.utils.logging import setup_output_capture
+
 log = logging.getLogger(__name__)
+
+# Global reference to status directory for signal handlers
+_status_dir: Path | None = None
 
 # Parameters that trigger parallel sweeps when given as lists
 SWEEP_PARAMS = {"dataset", "seed", "subject_id", "percentage"}
+
+
+def init_job_status(name: str, script: str, args: list[str]) -> Path:
+    """Initialize .status/ directory and job.json for tracking.
+
+    The log file is always .status/log relative to the output directory.
+    This is where Hydra's file handler and stdout/stderr capture both write.
+    """
+    status_dir = Path.cwd() / ".status"
+    status_dir.mkdir(exist_ok=True)
+
+    job_data = {
+        "name": name,
+        "script": script,
+        "args": args,
+        "started": datetime.now().isoformat(),
+        "ended": None,
+        "status": "running",
+        "pid": os.getpid(),
+        "output_dir": str(Path.cwd()),
+        "log_file": str(status_dir / "log"),
+        "error": None,
+        "signal": None,
+    }
+
+    job_file = status_dir / "job.json"
+    job_file.write_text(json.dumps(job_data, indent=2))
+
+    return status_dir
+
+
+def update_job_status(
+    status: str,
+    error: str | None = None,
+    sig: str | None = None,
+) -> None:
+    """Update job.json with new status."""
+    if _status_dir is None:
+        return
+
+    job_file = _status_dir / "job.json"
+    if not job_file.exists():
+        return
+
+    try:
+        job_data = json.loads(job_file.read_text())
+        job_data["status"] = status
+        job_data["ended"] = datetime.now().isoformat()
+        if error:
+            job_data["error"] = error
+        if sig:
+            job_data["signal"] = sig
+        job_file.write_text(json.dumps(job_data, indent=2))
+    except Exception:
+        pass  # Best effort - don't crash on status update failure
+
+
+def handle_signal(signum: int, frame) -> None:
+    """Handle termination signals by updating status before exit."""
+    sig_name = signal.Signals(signum).name
+    log.warning(f"Received {sig_name}, shutting down...")
+    update_job_status("aborted", sig=sig_name)
+    sys.exit(128 + signum)
 
 
 def expand_sweep(cfg: DictConfig) -> list[DictConfig]:
@@ -77,6 +149,12 @@ def run_single(task_module, cfg: DictConfig, idx: int, total: int) -> None:
 
 @hydra.main(version_base=None, config_name="config")
 def main(cfg: DictConfig) -> None:
+    global _status_dir
+
+    # Set up stdout/stderr capture to .status/log FIRST
+    # This captures all output including progress bars and prints
+    setup_output_capture()
+
     exp_name = cfg.get("experiment_name")
     task_name = cfg.get("task")
 
@@ -85,17 +163,34 @@ def main(cfg: DictConfig) -> None:
     if not task_name:
         raise ValueError("task not set in config")
 
+    # Initialize job tracking
+    job_name = f"{exp_name}_{task_name}"
+    script = cfg.get("_module_path", f"experiments/{exp_name}/{task_name}.py")
+    args = sys.argv[1:] if len(sys.argv) > 1 else []
+    _status_dir = init_job_status(job_name, script, args)
+
+    # Set up signal handlers for graceful shutdown
+    signal.signal(signal.SIGTERM, handle_signal)
+    signal.signal(signal.SIGINT, handle_signal)
+
+    try:
+        _run_task(cfg, exp_name, task_name)
+        update_job_status("completed")
+    except Exception as e:
+        update_job_status("failed", error=str(e))
+        raise
+
+
+def _run_task(cfg: DictConfig, exp_name: str, task_name: str) -> None:
+    """Execute the task (separated for cleaner error handling)."""
     # Import task module
-    # If _module_path is provided (by submit script), use it directly
-    # Otherwise fall back to deriving from experiment_name/task
     module_path = cfg.get("_module_path")
     if module_path:
         module_paths = [module_path]
     else:
-        # Legacy: derive from config (works when experiment_name/task match module structure)
         module_paths = [
-            f"experiments.{exp_name}.{task_name}",  # Nested structure
-            f"experiments.{exp_name}",  # Flat structure
+            f"experiments.{exp_name}.{task_name}",
+            f"experiments.{exp_name}",
         ]
 
     task_module = None
@@ -116,13 +211,11 @@ def main(cfg: DictConfig) -> None:
     n_configs = len(configs)
 
     if n_configs == 1:
-        # Single run
         log.info(f"Experiment: {exp_name}")
         log.info(f"Task: {task_name}")
         log.info(f"Output: {Path.cwd()}")
         task_module.run(configs[0])
     else:
-        # Parallel sweep
         n_jobs = cfg.get("sweep_jobs", min(n_configs, cfg.get("n_jobs", -1)))
         sweep_params = [p for p in SWEEP_PARAMS if p in OmegaConf.to_container(cfg)
                        and isinstance(OmegaConf.to_container(cfg).get(p), list)]

@@ -1,5 +1,0 @@
-# @package dataset
-type: neural_rsm
-path: ${paths.datasets}/similarity_datasets/cichy118
-rank_range: [1, 30, 1]
-

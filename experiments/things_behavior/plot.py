@@ -234,6 +234,38 @@ def _plot_predicted_similarity(df: pd.DataFrame, output_path: Path) -> None:
     save_figure(fig, output_path)
 
 
+def _plot_dimension_reliability(df: pd.DataFrame, output_path: Path, n_runs: int = 20) -> None:
+    """Bar plot of dimension reliability across random restarts."""
+    fig, ax = create_figure("wide")
+
+    # Sort by reliability
+    df_sorted = df.sort_values("Reliability", ascending=False).reset_index(drop=True)
+
+    colors = [CMAP[1] if r >= 0.9 else GRAY["medium"] for r in df_sorted["Reliability"]]
+
+    ax.bar(
+        range(len(df_sorted)),
+        df_sorted["Reliability"],
+        color=colors,
+        edgecolor="none",
+        width=0.8,
+    )
+
+    ax.axhline(y=0.9, color=CMAP[0], linestyle="--", linewidth=1, zorder=0)
+
+    mean_rel = df["Reliability"].mean()
+    ax.axhline(y=mean_rel, color="black", linestyle=":", linewidth=1, zorder=0)
+
+    ax.set_xlabel("Dimension (sorted)")
+    ax.set_ylabel("Reliability (r)")
+    ax.set_xlim(-1, len(df_sorted))
+    ax.set_ylim(0, 1.05)
+    ax.set_title(f"Dimension stability ({n_runs} restarts, mean r = {mean_rel:.2f})", fontsize=9)
+
+    despine(ax)
+    save_figure(fig, output_path)
+
+
 def _plot_cross_validation_by_fraction(df: pd.DataFrame, output_path: Path) -> None:
     """Line plot of CV scores by rank, colored by observed fraction."""
     if "observed_fraction" not in df.columns:
@@ -407,6 +439,15 @@ def main():
             df = pd.read_csv(csv)
             _plot_predicted_similarity(df, dim_plot_dir / "48_predicted.pdf")
             print(f"dims={dims}: 48_predicted")
+
+        # Dimension reliability
+        csv = dim_data_dir / "dimension_reliability.csv"
+        if csv.exists():
+            df = pd.read_csv(csv)
+            _plot_dimension_reliability(
+                df, dim_plot_dir / "dimension_reliability.pdf", n_runs=20
+            )
+            print(f"dims={dims}: dimension_reliability")
 
     # Cross-validation plots (not per-dims)
     csv = DATA_DIR / "spose_cross_validation.csv"

@@ -18,6 +18,7 @@ from .bounds import (
 from .consensus import (
     EnsembleEmbedding,
     ClusterEmbedding,
+    AlignedConsensus,
 )
 
 # Version is managed in pyproject.toml
@@ -39,4 +40,5 @@ __all__: list[str] = [
     "p_upper_only_k",
     "EnsembleEmbedding",
     "ClusterEmbedding",
+    "AlignedConsensus",
 ]

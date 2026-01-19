@@ -1,8 +1,0 @@
-# @package dataset
-type: graph
-path: ${paths.data_dir}/ppi
-file: STRING_human_adjacency_weighted_nan.npy # TODO we have not created yet...
-normalize: true
-fill_nan: 0.0
-rank_range: [5, 100, 5]
-
