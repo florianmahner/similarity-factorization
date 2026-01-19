@@ -113,3 +113,230 @@ def permutation_test(A, B, permutations=10000, random_state=None, two_sided=True
 
     p_value = (greater + 1) / (permutations + 1)
     return p_value, null_corrs, observed_corr
+
+
+# =============================================================================
+# Restricted Mantel Test (for factorial designs)
+# =============================================================================
+
+
+def _get_stratified_permutation(
+    n: int, strata: np.ndarray, rng: np.random.Generator
+) -> np.ndarray:
+    """Get permutation indices that only shuffle within strata groups.
+
+    Parameters
+    ----------
+    n : int
+        Number of items
+    strata : np.ndarray
+        Array of shape (n, n_other_factors) defining strata membership.
+        Items with identical rows are in the same stratum.
+    rng : np.random.Generator
+        Random number generator
+
+    Returns
+    -------
+    np.ndarray
+        Permutation indices of length n
+    """
+    idx = np.arange(n)
+    unique_strata = np.unique(strata, axis=0)
+    for group in unique_strata:
+        mask = (strata == group).all(axis=1)
+        group_indices = np.where(mask)[0]
+        idx[group_indices] = rng.permutation(group_indices)
+    return idx
+
+
+def mantel_test_restricted(
+    model_rsm: np.ndarray,
+    data_rsm: np.ndarray,
+    strata: np.ndarray,
+    permutations: int = 1000,
+    random_state: int | None = None,
+) -> tuple[float, float, np.ndarray]:
+    """Mantel test with restricted permutation for factorial designs.
+
+    In factorial designs, when testing one factor's effect, we must control
+    for other factors. This is done by only permuting items within strata
+    defined by the levels of the other factors.
+
+    Parameters
+    ----------
+    model_rsm : np.ndarray
+        Hypothesis RSM for the factor being tested (n x n)
+    data_rsm : np.ndarray
+        Observed/measured RSM (n x n)
+    strata : np.ndarray
+        Strata membership array (n x n_other_factors). Items with the same
+        row values are in the same stratum and can be permuted together.
+    permutations : int
+        Number of permutations for null distribution
+    random_state : int | None
+        Random seed for reproducibility
+
+    Returns
+    -------
+    p_value : float
+        One-sided p-value (proportion of null >= observed)
+    r_obs : float
+        Observed correlation
+    r_null : np.ndarray
+        Null distribution of correlations
+    """
+    rng = np.random.default_rng(random_state)
+    n = model_rsm.shape[0]
+
+    idx_upper = np.triu_indices(n, k=1)
+    data_flat = data_rsm[idx_upper]
+    model_flat = model_rsm[idx_upper]
+
+    r_obs = pearsonr(data_flat, model_flat).statistic
+
+    r_null = np.zeros(permutations)
+    for i in range(permutations):
+        perm = _get_stratified_permutation(n, strata, rng)
+        model_perm = model_rsm[perm][:, perm]
+        model_perm_flat = model_perm[idx_upper]
+        r_null[i] = pearsonr(data_flat, model_perm_flat).statistic
+
+    p_value = (np.sum(r_null >= r_obs) + 1) / (permutations + 1)
+    return p_value, r_obs, r_null
+
+
+# =============================================================================
+# LOO Column Alignment Test (for SRF embeddings)
+# =============================================================================
+
+
+def _find_column_permutation(
+    X: np.ndarray, W: np.ndarray
+) -> np.ndarray:
+    """Find optimal column permutation to align W to X via Hungarian algorithm.
+
+    Parameters
+    ----------
+    X : np.ndarray
+        Target matrix (n x k), e.g., one-hot factorial design
+    W : np.ndarray
+        Source matrix (n x k), e.g., SRF embedding
+
+    Returns
+    -------
+    np.ndarray
+        Column indices such that W[:, perm] best aligns with X
+    """
+    from scipy.optimize import linear_sum_assignment
+
+    k = X.shape[1]
+    # Correlation matrix between X columns and W columns
+    # Standardize for correlation
+    X_std = (X - X.mean(0)) / (X.std(0) + 1e-9)
+    W_std = (W - W.mean(0)) / (W.std(0) + 1e-9)
+    corr = (X_std.T @ W_std) / X.shape[0]  # (k x k)
+
+    # Hungarian algorithm to maximize absolute correlation
+    _, col_perm = linear_sum_assignment(-np.abs(corr))
+    return col_perm
+
+
+def loo_alignment(W: np.ndarray, X: np.ndarray) -> np.ndarray:
+    """Leave-one-out column alignment of W to X.
+
+    For each item i, finds the optimal column permutation using only
+    the other N-1 items, then applies that permutation to item i.
+    This prevents overfitting when evaluating alignment quality.
+
+    Parameters
+    ----------
+    W : np.ndarray
+        SRF embedding matrix (n x k)
+    X : np.ndarray
+        Target matrix (n x k), e.g., one-hot factorial design
+
+    Returns
+    -------
+    np.ndarray
+        W with columns permuted using LOO alignment (n x k)
+    """
+    n, k = W.shape
+    W_aligned = np.zeros_like(W)
+
+    for i in range(n):
+        train_mask = np.ones(n, dtype=bool)
+        train_mask[i] = False
+
+        col_perm = _find_column_permutation(X[train_mask], W[train_mask])
+        W_aligned[i] = W[i, col_perm]
+
+    return W_aligned
+
+
+def loo_alignment_test(
+    W: np.ndarray,
+    X: np.ndarray,
+    columns: slice | int | None = None,
+    permutations: int = 1000,
+    random_state: int | None = None,
+) -> tuple[float, float, np.ndarray]:
+    """LOO alignment test for SRF embedding recovery of structure.
+
+    Tests whether the SRF embedding W recovers the structure in X
+    using leave-one-out column alignment to prevent overfitting.
+
+    Works for both:
+    - Factorial designs: X is one-hot, columns=slice for factor groups
+    - SPOSE-style: X is continuous, columns=int for single dimension
+
+    Parameters
+    ----------
+    W : np.ndarray
+        SRF embedding matrix (n x k)
+    X : np.ndarray
+        Target matrix (n x k). Can be one-hot (factorial) or continuous (SPOSE).
+    columns : slice | int | None
+        Which columns to test:
+        - slice: test a group of columns (e.g., slice(0,3) for a factor)
+        - int: test a single column/dimension (e.g., 0 for first dim)
+        - None: test all columns
+    permutations : int
+        Number of permutations for null distribution
+    random_state : int | None
+        Random seed for reproducibility
+
+    Returns
+    -------
+    p_value : float
+        One-sided p-value
+    r_obs : float
+        Observed correlation between aligned W and X
+    r_null : np.ndarray
+        Null distribution
+    """
+    rng = np.random.default_rng(random_state)
+    n = W.shape[0]
+
+    W_aligned = loo_alignment(W, X)
+
+    if columns is not None:
+        if isinstance(columns, int):
+            W_test = W_aligned[:, columns]
+            X_test = X[:, columns]
+        else:
+            W_test = W_aligned[:, columns]
+            X_test = X[:, columns]
+    else:
+        W_test = W_aligned
+        X_test = X
+
+    r_obs = pearsonr(W_test.ravel(), X_test.ravel()).statistic
+
+    r_null = np.zeros(permutations)
+    for i in range(permutations):
+        perm = rng.permutation(n)
+        X_perm = X_test[perm] if X_test.ndim > 1 else X_test[perm]
+        r_null[i] = pearsonr(W_test.ravel(), X_perm.ravel()).statistic
+
+    p_value = (np.sum(r_null >= r_obs) + 1) / (permutations + 1)
+    return p_value, r_obs, r_null
