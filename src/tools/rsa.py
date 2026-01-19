@@ -340,3 +340,76 @@ def loo_alignment_test(
 
     p_value = (np.sum(r_null >= r_obs) + 1) / (permutations + 1)
     return p_value, r_obs, r_null
+
+
+def loo_alignment_test_multi(
+    W: np.ndarray,
+    X: np.ndarray,
+    permutations: int = 1000,
+    alpha: float = 0.05,
+    random_state: int | None = None,
+) -> dict:
+    """LOO alignment test for all dimensions with FDR correction.
+
+    Tests each dimension independently using LOO alignment, then applies
+    FDR (Benjamini-Hochberg) correction for multiple comparisons.
+
+    Parameters
+    ----------
+    W : np.ndarray
+        SRF embedding matrix (n x k)
+    X : np.ndarray
+        Target matrix (n x k), e.g., SPOSE dimensions or factorial design
+    permutations : int
+        Number of permutations per dimension
+    alpha : float
+        Significance level for FDR correction
+    random_state : int | None
+        Random seed for reproducibility
+
+    Returns
+    -------
+    dict with keys:
+        - r_obs: array of observed correlations per dimension
+        - raw_p: array of raw p-values per dimension
+        - corrected_p: array of FDR-corrected p-values
+        - significant: boolean array of significant dimensions
+        - W_aligned: LOO-aligned W matrix
+    """
+    from statsmodels.stats.multitest import multipletests
+
+    rng = np.random.default_rng(random_state)
+    n, k = W.shape
+
+    W_aligned = loo_alignment(W, X)
+
+    raw_ps = []
+    r_obs_all = []
+
+    for dim in range(k):
+        W_dim = W_aligned[:, dim]
+        X_dim = X[:, dim]
+
+        r_obs = pearsonr(W_dim, X_dim).statistic
+        r_obs_all.append(r_obs)
+
+        r_null = np.zeros(permutations)
+        for i in range(permutations):
+            perm = rng.permutation(n)
+            r_null[i] = pearsonr(W_dim, X_dim[perm]).statistic
+
+        p_value = (np.sum(r_null >= r_obs) + 1) / (permutations + 1)
+        raw_ps.append(p_value)
+
+    raw_ps = np.array(raw_ps)
+    r_obs_all = np.array(r_obs_all)
+
+    reject, corrected_ps, _, _ = multipletests(raw_ps, alpha=alpha, method="fdr_bh")
+
+    return {
+        "r_obs": r_obs_all,
+        "raw_p": raw_ps,
+        "corrected_p": corrected_ps,
+        "significant": reject,
+        "W_aligned": W_aligned,
+    }
