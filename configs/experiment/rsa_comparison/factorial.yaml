@@ -1,0 +1,23 @@
+# RSA Comparison: Factorial Design
+
+defaults:
+  - /base
+  - _self_
+
+experiment_name: rsa_comparison
+task: factorial
+
+# === Parameters ===
+n_repeats: 100
+n_permutations: 1000
+alpha: 0.05
+snrs: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+
+levels:
+  animacy: [animate, inanimate]
+  size: [small, medium, large]
+  curvature: [straight, curved]
+  color: [red, blue, green, yellow]
+
+# === Compute ===
+n_jobs: 16

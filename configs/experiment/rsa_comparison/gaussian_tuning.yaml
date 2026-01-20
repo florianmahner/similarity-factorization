@@ -1,0 +1,21 @@
+# RSA Comparison: Gaussian Tuning Simulation
+
+defaults:
+  - /base
+  - _self_
+
+experiment_name: rsa_comparison
+task: gaussian_tuning
+
+# === Parameters ===
+n_objects: 100
+n_dims: 5
+n_neurons_per_dim: 10
+tuning_width: 0.15
+n_repeats: 100
+n_permutations: 1000
+alpha: 0.05
+snrs: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+
+# === Compute ===
+n_jobs: 16

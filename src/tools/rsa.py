@@ -354,6 +354,10 @@ def loo_alignment_test_multi(
     Tests each dimension independently using LOO alignment, then applies
     FDR (Benjamini-Hochberg) correction for multiple comparisons.
 
+    IMPORTANT: The null distribution is computed by re-doing LOO alignment
+    for each permuted X. This is necessary because the alignment step itself
+    introduces selection bias that must be accounted for in the null.
+
     Parameters
     ----------
     W : np.ndarray
@@ -381,28 +385,29 @@ def loo_alignment_test_multi(
     rng = np.random.default_rng(random_state)
     n, k = W.shape
 
+    # Observed: LOO alignment to original X
     W_aligned = loo_alignment(W, X)
 
-    raw_ps = []
-    r_obs_all = []
+    # Compute observed correlations for all dimensions
+    r_obs_all = np.array([
+        pearsonr(W_aligned[:, dim], X[:, dim]).statistic for dim in range(k)
+    ])
 
-    for dim in range(k):
-        W_dim = W_aligned[:, dim]
-        X_dim = X[:, dim]
+    # Compute null distribution by re-aligning for each permutation
+    # This accounts for the selection bias in the alignment step
+    r_null_all = np.zeros((permutations, k))
+    for i in range(permutations):
+        perm = rng.permutation(n)
+        X_perm = X[perm]
+        W_aligned_perm = loo_alignment(W, X_perm)
+        for dim in range(k):
+            r_null_all[i, dim] = pearsonr(W_aligned_perm[:, dim], X_perm[:, dim]).statistic
 
-        r_obs = pearsonr(W_dim, X_dim).statistic
-        r_obs_all.append(r_obs)
-
-        r_null = np.zeros(permutations)
-        for i in range(permutations):
-            perm = rng.permutation(n)
-            r_null[i] = pearsonr(W_dim, X_dim[perm]).statistic
-
-        p_value = (np.sum(r_null >= r_obs) + 1) / (permutations + 1)
-        raw_ps.append(p_value)
-
-    raw_ps = np.array(raw_ps)
-    r_obs_all = np.array(r_obs_all)
+    # Compute p-values (one-sided: testing if r_obs > null)
+    raw_ps = np.array([
+        (np.sum(r_null_all[:, dim] >= r_obs_all[dim]) + 1) / (permutations + 1)
+        for dim in range(k)
+    ])
 
     reject, corrected_ps, _, _ = multipletests(raw_ps, alpha=alpha, method="fdr_bh")
 
