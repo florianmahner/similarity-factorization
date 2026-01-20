@@ -87,15 +87,20 @@ def build_graph(cfg: DictConfig, subject_id: int | None = None) -> np.ndarray:
 def build_word_association(
     cfg: DictConfig, subject_id: int | None = None
 ) -> np.ndarray:
-    """Build PPMI similarity matrix from word association data (SWOW)."""
+    """Build similarity matrix from word association data (SWOW).
+
+    Supports both PPMI (local) and random walk (global) similarity.
+    """
     ds = load_dataset(
         cfg.name,
         root=cfg.get("path"),
+        similarity_method=cfg.get("similarity_method", "ppmi"),
         use_all_responses=cfg.get("use_all_responses", False),
         top_n_words=cfg.get("top_n_words"),
         min_word_length=cfg.get("min_word_length", 1),
-        symmetrization=cfg.get("symmetrization", "geometric_mean"),
+        symmetrization=cfg.get("symmetrization", "sum"),
         bidirectional_only=cfg.get("bidirectional_only", False),
+        alpha=cfg.get("alpha", 0.75),
     )
     return ds.rsm
 

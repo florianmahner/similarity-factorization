@@ -1,0 +1,30 @@
+# @package dataset
+# SWOW Word Association Similarity
+#
+# Supports two similarity measures:
+# - ppmi: Positive Pointwise Mutual Information (local, sparse, fast)
+# - rw: Random Walk / Katz similarity (global, dense, slow but better for sparse data)
+#
+# Reference: De Deyne et al. (2019) "The Small World of Words"
+
+name: swow
+type: word_association
+path: ${paths.data_dir}/small-world-of-words
+
+# Similarity method: 'ppmi' (local) or 'rw' (global random walk)
+similarity_method: rw
+
+# Loading parameters
+use_all_responses: true
+top_n_words: null
+min_word_length: 1
+
+# PPMI-specific parameters
+symmetrization: sum
+bidirectional_only: false
+
+# Random walk parameters (only used when similarity_method: rw)
+alpha: 0.75
+
+bounds_task: swow
+rank_range: [5, 80, 5]

@@ -1,0 +1,19 @@
+# @package dataset
+# THINGS Monkey IT Neural Data (22k images)
+
+name: things-monkey-22k
+type: neural_features
+path: /SSD/fmahner/macaque_florian/22k
+
+# Similarity computation
+similarity_fn: gaussian_kernel
+
+# Loading parameters
+loader_kwargs:
+  monkey_type: "F"
+  roi: "it"
+  min_reliab: 0.3
+
+# Cross-experiment references
+bounds_task: things-monkey-22k
+rank_range: [5, 50, 5]

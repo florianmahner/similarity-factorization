@@ -18,7 +18,7 @@ from .nsd_utils import (
     get_available_subjects,
     load_nsd_data,
 )
-from .swow import load_swow_ppmi
+from .swow import load_swow_ppmi, load_swow_similarity
 
 ndarray = np.ndarray
 
@@ -490,19 +490,23 @@ def load_swow_data_paper_format(data_dir, use_all_responses=True):
 
 def load_swow(
     root: str | None = None,
+    similarity_method: str = "ppmi",
     use_all_responses: bool = False,
     top_n_words: int | None = None,
     min_word_length: int = 1,
-    symmetrization: str = "geometric_mean",
+    symmetrization: str = "sum",
     bidirectional_only: bool = False,
+    alpha: float = 0.75,
 ) -> DatasetResult:
     """
-    Load SWOW word association data as PPMI similarity matrix.
+    Load SWOW word association data as similarity matrix.
 
     Parameters
     ----------
     root : str
         Path to SWOW data directory
+    similarity_method : str
+        Similarity method: 'ppmi' (local) or 'rw' (random walk, global)
     use_all_responses : bool
         If True, use R123 (all responses). If False, use R1 only.
     top_n_words : int | None
@@ -510,27 +514,31 @@ def load_swow(
     min_word_length : int
         Minimum word length filter
     symmetrization : str
-        Method to symmetrize: 'sum', 'mean', 'geometric_mean'
+        Method to symmetrize (PPMI only): 'sum', 'mean', 'geometric_mean'
     bidirectional_only : bool
-        If True, keep only bidirectional edges
+        If True, keep only bidirectional edges (PPMI only)
+    alpha : float
+        Katz walk damping parameter (RW only, default 0.75)
 
     Returns
     -------
     DatasetResult
-        Dataset with PPMI matrix as rsm and vocabulary in metadata
+        Dataset with similarity matrix as rsm and vocabulary in metadata
     """
     root = Path(root)
-    ppmi_matrix, vocabulary, metadata = load_swow_ppmi(
+    similarity, vocabulary, metadata = load_swow_similarity(
         root,
+        method=similarity_method,
         use_all_responses=use_all_responses,
         top_n_words=top_n_words,
         min_word_length=min_word_length,
         symmetrization=symmetrization,
         bidirectional_only=bidirectional_only,
+        alpha=alpha,
     )
     return DatasetResult(
         name="swow",
-        rsm=ppmi_matrix,
+        rsm=similarity,
         metadata={"vocabulary": vocabulary, **metadata},
     )
 

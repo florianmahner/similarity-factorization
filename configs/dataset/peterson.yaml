@@ -1,0 +1,12 @@
+# @package dataset
+# Peterson fMRI dataset - Animals subset (default)
+#
+# For the 'various' subset, use: dataset=peterson_various
+# See also: peterson_animals.yaml, peterson_various.yaml
+
+name: peterson-animals
+type: neural_rsm
+path: /SSD/datasets/similarity_datasets/peterson
+
+bounds_task: peterson-animals
+rank_range: [5, 50, 5]
