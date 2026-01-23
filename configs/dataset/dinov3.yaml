@@ -1,0 +1,8 @@
+# DINOv3 ViT-L features for THINGS+ images (1854 objects)
+name: dinov3
+type: feature_file
+path: ${paths.data_dir}/features/dinov3
+features_file: dinov3_features.npy
+similarity_fn: gaussian_kernel
+bounds_task: dinov3
+rank_range: [5, 100, 5]

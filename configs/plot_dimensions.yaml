@@ -1,0 +1,21 @@
+# Plot Embedding Dimensions
+#
+# Visualize top-k items per dimension for a consensus embedding.
+#
+# Usage:
+#   ./scripts/submit experiments/plot_dimensions.py dataset=mur92
+#   ./scripts/submit experiments/plot_dimensions.py dataset=mur92 k=15
+
+defaults:
+  - /base
+  - /dataset: ???
+  - _self_
+
+experiment_name: plot_dimensions
+task: ${dataset.name}
+
+# Number of top items to show per dimension
+k: 10
+
+# Subject (for multi-subject datasets)
+subject_id: null

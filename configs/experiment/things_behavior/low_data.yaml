@@ -1,0 +1,27 @@
+# THINGS Behavior: Low Data Regime
+
+defaults:
+  - /base
+  - _self_
+
+experiment_name: things_behavior
+task: low_data
+
+# === Sweep ===
+# seed: [0, 1, 2, 3, 4]
+seed: 0
+
+# === Parameters ===
+dims: 66
+n_items: 1854
+percentage: [0.05, 0.10, 0.20, 0.50, 1.0]
+triplet_version: "4.7mio"
+
+# === Compute ===
+n_jobs: 16
+
+# === Paths ===
+dataset_path: ${paths.data_dir}/things
+images_path: /SSD/datasets/things/behav1854
+vice_embedding_path: ${paths.data_dir}/things/vice_embedding_66d.txt
+data_dir: ${paths.output_dir}/experiments/things_behavior/data

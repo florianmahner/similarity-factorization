@@ -1,0 +1,9 @@
+# @package dataset
+# Peterson fMRI dataset - Various objects subset
+
+name: peterson-various
+type: neural_rsm
+path: /SSD/datasets/similarity_datasets/peterson
+
+bounds_task: peterson-various
+rank_range: [1, 20, 1]

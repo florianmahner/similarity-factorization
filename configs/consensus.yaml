@@ -1,0 +1,36 @@
+# Consensus Embedding Generation
+#
+# Generate consensus embeddings using pre-computed optimal rank from estimate_rank.
+#
+# Prerequisites:
+#   Run estimate_rank first to determine optimal rank via CV.
+#
+# Usage:
+#   ./scripts/submit experiments/consensus.py dataset=swow
+#   ./scripts/submit experiments/consensus.py dataset=nsd subject_id=1
+#
+# Outputs:
+#   embedding.npy           - Final consensus embedding
+#   ensemble_embeddings.npy - All run embeddings (for recomputing consensus)
+#   pipeline.joblib         - Full fitted pipeline
+#   summary.json            - Metadata and quality metrics
+
+defaults:
+  - /base
+  - /dataset: ???
+  - _self_
+
+experiment_name: consensus
+task: ${dataset.name}
+
+# === Subject (for multi-subject datasets like NSD) ===
+subject_id: null
+
+# === Consensus parameters ===
+generate:
+  n_stable_runs: 50
+
+# === Compute ===
+common:
+  n_jobs: -1
+  random_state: 42

@@ -1,0 +1,14 @@
+# @package dataset
+# THINGS Behavioral Triplet Similarity
+
+name: things_behavior
+type: triplet
+path: ${paths.data_dir}/things
+
+# Loading parameters
+triplet_number: "4.7mio"
+n_objects: 1854
+
+# Cross-experiment references
+bounds_task: things_behavior  # -> outputs/experiments/bounds/things_behavior/
+rank_range: [5, 100, 5]

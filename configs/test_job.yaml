@@ -1,0 +1,12 @@
+# @package _global_
+defaults:
+  - base
+  - _self_
+
+experiment_name: test_job
+task: test_job
+
+# Test job parameters
+name: test
+total: 20
+interval: 5

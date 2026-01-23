@@ -1,0 +1,9 @@
+# @package dataset
+# Cichy118 fMRI dataset (118 objects, IT cortex, 15 subjects)
+
+name: cichy118
+type: neural_rsm
+path: /SSD/datasets/similarity_datasets/cichy118
+
+bounds_task: cichy118
+rank_range: [5, 50, 5]

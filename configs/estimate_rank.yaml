@@ -1,0 +1,26 @@
+# Estimate Optimal Rank via Cross-Validation
+#
+# Usage:
+#   ./scripts/submit experiments/estimate_rank.py dataset=swow
+#   ./scripts/submit experiments/estimate_rank.py dataset=nsd subject_id=1
+
+defaults:
+  - /base
+  - /dataset: ???
+  - _self_
+
+experiment_name: estimate_rank
+task: ${dataset.name}
+
+# Subject (for multi-subject datasets)
+subject_id: null
+
+# Cross-validation parameters
+cv:
+  n_repeats: 10
+  sampling_selection: "mean"  # min, mean, max
+
+# Compute
+common:
+  n_jobs: 40
+  random_state: 42
