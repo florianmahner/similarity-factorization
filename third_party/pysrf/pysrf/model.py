@@ -589,7 +589,7 @@ class SRF(TransformerMixin, BaseEstimator):
     def _fit_complete_data(self, x: np.ndarray) -> SRF:
         """Fit model with complete data (no missing values)."""
         w = _initialize_w(
-            x, self.rank, self.init, self.random_state, self._observation_mask
+            x, self.rank, self.init, self.random_state, observed_mask=self._observation_mask
         )
         history = defaultdict(list)
 
@@ -651,7 +651,7 @@ class SRF(TransformerMixin, BaseEstimator):
         history = defaultdict(list)
 
         w = _initialize_w(
-            x, self.rank, self.init, self.random_state, self._observation_mask
+            x, self.rank, self.init, self.random_state, observed_mask=self._observation_mask
         )
         lam = np.zeros_like(x)
         x_hat = w @ w.T

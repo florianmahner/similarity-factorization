@@ -136,6 +136,96 @@ def _plot_low_data_accuracy(
     save_figure(fig, output_path)
 
 
+def _plot_lowdata_comparison(
+    df: pd.DataFrame, accuracy_df: pd.DataFrame | None, output_path: Path
+) -> None:
+    """Plot SRF vs VICE accuracy across training data percentages.
+
+    Same style as _plot_low_data_accuracy but with both SRF and VICE curves.
+    """
+    fig, ax = create_figure("single")
+
+    percentages = sorted(df["pct"].unique())
+    x_positions = np.linspace(0, 1, len(percentages))
+
+    # SRF curve
+    srf_df = df[df["model"] == "SRF"]
+    srf_grouped = srf_df.groupby("pct")["val_acc"].agg(["mean", "std"]).reset_index()
+    srf_grouped = srf_grouped.sort_values("pct")
+    ax.errorbar(
+        x_positions,
+        srf_grouped["mean"] * 100,
+        yerr=srf_grouped["std"] * 100,
+        marker="o",
+        markersize=5,
+        color=CMAP[1],
+        capsize=2,
+        capthick=0.8,
+        linewidth=1.2,
+        label="SRF",
+    )
+
+    # VICE curve
+    vice_df = df[df["model"] == "VICE"]
+    vice_grouped = vice_df.groupby("pct")["val_acc"].agg(["mean", "std"]).reset_index()
+    vice_grouped = vice_grouped.sort_values("pct")
+    ax.errorbar(
+        x_positions,
+        vice_grouped["mean"] * 100,
+        yerr=vice_grouped["std"] * 100,
+        marker="o",
+        markersize=5,
+        color=CMAP[0],
+        capsize=2,
+        capthick=0.8,
+        linewidth=1.2,
+        label="VICE",
+    )
+
+    # Reference lines
+    ax.axhline(
+        y=33.33,
+        color=GRAY["light"],
+        linestyle=":",
+        linewidth=1,
+        label="Chance",
+        zorder=0,
+    )
+    ax.axhline(
+        y=66.67,
+        color=GRAY["medium"],
+        linestyle=":",
+        linewidth=1,
+        label="Noise ceiling",
+        zorder=0,
+    )
+
+    # SPoSE baseline (100% data)
+    if accuracy_df is not None:
+        spose_acc = (
+            accuracy_df[accuracy_df["model"] == "SPoSE"]["accuracy"].mean() * 100
+        )
+        ax.axhline(
+            y=spose_acc,
+            color=CMAP[2],
+            linestyle="--",
+            linewidth=1,
+            label="SPoSE",
+            zorder=0,
+        )
+
+    ax.set_ylabel("Accuracy (%)")
+    ax.set_xlabel("Training data (%)")
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels([f"{p:.0f}" for p in percentages])
+    ax.set_ylim(30, 68)
+
+    despine(ax)
+    ax.legend(frameon=False, fontsize=7, loc="lower right", ncol=2)
+
+    save_figure(fig, output_path)
+
+
 def _plot_accuracy_comparison(df: pd.DataFrame, output_path: Path) -> None:
     """Bar plot comparing model accuracy and correlation."""
     df = df.copy()
@@ -448,6 +538,16 @@ def main():
                 df, dim_plot_dir / "dimension_reliability.pdf", n_runs=20
             )
             print(f"dims={dims}: dimension_reliability")
+
+    # Low-data comparison (SRF vs VICE)
+    csv = DATA_DIR / "lowdata_comparison.csv"
+    if csv.exists():
+        df = pd.read_csv(csv)
+        # Load accuracy_comparison for SPoSE baseline (use dims=66)
+        acc_csv = DATA_DIR / "66" / "accuracy_comparison.csv"
+        acc_df = pd.read_csv(acc_csv) if acc_csv.exists() else None
+        _plot_lowdata_comparison(df, acc_df, output_dir / "lowdata_comparison.pdf")
+        print("lowdata_comparison: SRF vs VICE")
 
     # Cross-validation plots (not per-dims)
     csv = DATA_DIR / "spose_cross_validation.csv"

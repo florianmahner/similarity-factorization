@@ -12,6 +12,8 @@ from .cross_validation import (
 from .bounds import (
     estimate_sampling_bounds,
     estimate_sampling_bounds_fast,
+    estimate_sampling_bounds_ultra,
+    precompute_matrix_info,
     pmin_bound,
     p_upper_only_k,
 )
@@ -36,6 +38,8 @@ __all__: list[str] = [
     "create_train_val_split",
     "estimate_sampling_bounds",
     "estimate_sampling_bounds_fast",
+    "estimate_sampling_bounds_ultra",
+    "precompute_matrix_info",
     "pmin_bound",
     "p_upper_only_k",
     "EnsembleEmbedding",

@@ -8,11 +8,12 @@ experiment_name: rsa_comparison
 task: factorial
 
 # === Parameters ===
-n_repeats: 100
+n_repeats: 1000
 n_permutations: 1000
 alpha: 0.05
 snrs: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
 
+# Mixed factor levels (2x3x2x4 = 48 items, 11 columns)
 levels:
   animacy: [animate, inanimate]
   size: [small, medium, large]
@@ -20,4 +21,4 @@ levels:
   color: [red, blue, green, yellow]
 
 # === Compute ===
-n_jobs: 16
+n_jobs: 100

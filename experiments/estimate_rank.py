@@ -33,13 +33,13 @@ def _get_bounds_path(cfg: DictConfig, subject_id: int | None) -> Path:
     bounds_task = cfg.dataset.get("bounds_task", cfg.dataset.name)
     bounds_dir = Path(cfg.project_root) / "outputs" / "experiments" / "bounds" / bounds_task
     if subject_id is not None:
-        new_path = bounds_dir / f"subject_{subject_id}" / "bounds.json"
-        old_path = bounds_dir / f"subj{subject_id:02d}" / "bounds.json"
-        if new_path.exists():
-            return new_path
-        if old_path.exists():
-            return old_path
-        return new_path
+        primary = bounds_dir / f"subj{subject_id:02d}" / "bounds.json"
+        fallback = bounds_dir / f"subject_{subject_id}" / "bounds.json"
+        if primary.exists():
+            return primary
+        if fallback.exists():
+            return fallback
+        return primary
     return bounds_dir / "bounds.json"
 
 
@@ -47,6 +47,9 @@ def run(cfg: DictConfig) -> None:
     """Run cross-validation to estimate optimal rank."""
     subject_id = cfg.get("subject_id")
     output_dir = Path.cwd()
+    if subject_id is not None:
+        output_dir = output_dir / f"subj{subject_id:02d}"
+        output_dir.mkdir(parents=True, exist_ok=True)
 
     # Load similarity matrix
     log.info(f"Building similarity matrix for {cfg.dataset.name}...")

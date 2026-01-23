@@ -5,6 +5,8 @@ from pysrf.bounds import (
     p_upper_only_k,
     estimate_sampling_bounds,
     estimate_sampling_bounds_fast,
+    estimate_sampling_bounds_ultra,
+    precompute_matrix_info,
     lambda_bulk_dyson_raw,
 )
 from pysrf import SRF, cross_val_score
@@ -179,3 +181,56 @@ def test_reconstruction_quality_at_estimated_bounds():
     assert (
         mse_train < 0.1
     ), "Reconstruction should be accurate at estimated sampling rate"
+
+
+def test_precompute_matrix_info():
+    """Test precompute_matrix_info returns valid info."""
+    s = generate_test_matrix(n=30, rank=5)
+    info = precompute_matrix_info(s)
+
+    assert hasattr(info, "eigvals")
+    assert hasattr(info, "fro_norm")
+    assert hasattr(info, "s_norm")
+    assert hasattr(info, "eff_dim")
+    assert hasattr(info, "S_sq")
+    assert hasattr(info, "s2_max")
+    assert len(info.eigvals) == s.shape[0]
+    assert info.fro_norm > 0
+    assert info.s_norm > 0
+    assert info.eff_dim >= 1
+    assert info.S_sq.shape == s.shape
+
+
+def test_estimate_sampling_bounds_ultra():
+    """Test estimate_sampling_bounds_ultra returns valid bounds."""
+    s = generate_test_matrix(n=30, rank=5)
+
+    pmin, pmax, s_noise = estimate_sampling_bounds_ultra(
+        s, verbose=False, random_state=42
+    )
+
+    assert isinstance(pmin, (float, np.floating))
+    assert isinstance(pmax, (float, np.floating))
+    assert isinstance(s_noise, np.ndarray)
+    assert s_noise.shape == s.shape
+    assert 0 <= pmin <= 1
+    assert 0 <= pmax <= 1
+
+
+def test_estimate_sampling_bounds_ultra_equivalence():
+    """Test that ultra function gives similar results to fast function."""
+    s = generate_test_matrix(n=50, rank=5)
+
+    pmin_fast, pmax_fast, _ = estimate_sampling_bounds_fast(
+        s, verbose=False, random_state=42, n_jobs=1
+    )
+    pmin_ultra, pmax_ultra, _ = estimate_sampling_bounds_ultra(
+        s, verbose=False, random_state=42
+    )
+
+    assert np.isclose(pmin_fast, pmin_ultra, rtol=0.1), (
+        f"pmin mismatch: fast={pmin_fast:.4f}, ultra={pmin_ultra:.4f}"
+    )
+    assert np.isclose(pmax_fast, pmax_ultra, rtol=0.1), (
+        f"pmax mismatch: fast={pmax_fast:.4f}, ultra={pmax_ultra:.4f}"
+    )

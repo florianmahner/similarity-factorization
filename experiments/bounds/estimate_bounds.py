@@ -115,7 +115,7 @@ def run(cfg: DictConfig) -> None:
     # Determine output path
     out_dir = Path.cwd()
     if subject_id is not None:
-        out_dir = out_dir / f"subject_{subject_id}"
+        out_dir = out_dir / f"subj{subject_id:02d}"
         out_dir.mkdir(parents=True, exist_ok=True)
 
     with open(out_dir / "bounds.json", "w") as f:

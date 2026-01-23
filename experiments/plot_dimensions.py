@@ -27,10 +27,16 @@ log = logging.getLogger(__name__)
 
 def _get_consensus_path(cfg: DictConfig, subject_id: int | None) -> Path:
     """Get path to consensus outputs."""
-    consensus_dir = Path(cfg.project_root) / "outputs" / "experiments" / "consensus"
-    if subject_id is not None:
-        return consensus_dir / cfg.dataset.name / f"subject_{subject_id}"
-    return consensus_dir / cfg.dataset.name
+    consensus_dir = Path(cfg.project_root) / "outputs" / "experiments" / "consensus" / cfg.dataset.name
+    if subject_id is None:
+        return consensus_dir
+    primary = consensus_dir / f"subj{subject_id:02d}"
+    fallback = consensus_dir / f"subject_{subject_id}"
+    if primary.exists():
+        return primary
+    if fallback.exists():
+        return fallback
+    return primary
 
 
 def _load_embedding(consensus_path: Path) -> np.ndarray:
@@ -41,21 +47,22 @@ def _load_embedding(consensus_path: Path) -> np.ndarray:
     return np.load(embedding_path)
 
 
-def _get_item_labels(dataset) -> list[str]:
+def _get_item_labels(dataset, n_items: int) -> list[str]:
     """Extract item labels from dataset."""
-    if hasattr(dataset, "labels"):
+    if hasattr(dataset, "labels") and dataset.labels is not None:
         return list(dataset.labels)
-    if hasattr(dataset, "metadata") and "images" in dataset.metadata:
-        return [Path(p).stem for p in dataset.metadata["images"]]
-    if hasattr(dataset, "items"):
+    if hasattr(dataset, "items") and dataset.items is not None:
         return list(dataset.items)
-    return [str(i) for i in range(len(dataset.rsm))]
+    return [str(i) for i in range(n_items)]
 
 
-def _get_image_paths(dataset) -> list[Path] | None:
-    """Extract image paths from dataset if available."""
+def _get_images(dataset) -> np.ndarray | list[Path] | None:
+    """Extract images from dataset (as array or paths)."""
     if hasattr(dataset, "metadata") and "images" in dataset.metadata:
-        return [Path(p) for p in dataset.metadata["images"]]
+        imgs = dataset.metadata["images"]
+        if isinstance(imgs, np.ndarray):
+            return imgs
+        return [Path(p) for p in imgs]
     if hasattr(dataset, "image_paths"):
         return [Path(p) for p in dataset.image_paths]
     return None
@@ -94,12 +101,12 @@ def _plot_topk_text(
 def _plot_topk_images(
     output_path: Path,
     embedding: np.ndarray,
-    image_paths: list[Path],
+    images: np.ndarray | list[Path],
     k: int = 10,
-    thumbnail_size: int = 64,
 ) -> None:
     """Plot top-k items per dimension as image grid (dims as rows, items as cols)."""
     n_dims = embedding.shape[1]
+    is_array = isinstance(images, np.ndarray)
 
     fig, axes = plt.subplots(n_dims, k, figsize=(1.2 * k, 1.5 * n_dims))
     if n_dims == 1:
@@ -111,22 +118,112 @@ def _plot_topk_images(
         for col, idx in enumerate(top_idx):
             ax = axes[dim, col]
 
-            img_path = image_paths[idx]
-            if img_path.exists():
-                img = Image.open(img_path).convert("RGB")
-                img.thumbnail((thumbnail_size * 2, thumbnail_size * 2))
-                ax.imshow(img)
+            if is_array:
+                ax.imshow(images[idx])
             else:
-                ax.text(0.5, 0.5, img_path.stem, ha="center", va="center", fontsize=6)
+                img_path = images[idx]
+                if img_path.exists():
+                    img = Image.open(img_path).convert("RGB")
+                    ax.imshow(img)
+                else:
+                    ax.text(0.5, 0.5, img_path.stem, ha="center", va="center", fontsize=6)
 
             ax.axis("off")
 
-        # Label dimension on the left
         axes[dim, 0].set_ylabel(f"D{dim + 1}", fontsize=10, fontweight="bold", rotation=0, labelpad=20, va="center")
 
     plt.tight_layout()
     save_figure(fig, output_path)
     plt.close(fig)
+
+
+def _plot_single_dimension_images(
+    output_dir: Path,
+    dim: int,
+    embedding: np.ndarray,
+    images: np.ndarray | list[Path],
+    labels: list[str] | None = None,
+    k: int = 10,
+) -> None:
+    """Plot a single dimension as a square grid of top-k images."""
+    is_array = isinstance(images, np.ndarray)
+    top_idx = np.argsort(embedding[:, dim])[::-1][:k]
+
+    # Square grid
+    n_cols = int(np.ceil(np.sqrt(k)))
+    n_rows = int(np.ceil(k / n_cols))
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(1.5 * n_cols, 1.5 * n_rows))
+    axes = np.atleast_2d(axes)
+
+    for i, idx in enumerate(top_idx):
+        row, col = i // n_cols, i % n_cols
+        ax = axes[row, col]
+
+        if is_array:
+            ax.imshow(images[idx])
+        else:
+            img_path = images[idx]
+            if img_path.exists():
+                img = Image.open(img_path).convert("RGB")
+                ax.imshow(img)
+            else:
+                ax.text(0.5, 0.5, "?", ha="center", va="center", fontsize=12)
+        ax.axis("off")
+
+    # Hide unused axes
+    for i in range(k, n_rows * n_cols):
+        row, col = i // n_cols, i % n_cols
+        axes[row, col].axis("off")
+
+    fig.suptitle(f"Dimension {dim + 1}", fontsize=12, fontweight="bold", y=1.02)
+    plt.subplots_adjust(wspace=0.05, hspace=0.05)
+    fig.savefig(output_dir / f"dim_{dim + 1:02d}.png", dpi=150, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+
+
+def _plot_single_dimension_text(
+    output_dir: Path,
+    dim: int,
+    embedding: np.ndarray,
+    labels: list[str],
+    k: int = 10,
+) -> None:
+    """Plot a single dimension as horizontal bar chart."""
+    top_idx = np.argsort(embedding[:, dim])[::-1][:k]
+    top_labels = [labels[i] for i in top_idx]
+    top_values = embedding[top_idx, dim]
+
+    fig, ax = plt.subplots(figsize=(6, 0.4 * k + 1))
+    ax.barh(range(k), top_values[::-1], color=CMAP[dim % len(CMAP)])
+    ax.set_yticks(range(k))
+    ax.set_yticklabels(top_labels[::-1], fontsize=10)
+    ax.set_xlabel("Loading")
+    ax.set_title(f"Dimension {dim + 1}", fontsize=12, fontweight="bold")
+    despine(ax)
+
+    plt.tight_layout()
+    fig.savefig(output_dir / f"dim_{dim + 1:02d}.png", dpi=150, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+
+
+def _plot_individual_dimensions(
+    output_dir: Path,
+    embedding: np.ndarray,
+    images: np.ndarray | list[Path] | None,
+    labels: list[str],
+    k: int = 10,
+) -> None:
+    """Plot each dimension separately in a dims/ subfolder."""
+    dims_dir = output_dir / "dims"
+    dims_dir.mkdir(exist_ok=True)
+
+    n_dims = embedding.shape[1]
+    for dim in range(n_dims):
+        if images is not None:
+            _plot_single_dimension_images(dims_dir, dim, embedding, images, k=k)
+        else:
+            _plot_single_dimension_text(dims_dir, dim, embedding, labels, k=k)
 
 
 def run(cfg: DictConfig) -> None:
@@ -143,17 +240,25 @@ def run(cfg: DictConfig) -> None:
 
     # Load dataset for labels/images
     log.info(f"Loading dataset {cfg.dataset.name}...")
-    dataset = load_dataset(cfg.dataset.name, root=cfg.dataset.get("path"))
+    load_kwargs = {"root": cfg.dataset.get("path")}
+    if subject_id is not None:
+        load_kwargs["subject_id"] = subject_id
+    dataset = load_dataset(cfg.dataset.name, **load_kwargs)
 
-    labels = _get_item_labels(dataset)
-    image_paths = _get_image_paths(dataset)
+    n_items = embedding.shape[0]
+    labels = _get_item_labels(dataset, n_items)
+    images = _get_images(dataset)
 
-    # Plot
-    if image_paths is not None:
-        log.info(f"Plotting top-{k} images per dimension...")
-        _plot_topk_images(output_dir / "topk_images.pdf", embedding, image_paths, k=k)
+    # Plot combined view
+    if images is not None:
+        log.info(f"Plotting top-{k} images per dimension (combined)...")
+        _plot_topk_images(output_dir / "topk_images.pdf", embedding, images, k=k)
     else:
-        log.info(f"Plotting top-{k} labels per dimension...")
+        log.info(f"Plotting top-{k} labels per dimension (combined)...")
         _plot_topk_text(output_dir / "topk_items.pdf", embedding, labels, k=k)
+
+    # Plot individual dimensions
+    log.info(f"Plotting individual dimensions to dims/...")
+    _plot_individual_dimensions(output_dir, embedding, images, labels, k=k)
 
     log.info(f"Results saved to {output_dir}")

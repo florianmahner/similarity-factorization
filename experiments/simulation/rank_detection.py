@@ -28,6 +28,25 @@ from utils.simulation import simulation_dirichlet
 log = logging.getLogger(__name__)
 
 
+def _preflight_check() -> None:
+    """Verify critical imports work before spawning workers.
+
+    Catches corrupted .so files early rather than failing mid-job.
+    """
+    try:
+        import scipy.linalg
+        import sklearn.base
+        from pysrf import SRF
+
+        # Quick sanity check that scipy actually works
+        scipy.linalg.norm([1, 2, 3])
+    except Exception as e:
+        raise RuntimeError(
+            f"Pre-flight check failed: {e}\n"
+            "This usually means a corrupted package. Try: poetry run pip install --force-reinstall scipy"
+        ) from e
+
+
 # =============================================================================
 # Alternative rank selection methods
 # =============================================================================
@@ -348,6 +367,7 @@ def run(cfg: DictConfig) -> None:
     """Run rank detection analysis task with incremental saving."""
     import os
 
+    _preflight_check()
     log.info(f"Running rank detection analysis: n={cfg.n}")
     log.info(f"True ranks: {list(cfg.true_ranks)}")
     log.info(f"Alphas: {list(cfg.get('alphas', [1.0]))}")
@@ -356,6 +376,8 @@ def run(cfg: DictConfig) -> None:
 
     output_dir = Path(cfg.data_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    if not output_dir.exists():
+        raise RuntimeError(f"Failed to create output directory: {output_dir}")
     csv_path = output_dir / "rank_detection.csv"
     log.info(f"Outputs: {output_dir}")
 
@@ -410,6 +432,7 @@ def run(cfg: DictConfig) -> None:
         records.append(record)
 
         # Save incrementally after each condition
+        output_dir.mkdir(parents=True, exist_ok=True)  # Re-ensure directory exists (NFS flakiness)
         df = pd.DataFrame(records)
         df.to_csv(csv_path, index=False)
         log.info(f"Saved progress: {len(records)} conditions completed")

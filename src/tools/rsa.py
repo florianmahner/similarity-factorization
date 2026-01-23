@@ -1,13 +1,25 @@
 #!/usr/bin/env python3
+"""RSA and alignment tests for similarity analysis."""
 
 import numpy as np
-
 from numba import njit, prange
-from .metrics import compute_similarity, compute_distance
-from .stats import compute_correlation_coeff
 from scipy.stats import pearsonr
 
+from .metrics import compute_similarity, compute_distance
+from .stats import compute_correlation_coeff
+
 Array = np.ndarray
+
+
+def _correlation(a: np.ndarray, b: np.ndarray, two_sided: bool = True) -> float:
+    """Pearson correlation, absolute if two_sided."""
+    r = pearsonr(a, b).statistic
+    return np.abs(r) if two_sided else r
+
+
+def _pvalue(obs: float, null: np.ndarray) -> float:
+    """Permutation p-value."""
+    return (np.sum(null >= obs) + 1) / (len(null) + 1)
 
 
 def compute_rdm(x: Array, metric: str = "pearson") -> Array:
@@ -21,19 +33,15 @@ def compute_rsm(x: Array, metric: str = "pearson") -> Array:
 def correlate_rsms(
     x: Array, y: Array, corr_type: str = "pearson", return_pval: bool = False
 ) -> float | tuple[float, float]:
-    """Correlate the upper triangular parts of two rsms."""
+    """Correlate upper triangular parts of two RSMs."""
     if corr_type not in ["pearson", "spearman"]:
         raise ValueError("Correlation must be 'pearson' or 'spearman'")
 
-    x = x.copy()
-    y = y.copy()
+    x, y = x.copy(), y.copy()
     np.fill_diagonal(x, 1)
     np.fill_diagonal(y, 1)
-    triu_inds = np.triu_indices(len(x), k=1)
-    x_triu = x[triu_inds]
-    y_triu = y[triu_inds]
-    corr, p = compute_correlation_coeff(x_triu, y_triu, corr_type)
-
+    idx = np.triu_indices(len(x), k=1)
+    corr, p = compute_correlation_coeff(x[idx], y[idx], corr_type)
     return (corr, p) if return_pval else corr
 
 
@@ -51,6 +59,7 @@ def matmul(x: Array, y: Array) -> Array:
 
 @njit(parallel=True, fastmath=True)
 def reconstruct_rsm(w: Array) -> Array:
+    """Reconstruct RSM from embedding using softmax normalization."""
     n = len(w)
     s = matmul(w, w.T)
     s_e = np.exp(s)
@@ -60,92 +69,59 @@ def reconstruct_rsm(w: Array) -> Array:
             for k in prange(n):
                 if k != i and k != j:
                     rsm[i, j] += s_e[i, j] / (s_e[i, j] + s_e[i, k] + s_e[j, k])
-
     rsm /= n - 2
     rsm += rsm.T
     np.fill_diagonal(rsm, 1)
     return rsm
 
 
-def mantel_test(A, B, permutations=10000, random_state=None, two_sided=False):
-    """Mantel test for correlation between two distance/similarity matrices."""
-    if random_state is not None:
-        np.random.seed(random_state)
+def mantel_test(
+    a: np.ndarray,
+    b: np.ndarray,
+    permutations: int = 1000,
+    two_sided: bool = True,
+    random_state: int | None = None,
+) -> tuple[float, np.ndarray, float]:
+    """Mantel test for RSM correlation."""
+    rng = np.random.default_rng(random_state)
+    idx = np.triu_indices_from(a, k=1)
+    a_flat, b_flat = a[idx], b[idx]
 
-    idx_upper = np.triu_indices_from(A, k=1)
-    sim1, sim2 = A[idx_upper], B[idx_upper]
-    obs = (
-        np.abs(pearsonr(sim1, sim2).statistic)
-        if two_sided
-        else pearsonr(sim1, sim2).statistic
-    )
+    r_obs = _correlation(a_flat, b_flat, two_sided)
 
-    nulls = np.zeros(permutations)
+    null = np.zeros(permutations)
     for i in range(permutations):
-        perm = np.random.permutation(B.shape[0])
-        Bp = B[perm][:, perm]
-        sc = pearsonr(sim1, Bp[idx_upper]).statistic
-        nulls[i] = np.abs(sc) if two_sided else sc
+        perm = rng.permutation(b.shape[0])
+        null[i] = _correlation(a_flat, b[perm][:, perm][idx], two_sided)
 
-    p_value = (np.sum(nulls >= obs) + 1) / (permutations + 1)
-    return p_value, nulls, obs
+    return _pvalue(r_obs, null), null, r_obs
 
 
-def permutation_test(A, B, permutations=10000, random_state=None, two_sided=True):
-    """Permutation test for correlation between two vectors."""
-    if random_state is not None:
-        np.random.seed(random_state)
+def permutation_test(
+    a: np.ndarray,
+    b: np.ndarray,
+    permutations: int = 1000,
+    two_sided: bool = True,
+    random_state: int | None = None,
+) -> tuple[float, np.ndarray, float]:
+    """Permutation test for vector correlation."""
+    rng = np.random.default_rng(random_state)
+    r_obs = _correlation(a, b, two_sided)
 
-    observed_corr = pearsonr(A, B).statistic
-    if two_sided:
-        observed_corr = np.abs(observed_corr)
-
-    greater = 0
-    null_corrs = np.zeros(permutations)
+    null = np.zeros(permutations)
     for i in range(permutations):
-        perm = np.random.permutation(B)
-        perm_corr = pearsonr(A, perm).statistic
-        if two_sided:
-            perm_corr = np.abs(perm_corr)
-        if perm_corr >= observed_corr:
-            greater += 1
-        null_corrs[i] = perm_corr
+        null[i] = _correlation(a, rng.permutation(b), two_sided)
 
-    p_value = (greater + 1) / (permutations + 1)
-    return p_value, null_corrs, observed_corr
+    return _pvalue(r_obs, null), null, r_obs
 
 
-# =============================================================================
-# Restricted Mantel Test (for factorial designs)
-# =============================================================================
-
-
-def _get_stratified_permutation(
-    n: int, strata: np.ndarray, rng: np.random.Generator
-) -> np.ndarray:
-    """Get permutation indices that only shuffle within strata groups.
-
-    Parameters
-    ----------
-    n : int
-        Number of items
-    strata : np.ndarray
-        Array of shape (n, n_other_factors) defining strata membership.
-        Items with identical rows are in the same stratum.
-    rng : np.random.Generator
-        Random number generator
-
-    Returns
-    -------
-    np.ndarray
-        Permutation indices of length n
-    """
+def _get_stratified_permutation(n: int, strata: np.ndarray, rng) -> np.ndarray:
+    """Permute only within strata groups."""
     idx = np.arange(n)
-    unique_strata = np.unique(strata, axis=0)
-    for group in unique_strata:
+    for group in np.unique(strata, axis=0):
         mask = (strata == group).all(axis=1)
-        group_indices = np.where(mask)[0]
-        idx[group_indices] = rng.permutation(group_indices)
+        group_idx = np.where(mask)[0]
+        idx[group_idx] = rng.permutation(group_idx)
     return idx
 
 
@@ -156,265 +132,138 @@ def mantel_test_restricted(
     permutations: int = 1000,
     random_state: int | None = None,
 ) -> tuple[float, float, np.ndarray]:
-    """Mantel test with restricted permutation for factorial designs.
-
-    In factorial designs, when testing one factor's effect, we must control
-    for other factors. This is done by only permuting items within strata
-    defined by the levels of the other factors.
-
-    Parameters
-    ----------
-    model_rsm : np.ndarray
-        Hypothesis RSM for the factor being tested (n x n)
-    data_rsm : np.ndarray
-        Observed/measured RSM (n x n)
-    strata : np.ndarray
-        Strata membership array (n x n_other_factors). Items with the same
-        row values are in the same stratum and can be permuted together.
-    permutations : int
-        Number of permutations for null distribution
-    random_state : int | None
-        Random seed for reproducibility
-
-    Returns
-    -------
-    p_value : float
-        One-sided p-value (proportion of null >= observed)
-    r_obs : float
-        Observed correlation
-    r_null : np.ndarray
-        Null distribution of correlations
-    """
+    """Mantel test with restricted permutation within strata."""
     rng = np.random.default_rng(random_state)
     n = model_rsm.shape[0]
+    idx = np.triu_indices(n, k=1)
 
-    idx_upper = np.triu_indices(n, k=1)
-    data_flat = data_rsm[idx_upper]
-    model_flat = model_rsm[idx_upper]
-
-    r_obs = pearsonr(data_flat, model_flat).statistic
+    r_obs = pearsonr(data_rsm[idx], model_rsm[idx]).statistic
 
     r_null = np.zeros(permutations)
     for i in range(permutations):
         perm = _get_stratified_permutation(n, strata, rng)
-        model_perm = model_rsm[perm][:, perm]
-        model_perm_flat = model_perm[idx_upper]
-        r_null[i] = pearsonr(data_flat, model_perm_flat).statistic
+        r_null[i] = pearsonr(data_rsm[idx], model_rsm[perm][:, perm][idx]).statistic
 
-    p_value = (np.sum(r_null >= r_obs) + 1) / (permutations + 1)
-    return p_value, r_obs, r_null
+    return _pvalue(r_obs, r_null), r_obs, r_null
 
 
-# =============================================================================
-# LOO Column Alignment Test (for SRF embeddings)
-# =============================================================================
+def rsa_test(
+    x: np.ndarray,
+    s: np.ndarray,
+    two_sided: bool = True,
+    permutations: int = 1000,
+    alpha: float = 0.05,
+    fdr: bool = True,
+    random_state: int | None = None,
+) -> dict:
+    """RSA test for each column of x against similarity matrix s.
 
-
-def _find_column_permutation(
-    X: np.ndarray, W: np.ndarray
-) -> np.ndarray:
-    """Find optimal column permutation to align W to X via Hungarian algorithm.
-
-    Parameters
-    ----------
-    X : np.ndarray
-        Target matrix (n x k), e.g., one-hot factorial design
-    W : np.ndarray
-        Source matrix (n x k), e.g., SRF embedding
-
-    Returns
-    -------
-    np.ndarray
-        Column indices such that W[:, perm] best aligns with X
+    Returns dict with: r_obs, raw_p, corrected_p (if fdr), significant (if fdr)
     """
+    k = x.shape[1]
+    r_obs = np.zeros(k)
+    raw_p = np.zeros(k)
+
+    for i in range(k):
+        h = x[:, [i]] @ x[:, [i]].T
+        seed = random_state + i if random_state is not None else None
+        raw_p[i], _, r_obs[i] = mantel_test(h, s, permutations=permutations, two_sided=two_sided, random_state=seed)
+
+    result = {"r_obs": r_obs, "raw_p": raw_p}
+
+    if fdr:
+        from statsmodels.stats.multitest import multipletests
+        reject, corrected_p, _, _ = multipletests(raw_p, alpha=alpha, method="fdr_bh")
+        result["corrected_p"] = corrected_p
+        result["significant"] = reject
+
+    return result
+
+
+def _find_column_permutation(x: np.ndarray, w: np.ndarray) -> np.ndarray:
+    """Hungarian algorithm to align w columns to x using signed correlation."""
     from scipy.optimize import linear_sum_assignment
 
-    k = X.shape[1]
-    # Correlation matrix between X columns and W columns
-    # Standardize for correlation
-    X_std = (X - X.mean(0)) / (X.std(0) + 1e-9)
-    W_std = (W - W.mean(0)) / (W.std(0) + 1e-9)
-    corr = (X_std.T @ W_std) / X.shape[0]  # (k x k)
-
-    # Hungarian algorithm to maximize absolute correlation
-    _, col_perm = linear_sum_assignment(-np.abs(corr))
+    k = x.shape[1]
+    # Vectorized correlation: corrcoef returns (2k x 2k), we want top-right block
+    combined = np.corrcoef(x.T, w.T)
+    corr = combined[:k, k:]
+    _, col_perm = linear_sum_assignment(-corr)
     return col_perm
 
 
-def loo_alignment(W: np.ndarray, X: np.ndarray) -> np.ndarray:
-    """Leave-one-out column alignment of W to X.
+def global_alignment(w: np.ndarray, x: np.ndarray) -> np.ndarray:
+    """Align w to x using all data."""
+    return w[:, _find_column_permutation(x, w)]
 
-    For each item i, finds the optimal column permutation using only
-    the other N-1 items, then applies that permutation to item i.
-    This prevents overfitting when evaluating alignment quality.
 
-    Parameters
-    ----------
-    W : np.ndarray
-        SRF embedding matrix (n x k)
-    X : np.ndarray
-        Target matrix (n x k), e.g., one-hot factorial design
-
-    Returns
-    -------
-    np.ndarray
-        W with columns permuted using LOO alignment (n x k)
-    """
-    n, k = W.shape
-    W_aligned = np.zeros_like(W)
-
+def loo_alignment(w: np.ndarray, x: np.ndarray) -> np.ndarray:
+    """Leave-one-out alignment (unbiased)."""
+    n = w.shape[0]
+    w_aligned = np.zeros_like(w)
     for i in range(n):
-        train_mask = np.ones(n, dtype=bool)
-        train_mask[i] = False
-
-        col_perm = _find_column_permutation(X[train_mask], W[train_mask])
-        W_aligned[i] = W[i, col_perm]
-
-    return W_aligned
+        mask = np.ones(n, dtype=bool)
+        mask[i] = False
+        perm = _find_column_permutation(x[mask], w[mask])
+        w_aligned[i] = w[i, perm]
+    return w_aligned
 
 
-def loo_alignment_test(
-    W: np.ndarray,
-    X: np.ndarray,
-    columns: slice | int | None = None,
-    permutations: int = 1000,
-    random_state: int | None = None,
-) -> tuple[float, float, np.ndarray]:
-    """LOO alignment test for SRF embedding recovery of structure.
-
-    Tests whether the SRF embedding W recovers the structure in X
-    using leave-one-out column alignment to prevent overfitting.
-
-    Works for both:
-    - Factorial designs: X is one-hot, columns=slice for factor groups
-    - SPOSE-style: X is continuous, columns=int for single dimension
-
-    Parameters
-    ----------
-    W : np.ndarray
-        SRF embedding matrix (n x k)
-    X : np.ndarray
-        Target matrix (n x k). Can be one-hot (factorial) or continuous (SPOSE).
-    columns : slice | int | None
-        Which columns to test:
-        - slice: test a group of columns (e.g., slice(0,3) for a factor)
-        - int: test a single column/dimension (e.g., 0 for first dim)
-        - None: test all columns
-    permutations : int
-        Number of permutations for null distribution
-    random_state : int | None
-        Random seed for reproducibility
-
-    Returns
-    -------
-    p_value : float
-        One-sided p-value
-    r_obs : float
-        Observed correlation between aligned W and X
-    r_null : np.ndarray
-        Null distribution
-    """
-    rng = np.random.default_rng(random_state)
-    n = W.shape[0]
-
-    W_aligned = loo_alignment(W, X)
-
-    if columns is not None:
-        if isinstance(columns, int):
-            W_test = W_aligned[:, columns]
-            X_test = X[:, columns]
-        else:
-            W_test = W_aligned[:, columns]
-            X_test = X[:, columns]
-    else:
-        W_test = W_aligned
-        X_test = X
-
-    r_obs = pearsonr(W_test.ravel(), X_test.ravel()).statistic
-
-    r_null = np.zeros(permutations)
-    for i in range(permutations):
-        perm = rng.permutation(n)
-        X_perm = X_test[perm] if X_test.ndim > 1 else X_test[perm]
-        r_null[i] = pearsonr(W_test.ravel(), X_perm.ravel()).statistic
-
-    p_value = (np.sum(r_null >= r_obs) + 1) / (permutations + 1)
-    return p_value, r_obs, r_null
-
-
-def loo_alignment_test_multi(
-    W: np.ndarray,
-    X: np.ndarray,
+def alignment_test(
+    w: np.ndarray,
+    x: np.ndarray,
+    alignment: str = "global",
+    two_sided: bool = True,
     permutations: int = 1000,
     alpha: float = 0.05,
+    fdr: bool = True,
     random_state: int | None = None,
 ) -> dict:
-    """LOO alignment test for all dimensions with FDR correction.
+    """Test SRF embedding recovery of latent structure.
 
-    Tests each dimension independently using LOO alignment, then applies
-    FDR (Benjamini-Hochberg) correction for multiple comparisons.
-
-    IMPORTANT: The null distribution is computed by re-doing LOO alignment
-    for each permuted X. This is necessary because the alignment step itself
-    introduces selection bias that must be accounted for in the null.
-
-    Parameters
-    ----------
-    W : np.ndarray
-        SRF embedding matrix (n x k)
-    X : np.ndarray
-        Target matrix (n x k), e.g., SPOSE dimensions or factorial design
-    permutations : int
-        Number of permutations per dimension
-    alpha : float
-        Significance level for FDR correction
-    random_state : int | None
-        Random seed for reproducibility
-
-    Returns
-    -------
-    dict with keys:
-        - r_obs: array of observed correlations per dimension
-        - raw_p: array of raw p-values per dimension
-        - corrected_p: array of FDR-corrected p-values
-        - significant: boolean array of significant dimensions
-        - W_aligned: LOO-aligned W matrix
+    Returns dict with: r_obs, raw_p, corrected_p (if fdr), significant (if fdr), w_aligned
     """
-    from statsmodels.stats.multitest import multipletests
-
     rng = np.random.default_rng(random_state)
-    n, k = W.shape
+    n, k = w.shape
+    align_fn = global_alignment if alignment == "global" else loo_alignment
 
-    # Observed: LOO alignment to original X
-    W_aligned = loo_alignment(W, X)
+    w_aligned = align_fn(w, x)
+    r_obs = np.array([_correlation(w_aligned[:, d], x[:, d], two_sided) for d in range(k)])
 
-    # Compute observed correlations for all dimensions
-    r_obs_all = np.array([
-        pearsonr(W_aligned[:, dim], X[:, dim]).statistic for dim in range(k)
-    ])
-
-    # Compute null distribution by re-aligning for each permutation
-    # This accounts for the selection bias in the alignment step
-    r_null_all = np.zeros((permutations, k))
+    # Null distribution
+    r_null = np.zeros((permutations, k))
     for i in range(permutations):
         perm = rng.permutation(n)
-        X_perm = X[perm]
-        W_aligned_perm = loo_alignment(W, X_perm)
-        for dim in range(k):
-            r_null_all[i, dim] = pearsonr(W_aligned_perm[:, dim], X_perm[:, dim]).statistic
+        x_perm = x[perm]
+        w_perm = align_fn(w, x_perm)
+        for d in range(k):
+            r_null[i, d] = _correlation(w_perm[:, d], x_perm[:, d], two_sided)
 
-    # Compute p-values (one-sided: testing if r_obs > null)
-    raw_ps = np.array([
-        (np.sum(r_null_all[:, dim] >= r_obs_all[dim]) + 1) / (permutations + 1)
-        for dim in range(k)
-    ])
+    raw_p = np.array([_pvalue(r_obs[d], r_null[:, d]) for d in range(k)])
+    result = {"r_obs": r_obs, "raw_p": raw_p, "w_aligned": w_aligned}
 
-    reject, corrected_ps, _, _ = multipletests(raw_ps, alpha=alpha, method="fdr_bh")
+    if fdr:
+        from statsmodels.stats.multitest import multipletests
+        reject, corrected_p, _, _ = multipletests(raw_p, alpha=alpha, method="fdr_bh")
+        result["corrected_p"] = corrected_p
+        result["significant"] = reject
 
-    return {
-        "r_obs": r_obs_all,
-        "raw_p": raw_ps,
-        "corrected_p": corrected_ps,
-        "significant": reject,
-        "W_aligned": W_aligned,
-    }
+    return result
+
+
+# Legacy aliases
+def loo_alignment_test_multi(w, x, permutations=1000, alpha=0.05, random_state=None):
+    return alignment_test(
+        w, x, "loo", permutations=permutations, alpha=alpha, random_state=random_state
+    )
+
+
+def global_alignment_test_multi(w, x, permutations=1000, alpha=0.05, random_state=None):
+    return alignment_test(
+        w,
+        x,
+        "global",
+        permutations=permutations,
+        alpha=alpha,
+        random_state=random_state,
+    )

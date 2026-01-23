@@ -1,44 +1,44 @@
-[tool.poetry]
+[project]
 name = "pysrf"
 version = "0.1.0"
 description = "Similarity-based Representation Factorization (SRF) for modeling representations"
-authors = ["Florian Mahner <florian.mahner@icloud.com>"]
+authors = [{name = "Florian Mahner", email = "florian.mahner@icloud.com"}]
 readme = "README.md"
-license = "MIT"
-repository = "https://github.com/fmahner/pysrf"
+license = {text = "MIT"}
+requires-python = ">=3.10"
 keywords = ["matrix-factorization", "representation-learning", "similarity", "nmf"]
-packages = [{include = "pysrf"}]
+dependencies = [
+    "numpy>=1.23,<3.0",
+    "scikit-learn>=1.3,<2.0",
+    "scipy>=1.13,<2.0",
+    "pandas>=2.0",
+    "joblib>=1.0",
+]
 
-[tool.poetry.dependencies]
-python = "^3.10"
-numpy = ">=1.23,<3.0"
-scikit-learn = ">=1.3,<2.0"
-scipy = ">=1.13,<2.0"
-pandas = "^2.0"
-joblib = "^1.0"
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^7.0"
-pytest-cov = "^4.0"
-black = "^23.0"
-ruff = "^0.1"
-cython = "^3.0"
-mkdocs = "^1.5"
-mkdocs-material = "^9.5"
-mkdocstrings = {extras = ["python"], version = "^0.24"}
-mkdocs-autorefs = "^0.5"
-mkdocstrings-python = "^1.7"
-griffe = "^0.44"
-ipykernel = "^6.30.1"
-
-[tool.poetry.scripts]
-pysrf-compile = "build:main"
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "black>=23.0",
+    "ruff>=0.1",
+    "cython>=3.0",
+    "mkdocs>=1.5",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.24",
+    "mkdocs-autorefs>=0.5",
+    "mkdocstrings-python>=1.7",
+    "griffe>=0.44",
+    "ipykernel>=6.30.1",
+]
 
 [build-system]
-requires = ["poetry-core>=1.0.0", "setuptools>=61", "cython>=3.0", "numpy>=1.23"]
-build-backend = "poetry.core.masonry.api"
+requires = ["setuptools>=61", "wheel", "cython>=3.0", "numpy>=1.23"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pysrf*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-

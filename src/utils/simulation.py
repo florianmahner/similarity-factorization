@@ -145,6 +145,62 @@ def generate_tuning_simulation(
     }
 
 
+def generate_embedding_simulation(
+    n_objects: int = 100,
+    n_dims: int = 10,
+    sparsity: float = 0.5,
+    snr: float = 1.0,
+    rng: Generator | int | None = None,
+) -> dict:
+    """Generate simulation with direct embedding (like SPOSE).
+
+    Ground truth X is a sparse positive embedding. Similarity S = X @ X.T.
+    This matches what SRF assumes, so W should recover X directly.
+
+    Parameters
+    ----------
+    n_objects : int
+        Number of stimuli.
+    n_dims : int
+        Number of latent dimensions.
+    sparsity : float
+        Fraction of zeros in the embedding (0 = dense, 1 = all zeros).
+    snr : float
+        Signal-to-noise ratio (1.0 = no noise).
+    rng : Generator | int | None
+        Random number generator or seed.
+
+    Returns
+    -------
+    dict with keys:
+        - embedding: (n_objects, n_dims) ground truth embedding
+        - similarity: (n_objects, n_objects) similarity matrix
+    """
+    from src.utils.helpers import add_positive_noise_with_snr
+
+    rng = rng if isinstance(rng, Generator) else np.random.default_rng(rng)
+
+    # Generate sparse positive embedding (like SPOSE)
+    X = np.abs(rng.standard_normal((n_objects, n_dims)))
+    if sparsity > 0:
+        mask = rng.random((n_objects, n_dims)) > sparsity
+        X = X * mask
+
+    # Add noise
+    if snr < 1.0:
+        X_noisy = add_positive_noise_with_snr(X, snr, rng)
+    else:
+        X_noisy = X
+
+    # Similarity from noisy embedding
+    S = X_noisy @ X_noisy.T
+
+    return {
+        "embedding": X,  # Ground truth (noiseless)
+        "similarity": S,
+    }
+
+
 # =============================================================================
 # Original simulation functions
 # =============================================================================

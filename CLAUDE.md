@@ -17,6 +17,19 @@ poetry run python sandbox/simulation/example/run.py  # ❌ FORBIDDEN
 
 This ensures proper job tracking, logging, and output directory management.
 
+## CRITICAL: Third-Party Code
+
+**NEVER modify files in `third_party/` without explicit user approval.** This includes `pysrf`, `OpenNE`, and any other third-party dependencies. Always ask before making changes to these directories.
+
+## CRITICAL: Testing Code
+
+**Always test code in sandbox scripts, not in interactive one-liners.** Create a sandbox script (e.g., `sandbox/<domain>/<name>/run.py`) for any non-trivial testing or exploration. This allows:
+- Reuse and iteration on the code
+- Proper logging and output management
+- Easy cleanup if not needed
+
+Only use `poetry run python -c "..."` for trivial checks (e.g., checking a file's shape or a single value).
+
 ## Project Overview
 
 **Similarity-based Representation Factorization (SRF)** - Tools for modeling representations in minds, brains, and machines using symmetric non-negative matrix factorization with ADMM optimization.
@@ -261,11 +274,56 @@ Available in `configs/dataset/`: `nsd`, `swow`, `things_behavior`, `things_monke
 
 ## Coding Standards
 
-- **Reuse existing code**: ALWAYS search `src/` first before writing new utilities (e.g., `gaussian_kernel_similarity` in `src/tools/metrics.py`)
+- **Reuse existing code**: ALWAYS search `src/` first before writing new utilities
 - **Paths**: Always use `pathlib.Path`, reference data via `cfg.data_dir`
 - **Outputs**: Use `Path.cwd()` (Hydra changes to output dir)
 - **Parallelism**: `joblib.Parallel` locally, `hydra/launcher=slurm` for cluster
 - **Plotting**: `seaborn`/`matplotlib`, save as `.pdf` for experiments, `.png` for sandbox
+- **Variables**: Always lowercase (`w`, `x`, `s`), never uppercase (`W`, `X`, `S`)
+- **Atomic functions**: Break complex operations into small, reusable helpers prefixed with `_`
+- **No complex one-liners**: Use explicit loops instead of dense list comprehensions
+
+```python
+# Good: explicit loop
+r_obs = np.zeros(k)
+for d in range(k):
+    r_obs[d] = _correlation(w[:, d], x[:, d])
+
+# Bad: dense one-liner
+r_obs = np.array([_correlation(w[:, d], x[:, d]) for d in range(k)])
+```
+
+**Atomic functions example:**
+```python
+def _correlation(a, b, two_sided=True):
+    r = pearsonr(a, b).statistic
+    return np.abs(r) if two_sided else r
+
+def _pvalue(obs, null):
+    return (np.sum(null >= obs) + 1) / (len(null) + 1)
+
+def permutation_test(a, b, permutations=1000, two_sided=True):
+    r_obs = _correlation(a, b, two_sided)
+    null = np.array([_correlation(a, rng.permutation(b), two_sided) for _ in range(permutations)])
+    return _pvalue(r_obs, null), null, r_obs
+```
+
+**Statistical testing (`src/tools/rsa.py`):**
+
+```python
+from src.tools.rsa import alignment_test, mantel_test
+
+# SRF alignment test
+result = alignment_test(w, x, alignment="global", two_sided=True, fdr=True)
+# Returns: {"r_obs", "raw_p", "corrected_p", "significant", "w_aligned"}
+
+# RSA Mantel test
+p, null, r = mantel_test(h, s, two_sided=True, permutations=1000)
+```
+
+- `two_sided=True`: Use |r| for sign ambiguity (default)
+- `fdr=True`: Benjamini-Hochberg correction
+- Null re-aligns each permutation (accounts for selection bias)
 
 ## Figure Theme (`src/utils/figure_theme.py`)
 
@@ -362,3 +420,38 @@ embedding = pipeline.fit_transform(similarity)
 ## Data
 
 Data directory: `${project_root}/data/` (configured in `configs/paths/local.yaml`)
+
+**THINGS images**: `/SSD/datasets/things/`
+- Full set: `/SSD/datasets/things/core/<class_name>/<class_name>_XXs.jpg`
+- Behavioral 1854: `/SSD/datasets/things/behav1854/<class_name>/<class_name>_01b.jpg`
+- Use for visualizing SRF dimensions (top-k images per dimension)
+
+## Insights Knowledge Base
+
+Document experimental findings and insights in `docs/insights/`. This builds a persistent knowledge base of what was tried and learned.
+
+**When to add an insight:**
+- Debugging reveals unexpected behavior
+- Experiments show parameter sensitivity
+- Comparisons reveal method differences
+- Any finding that would be useful to remember
+
+**Insight document structure:**
+1. **Summary** - One-line description
+2. **Background** - Context and motivation
+3. **Evidence** - Data tables, experiment results, code snippets
+4. **Tentative conclusions** - What the evidence suggests (with caveats)
+5. **Open questions** - What remains unclear
+6. **Reproducibility** - How to replicate the finding
+
+**Guidelines:**
+- Show evidence, not just conclusions
+- Avoid definitive statements without strong support
+- Note conditions under which findings hold
+- Include references to scripts, data, sandbox experiments
+- Date each insight for context
+
+**Example topics:**
+- `cv_sampling_fraction.md` - CV needs higher p than bounds estimation provides
+- `factor_recovery_baseline.md` - Chance-level metrics for factor recovery
+- `srf_statistical_testing.md` - LOO cross-validation for proper SRF testing

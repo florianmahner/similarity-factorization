@@ -543,9 +543,90 @@ def load_swow(
     )
 
 
+def load_dnn_features(
+    root: str | None = None,
+    layer: str | None = None,
+    filter_plus: bool = False,
+    image_info_path: str | None = None,
+) -> DatasetResult:
+    """
+    Load DNN features from deepsim feature extraction.
+
+    Parameters
+    ----------
+    root : str
+        Path to model features directory
+    layer : str
+        Layer to load. If None, auto-detects the only available layer.
+    filter_plus : bool
+        If True, filter to only THINGS+ images (1854 behavioral subset)
+    image_info_path : str
+        Path to image_info.csv for filtering
+
+    Returns
+    -------
+    DatasetResult
+        Dataset with features (n_images, n_features)
+
+    Available models (pass as root):
+        CLIP models (layer='visual'):
+        - /SSD/projects/deepsim/raw/features/dataset/openai/ViT-L-14
+        - /SSD/projects/deepsim/raw/features/dataset/laion2b_s32b_b82k/ViT-L-14
+
+        ImageNet models (layer auto-detected):
+        - /SSD/projects/deepsim/raw/features/architecture/IMAGENET1K_V1/resnet50
+        - /SSD/projects/deepsim/raw/features/architecture/IMAGENET1K_V1/vgg16_bn
+        - /SSD/projects/deepsim/raw/features/architecture/IMAGENET1K_V1/convnext_large
+        - /SSD/projects/deepsim/raw/features/architecture/IMAGENET1K_V1/swin_b
+    """
+    import pandas as pd
+
+    root = Path(root)
+
+    if layer is None:
+        subdirs = [d for d in root.iterdir() if d.is_dir()]
+        if len(subdirs) == 1:
+            layer = subdirs[0].name
+        else:
+            raise ValueError(f"Multiple layers found in {root}, specify one: {[d.name for d in subdirs]}")
+
+    features = np.load(root / layer / "features.npy")
+
+    metadata = {"layer": layer, "model": root.name}
+
+    if filter_plus:
+        if image_info_path is None:
+            image_info_path = "/SSD/projects/deepsim/raw/features/image_info.csv"
+        info = pd.read_csv(image_info_path)
+        plus_mask = info["filename"].str.contains("_plus")
+        features = features[plus_mask.values]
+        categories = info.loc[plus_mask, "category"].tolist()
+        metadata["filenames"] = info.loc[plus_mask, "filename"].tolist()
+        metadata["categories"] = categories
+        metadata["paths"] = [
+            f"/SSD/datasets/things/behav1854/{cat}/{cat}_01b.jpg" for cat in categories
+        ]
+        metadata["filtered"] = "plus"
+
+    metadata["n_images"] = features.shape[0]
+    metadata["n_features"] = features.shape[1]
+
+    return DatasetResult(
+        name="dnn",
+        data=features,
+        metadata=metadata,
+    )
+
+
+# Alias for backward compatibility
+load_vit = load_dnn_features
+
+
 DATASETS = {
     "mur92": load_mur92,
     "cichy118": load_cichy118,
+    "vit": load_vit,
+    "dnn": load_dnn_features,
     "peterson-animals": lambda **kwargs: load_peterson(variant="animals", **kwargs),
     "peterson-various": lambda **kwargs: load_peterson(variant="various", **kwargs),
     "nsd": load_nsd,

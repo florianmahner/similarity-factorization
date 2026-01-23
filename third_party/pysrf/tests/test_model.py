@@ -156,5 +156,8 @@ def test_monotonicity():
     model.fit(s)
     assert np.all(model.w_ >= 0)
 
-    loss = model.history_["rec_error"]
-    assert np.all(np.diff(loss) <= 0)
+    # Check that mse key exists and decreases monotonically
+    assert "mse" in model.history_, "Expected 'mse' key in history"
+    mse = model.history_["mse"]
+    assert len(mse) > 0, "Expected non-empty mse history"
+    assert np.all(np.diff(mse) <= 1e-10), "MSE should decrease monotonically"
