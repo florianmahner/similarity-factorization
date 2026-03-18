@@ -32,7 +32,6 @@ OUTPUT_DIR = PROJECT_ROOT / "outputs/experiments/simulation/kappa_rank_detection
 METHODS = [
     ("Coherence ($\\kappa$)", "rank_kappa"),
     ("Parallel analysis", "rank_parallel"),
-    ("Cophenetic", "rank_cophenetic"),
     ("Elbow", "rank_elbow"),
 ]
 

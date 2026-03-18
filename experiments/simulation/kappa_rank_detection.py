@@ -14,7 +14,6 @@ import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 from kneed import KneeLocator
-from pysrf import SRF
 
 from src.coherence import (
     _estimate_kappa_hat as estimate_kappa,
@@ -101,40 +100,6 @@ def _select_parallel_analysis(eigvals: np.ndarray, n: int, n_iter: int = 100, se
     return max(1, int(n_above))
 
 
-def _select_cophenetic(similarity: np.ndarray, candidate_ranks: list[int], n_runs: int = 5, seed: int = 0) -> int:
-    """Cophenetic correlation: pick rank with highest consensus stability."""
-    from scipy.cluster.hierarchy import cophenet, linkage
-    from scipy.spatial.distance import squareform
-
-    best_rank = candidate_ranks[0]
-    best_coph = -1.0
-    n = similarity.shape[0]
-
-    for rank in candidate_ranks:
-        consensus = np.zeros((n, n))
-        for r in range(n_runs):
-            model = SRF(rank=rank, random_state=seed + r, max_outer=50, max_inner=20)
-            model.fit(similarity)
-            w = model.components_
-            assignments = np.argmax(w, axis=1)
-            connectivity = (assignments[:, None] == assignments[None, :]).astype(float)
-            consensus += connectivity
-        consensus /= n_runs
-
-        dist = 1.0 - consensus
-        np.fill_diagonal(dist, 0)
-        dist = np.maximum(dist, 0)
-        dist_vec = squareform(dist, checks=False)
-        z = linkage(dist_vec, method="average")
-        coph_corr, _ = cophenet(z, dist_vec)
-
-        if coph_corr > best_coph:
-            best_coph = coph_corr
-            best_rank = rank
-
-    return best_rank
-
-
 def _select_elbow(eigvals: np.ndarray) -> int:
     x = np.arange(1, len(eigvals) + 1)
     kn = KneeLocator(x, eigvals, curve="convex", direction="decreasing")
@@ -152,14 +117,8 @@ def _run_one(true_rank: int, alpha: float, snr: float, seed: int) -> dict:
     eigvals = np.linalg.eigvalsh(similarity)[::-1]
     eigvals = eigvals[eigvals > 0]
 
-    candidate_ranks = list(range(max(2, true_rank - 12), true_rank + 13, 3))
-    if true_rank not in candidate_ranks:
-        candidate_ranks.append(true_rank)
-    candidate_ranks = sorted(set(candidate_ranks))
-
     rank_kappa = _select_kappa(similarity, true_rank)
     rank_parallel = _select_parallel_analysis(eigvals, N, seed=seed)
-    rank_cophenetic = _select_cophenetic(similarity, candidate_ranks, seed=seed)
     rank_elbow = _select_elbow(eigvals)
 
     return {
@@ -169,11 +128,9 @@ def _run_one(true_rank: int, alpha: float, snr: float, seed: int) -> dict:
         "seed": seed,
         "rank_kappa": rank_kappa,
         "rank_parallel": rank_parallel,
-        "rank_cophenetic": rank_cophenetic,
         "rank_elbow": rank_elbow,
         "error_kappa": abs(rank_kappa - true_rank),
         "error_parallel": abs(rank_parallel - true_rank),
-        "error_cophenetic": abs(rank_cophenetic - true_rank),
         "error_elbow": abs(rank_elbow - true_rank),
     }
 
