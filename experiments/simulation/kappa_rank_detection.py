@@ -1,4 +1,4 @@
-"""Rank selection benchmark: kappa coherence, BIC, elbow, and variance-90 across a full grid.
+"""Rank selection benchmark: kappa coherence, parallel analysis, cophenetic, and elbow across a full grid.
 
 Compares 4 rank selection methods on synthetic similarity matrices (n=300) across
 a grid of true ranks, sparsity (alpha), and SNR. Results are saved as a single CSV.
@@ -70,7 +70,7 @@ def _select_kappa(similarity: np.ndarray, true_rank: int) -> int:
         similarity,
         k_list=k_list,
         p_list=p_list,
-        B=50,
+        B=100,
         B_null=0,
         compute_null=False,
         use_baseline_correction=False,
@@ -81,33 +81,55 @@ def _select_kappa(similarity: np.ndarray, true_rank: int) -> int:
     )
 
     x_median = result["diagnostics"]["x_median"]
-    kappa, _ = estimate_kappa(x_median, result["p"], hi_band_quantile=0.85)
+    kappa, _ = estimate_kappa(x_median, result["p"], hi_band_quantile=0.90)
     k_cut, _ = kappa_changepoint(kappa, result["k_list"])
     return int(k_cut)
 
 
-def _select_bic(similarity: np.ndarray, true_rank: int, seed: int) -> int:
-    n = similarity.shape[0]
-    n_obs = n * n
-    lower = max(2, true_rank - 15)
-    upper = true_rank + 15
-    candidate_ranks = list(range(lower, upper + 1, 2))
-    if true_rank not in candidate_ranks:
-        candidate_ranks.append(true_rank)
-    candidate_ranks = sorted(set(candidate_ranks))
+def _select_parallel_analysis(eigvals: np.ndarray, n: int, n_iter: int = 100, seed: int = 0) -> int:
+    """Parallel analysis: keep eigenvalues exceeding random null (95th percentile)."""
+    rng = np.random.default_rng(seed)
+    k_max = len(eigvals)
+    null_eigvals = np.zeros((n_iter, k_max))
+    for i in range(n_iter):
+        x_rand = rng.standard_normal((n, n))
+        s_rand = x_rand @ x_rand.T / n
+        eig_rand = np.linalg.eigvalsh(s_rand)[::-1]
+        null_eigvals[i] = eig_rand[:k_max]
+    threshold = np.percentile(null_eigvals, 95, axis=0)
+    n_above = np.sum(eigvals[:k_max] > threshold)
+    return max(1, int(n_above))
+
+
+def _select_cophenetic(similarity: np.ndarray, candidate_ranks: list[int], n_runs: int = 10, seed: int = 0) -> int:
+    """Cophenetic correlation: pick rank with highest consensus stability."""
+    from scipy.cluster.hierarchy import cophenet, linkage
+    from scipy.spatial.distance import squareform
 
     best_rank = candidate_ranks[0]
-    best_bic = np.inf
+    best_coph = -1.0
+    n = similarity.shape[0]
 
     for rank in candidate_ranks:
-        model = SRF(rank=rank, random_state=seed, max_outer=100, max_inner=30)
-        model.fit(similarity)
-        recon = model.reconstruct()
-        mse = np.mean((similarity - recon) ** 2)
-        n_params = n * rank
-        bic = n_obs * np.log(mse + 1e-10) + n_params * np.log(n_obs)
-        if bic < best_bic:
-            best_bic = bic
+        consensus = np.zeros((n, n))
+        for r in range(n_runs):
+            model = SRF(rank=rank, random_state=seed + r, max_outer=50, max_inner=20)
+            model.fit(similarity)
+            w = model.embedding_
+            assignments = np.argmax(w, axis=1)
+            connectivity = (assignments[:, None] == assignments[None, :]).astype(float)
+            consensus += connectivity
+        consensus /= n_runs
+
+        dist = 1.0 - consensus
+        np.fill_diagonal(dist, 0)
+        dist = np.maximum(dist, 0)
+        dist_vec = squareform(dist, checks=False)
+        z = linkage(dist_vec, method="average")
+        coph_corr, _ = cophenet(z, dist_vec)
+
+        if coph_corr > best_coph:
+            best_coph = coph_corr
             best_rank = rank
 
     return best_rank
@@ -117,13 +139,6 @@ def _select_elbow(eigvals: np.ndarray) -> int:
     x = np.arange(1, len(eigvals) + 1)
     kn = KneeLocator(x, eigvals, curve="convex", direction="decreasing")
     return int(kn.knee) if kn.knee is not None else 1
-
-
-def _select_var90(eigvals: np.ndarray, threshold: float = 0.90) -> int:
-    total = np.sum(eigvals ** 2)
-    cumvar = np.cumsum(eigvals ** 2) / total
-    idx = np.searchsorted(cumvar, threshold)
-    return int(idx + 1)
 
 
 # =============================================================================
@@ -137,10 +152,15 @@ def _run_one(true_rank: int, alpha: float, snr: float, seed: int) -> dict:
     eigvals = np.linalg.eigvalsh(similarity)[::-1]
     eigvals = eigvals[eigvals > 0]
 
+    candidate_ranks = list(range(max(2, true_rank - 12), true_rank + 13, 3))
+    if true_rank not in candidate_ranks:
+        candidate_ranks.append(true_rank)
+    candidate_ranks = sorted(set(candidate_ranks))
+
     rank_kappa = _select_kappa(similarity, true_rank)
-    rank_bic = _select_bic(similarity, true_rank, seed)
+    rank_parallel = _select_parallel_analysis(eigvals, N, seed=seed)
+    rank_cophenetic = _select_cophenetic(similarity, candidate_ranks, seed=seed)
     rank_elbow = _select_elbow(eigvals)
-    rank_var90 = _select_var90(eigvals)
 
     return {
         "true_rank": true_rank,
@@ -148,13 +168,13 @@ def _run_one(true_rank: int, alpha: float, snr: float, seed: int) -> dict:
         "snr": snr,
         "seed": seed,
         "rank_kappa": rank_kappa,
-        "rank_bic": rank_bic,
+        "rank_parallel": rank_parallel,
+        "rank_cophenetic": rank_cophenetic,
         "rank_elbow": rank_elbow,
-        "rank_var90": rank_var90,
         "error_kappa": abs(rank_kappa - true_rank),
-        "error_bic": abs(rank_bic - true_rank),
+        "error_parallel": abs(rank_parallel - true_rank),
+        "error_cophenetic": abs(rank_cophenetic - true_rank),
         "error_elbow": abs(rank_elbow - true_rank),
-        "error_var90": abs(rank_var90 - true_rank),
     }
 
 
