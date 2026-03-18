@@ -1,9 +1,11 @@
-"""
-Publication-quality rank detection plots comparing kappa, BIC, and elbow methods.
+"""Rank detection scatter plots: detected vs true rank.
 
-Produces two PDF figures:
-1. rank_detection_vary_alpha.pdf  -- fixed SNR=1.0, panels for alpha in {0.1, 1.0, 5.0}
-2. rank_detection_vary_snr.pdf   -- fixed alpha=5.0, panels for SNR in {0.3, 0.5, 0.7, 1.0}
+Two separate PDF figures:
+1. rank_detection_vary_complexity.pdf -- fixed SNR=0.7, dots colored by alpha
+2. rank_detection_vary_snr.pdf       -- fixed alpha=2.0, dots colored by SNR
+
+Each figure has 4 panels (one per method), with a shared colorbar showing
+the varying parameter.
 
 Usage:
     poetry run python experiments/simulation/plot_kappa_rank_detection.py
@@ -14,8 +16,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 import numpy as np
 import pandas as pd
+
+import sys
+sys.path.insert(0, str(Path(__file__).parents[2]))
 
 from src.utils.figure_theme import CMAP, GRAY, apply_theme, despine, save_figure
 
@@ -23,171 +29,120 @@ PROJECT_ROOT = Path(__file__).parents[2]
 DATA_PATH = PROJECT_ROOT / "outputs/experiments/simulation/kappa_rank_detection/kappa_rank_detection.csv"
 OUTPUT_DIR = PROJECT_ROOT / "outputs/experiments/simulation/kappa_rank_detection"
 
-TRUE_RANKS = [5, 10, 15, 20, 25, 30, 35, 40]
-MAX_RANK = 40
-AXIS_LIM = (0, MAX_RANK + 5)
-AXIS_TICKS = TRUE_RANKS
-
 METHODS = [
-    ("Kappa (ours)", "rank_kappa", CMAP[1], "o"),
-    ("BIC", "rank_bic", CMAP[0], "s"),
-    ("Elbow", "rank_elbow", CMAP[2], "D"),
+    ("Coherence ($\\kappa$)", "rank_kappa"),
+    ("Parallel analysis", "rank_parallel"),
+    ("Cophenetic", "rank_cophenetic"),
+    ("Elbow", "rank_elbow"),
 ]
 
-JITTER_SEEDS = {"rank_kappa": 0, "rank_bic": 1, "rank_elbow": 2}
-JITTER_SCALE = 0.35
-SCATTER_ALPHA = 0.3
-SCATTER_SIZE = 13
-MEDIAN_LW = 1.5
-MEDIAN_MS = 5
 
+def _draw_panel(ax, df, rank_col, color_col, cmap, norm, title, show_ylabel):
+    """Scatter plot with dots colored by a continuous variable."""
+    ranks = sorted(df["true_rank"].unique())
+    lo, hi = 0, max(ranks) + 5
 
-def _add_identity(ax: plt.Axes) -> None:
-    lo, hi = AXIS_LIM
-    ax.plot([lo, hi], [lo, hi], color=GRAY["light"], lw=1.0, zorder=0)
+    ax.plot([lo, hi], [lo, hi], color=GRAY["light"], lw=0.8, zorder=0)
 
+    rng = np.random.default_rng(42)
+    jx = rng.uniform(-0.8, 0.8, len(df))
+    jy = rng.uniform(-0.8, 0.8, len(df))
 
-def _scatter_with_jitter(
-    ax: plt.Axes,
-    x: np.ndarray,
-    y: np.ndarray,
-    color: str,
-    marker: str,
-    rng: np.random.Generator,
-) -> None:
-    jitter = rng.uniform(-JITTER_SCALE, JITTER_SCALE, size=len(x))
     ax.scatter(
-        x + jitter,
-        y,
-        color=color,
-        marker=marker,
-        s=SCATTER_SIZE,
-        alpha=SCATTER_ALPHA,
-        linewidths=0,
-        zorder=2,
+        df["true_rank"].values + jx,
+        df[rank_col].values + jy,
+        c=df[color_col].values,
+        cmap=cmap, norm=norm,
+        s=14, alpha=0.5, edgecolors="none", zorder=2,
     )
 
-
-def _median_line(
-    ax: plt.Axes,
-    df: pd.DataFrame,
-    rank_col: str,
-    color: str,
-    marker: str,
-    label: str,
-) -> None:
-    medians = df.groupby("true_rank")[rank_col].median().reset_index()
+    # Median line (black, method-agnostic)
+    med = df.groupby("true_rank")[rank_col].median()
     ax.plot(
-        medians["true_rank"],
-        medians[rank_col],
-        marker=marker,
-        color=color,
-        linewidth=MEDIAN_LW,
-        markersize=MEDIAN_MS,
-        label=label,
-        zorder=3,
+        med.index, med.values,
+        "o-", color="black", lw=1.5, ms=4,
+        markeredgecolor="white", markeredgewidth=0.5,
+        zorder=4,
     )
 
-
-def _format_panel(ax: plt.Axes, title: str, show_ylabel: bool) -> None:
-    ax.set_xlim(*AXIS_LIM)
-    ax.set_ylim(*AXIS_LIM)
-    ax.set_xticks(AXIS_TICKS)
-    ax.set_yticks(AXIS_TICKS)
-    ax.set_aspect("equal")
-    ax.set_xlabel("True rank", fontsize=9)
+    ax.set_xlim(lo, hi)
+    ax.set_ylim(lo, hi)
+    ax.set_xticks(ranks)
+    ax.set_yticks(ranks)
+    ax.set_xlabel("True rank")
     if show_ylabel:
-        ax.set_ylabel("Detected rank", fontsize=9)
+        ax.set_ylabel("Detected rank")
     else:
         ax.set_yticklabels([])
     ax.set_title(title, fontsize=9)
+    ax.set_aspect("equal")
     despine(ax)
 
 
-def _draw_panel(
-    ax: plt.Axes,
-    subset: pd.DataFrame,
-    title: str,
-    show_ylabel: bool,
-    show_legend: bool,
-) -> None:
-    _add_identity(ax)
-    for label, rank_col, color, marker in METHODS:
-        rng = np.random.default_rng(JITTER_SEEDS[rank_col])
-        _scatter_with_jitter(ax, subset["true_rank"].values, subset[rank_col].values, color, marker, rng)
-        _median_line(ax, subset, rank_col, color, marker, label)
-    _format_panel(ax, title, show_ylabel)
-    if show_legend:
-        ax.legend(frameon=False, fontsize=7, loc="upper left")
-
-
-def plot_vary_alpha(df: pd.DataFrame, output_dir: Path) -> None:
-    """Figure 1: Vary alpha, fixed SNR=1.0."""
-    alphas = [0.1, 1.0, 5.0]
-    titles = [r"$\alpha$ = 0.1", r"$\alpha$ = 1.0", r"$\alpha$ = 5.0"]
-    subset_snr = df[df["snr"] == 1.0]
-
-    ncols = len(alphas)
-    panel_w = 2.8
-    panel_h = 2.8
-
+def plot_vary_complexity(df, output_dir):
+    """Fixed SNR=0.7, all alphas pooled, colored by alpha."""
     apply_theme()
-    fig, axes = plt.subplots(
-        1,
-        ncols,
-        figsize=(panel_w * ncols, panel_h),
-        gridspec_kw={"wspace": 0.35},
-    )
+    sub = df[df["snr"] == 0.7].copy()
 
-    for i, (alpha, title) in enumerate(zip(alphas, titles)):
-        subset = subset_snr[subset_snr["alpha"] == alpha]
-        _draw_panel(
-            axes[i],
-            subset,
-            title,
-            show_ylabel=(i == 0),
-            show_legend=(i == 0),
-        )
+    alphas = sorted(sub["alpha"].unique())
+    norm = mcolors.LogNorm(vmin=min(alphas), vmax=max(alphas))
+    cmap = "viridis"
 
-    save_figure(fig, output_dir / "rank_detection_vary_alpha.pdf")
+    ncols = len(METHODS)
+    fig, axes = plt.subplots(1, ncols, figsize=(2.8 * ncols, 3.0),
+                              gridspec_kw={"wspace": 0.25})
+
+    for i, (label, col) in enumerate(METHODS):
+        _draw_panel(axes[i], sub, col, "alpha", cmap, norm, label, show_ylabel=(i == 0))
+
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=axes.tolist(), shrink=0.8, pad=0.02)
+    cbar.set_label("Complexity ($\\alpha$)", fontsize=8)
+    cbar.set_ticks(alphas)
+    cbar.set_ticklabels([str(a) for a in alphas])
+
+    save_figure(fig, output_dir / "rank_detection_vary_complexity.pdf")
+    plt.close(fig)
+    print(f"Saved rank_detection_vary_complexity.pdf ({len(sub)} points)")
 
 
-def plot_vary_snr(df: pd.DataFrame, output_dir: Path) -> None:
-    """Figure 2: Vary SNR, fixed alpha=5.0."""
-    snrs = [0.3, 0.5, 0.7, 1.0]
-    titles = ["SNR = 0.3", "SNR = 0.5", "SNR = 0.7", "SNR = 1.0"]
-    subset_alpha = df[df["alpha"] == 5.0]
-
-    ncols = len(snrs)
-    panel_w = 2.8
-    panel_h = 2.8
-
+def plot_vary_snr(df, output_dir):
+    """Fixed alpha=2.0, all SNRs pooled, colored by SNR."""
     apply_theme()
-    fig, axes = plt.subplots(
-        1,
-        ncols,
-        figsize=(panel_w * ncols, panel_h),
-        gridspec_kw={"wspace": 0.35},
-    )
+    sub = df[df["alpha"] == 2.0].copy()
 
-    for i, (snr, title) in enumerate(zip(snrs, titles)):
-        subset = subset_alpha[subset_alpha["snr"] == snr]
-        _draw_panel(
-            axes[i],
-            subset,
-            title,
-            show_ylabel=(i == 0),
-            show_legend=(i == 0),
-        )
+    snrs = sorted(sub["snr"].unique())
+    norm = mcolors.Normalize(vmin=min(snrs), vmax=max(snrs))
+    cmap = "plasma"
+
+    ncols = len(METHODS)
+    fig, axes = plt.subplots(1, ncols, figsize=(2.8 * ncols, 3.0),
+                              gridspec_kw={"wspace": 0.25})
+
+    for i, (label, col) in enumerate(METHODS):
+        _draw_panel(axes[i], sub, col, "snr", cmap, norm, label, show_ylabel=(i == 0))
+
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=axes.tolist(), shrink=0.8, pad=0.02)
+    cbar.set_label("Signal-to-noise ratio", fontsize=8)
+    cbar.set_ticks(snrs)
+    cbar.set_ticklabels([str(s) for s in snrs])
 
     save_figure(fig, output_dir / "rank_detection_vary_snr.pdf")
+    plt.close(fig)
+    print(f"Saved rank_detection_vary_snr.pdf ({len(sub)} points)")
 
 
-def main() -> None:
+def main():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     df = pd.read_csv(DATA_PATH)
-    plot_vary_alpha(df, OUTPUT_DIR)
+    print(f"Loaded {len(df)} rows")
+
+    plot_vary_complexity(df, OUTPUT_DIR)
     plot_vary_snr(df, OUTPUT_DIR)
+    print("Done.")
 
 
 if __name__ == "__main__":
