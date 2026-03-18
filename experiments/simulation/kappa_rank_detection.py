@@ -101,7 +101,7 @@ def _select_parallel_analysis(eigvals: np.ndarray, n: int, n_iter: int = 100, se
     return max(1, int(n_above))
 
 
-def _select_cophenetic(similarity: np.ndarray, candidate_ranks: list[int], n_runs: int = 10, seed: int = 0) -> int:
+def _select_cophenetic(similarity: np.ndarray, candidate_ranks: list[int], n_runs: int = 5, seed: int = 0) -> int:
     """Cophenetic correlation: pick rank with highest consensus stability."""
     from scipy.cluster.hierarchy import cophenet, linkage
     from scipy.spatial.distance import squareform
@@ -115,7 +115,7 @@ def _select_cophenetic(similarity: np.ndarray, candidate_ranks: list[int], n_run
         for r in range(n_runs):
             model = SRF(rank=rank, random_state=seed + r, max_outer=50, max_inner=20)
             model.fit(similarity)
-            w = model.embedding_
+            w = model.components_
             assignments = np.argmax(w, axis=1)
             connectivity = (assignments[:, None] == assignments[None, :]).astype(float)
             consensus += connectivity
