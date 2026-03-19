@@ -18,7 +18,8 @@ from pysrf import cross_val_score
 from pysrf.bounds import estimate_sampling_bounds_ultra
 
 from similarity import build_similarity, get_rank_grid
-from src.utils.figure_theme import CMAP, create_figure, despine, save_figure
+from src.colors import ROSE, TEAL
+from src.utils.figure_theme import create_figure, despine, save_figure
 
 log = logging.getLogger(__name__)
 
@@ -131,8 +132,8 @@ def run(cfg: DictConfig) -> None:
     means = [cv_scores[r]["mean"] for r in ranks]
     stds = [cv_scores[r]["std"] for r in ranks]
 
-    ax.errorbar(ranks, means, yerr=stds, fmt="o-", color=CMAP[1], capsize=3, markersize=4)
-    ax.axvline(optimal_rank, color=CMAP[0], linestyle="--", linewidth=1.5, label=f"Optimal: {optimal_rank}")
+    ax.errorbar(ranks, means, yerr=stds, fmt="o-", color=TEAL, capsize=3, markersize=4)
+    ax.axvline(optimal_rank, color=ROSE, linestyle="--", linewidth=1.5, label=f"Optimal: {optimal_rank}")
     ax.set_xlabel("Rank")
     ax.set_ylabel("CV Score (MSE)")
     ax.legend(fontsize=8)

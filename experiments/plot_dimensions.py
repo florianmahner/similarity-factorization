@@ -20,7 +20,8 @@ from omegaconf import DictConfig
 from PIL import Image
 
 from datasets import load_dataset
-from src.utils.figure_theme import CMAP, despine, save_figure
+from src.colors import CYCLE
+from src.utils.figure_theme import despine, save_figure
 
 log = logging.getLogger(__name__)
 
@@ -86,7 +87,7 @@ def _plot_topk_text(
         top_labels = [labels[i] for i in top_idx]
         top_values = embedding[top_idx, dim]
 
-        ax.barh(range(k), top_values[::-1], color=CMAP[dim % len(CMAP)])
+        ax.barh(range(k), top_values[::-1], color=CYCLE[dim % len(CYCLE)])
         ax.set_yticks(range(k))
         ax.set_yticklabels(top_labels[::-1], fontsize=8)
         ax.set_xlabel("Loading")
@@ -195,7 +196,7 @@ def _plot_single_dimension_text(
     top_values = embedding[top_idx, dim]
 
     fig, ax = plt.subplots(figsize=(6, 0.4 * k + 1))
-    ax.barh(range(k), top_values[::-1], color=CMAP[dim % len(CMAP)])
+    ax.barh(range(k), top_values[::-1], color=CYCLE[dim % len(CYCLE)])
     ax.set_yticks(range(k))
     ax.set_yticklabels(top_labels[::-1], fontsize=10)
     ax.set_xlabel("Loading")

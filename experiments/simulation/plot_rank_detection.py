@@ -19,9 +19,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from src.colors import ROSE, TEAL, CYAN, SAND, GRAY, GRAY_LIGHT, GRAY_DARK, GRAY_PALE
 from src.utils.figure_theme import (
-    CMAP,
-    GRAY,
     create_figure,
     despine,
     save_figure,
@@ -53,15 +52,15 @@ def plot_by_true_rank(df: pd.DataFrame, output_dir: Path) -> None:
 
     # Identity line
     lims = [5, 45]
-    ax.plot(lims, lims, "--", color=GRAY["light"], lw=1.5, zorder=0)
-    ax.text(42, 39, "identity", fontsize=7, color=GRAY["medium"], ha="right", va="top")
+    ax.plot(lims, lims, "--", color=GRAY_LIGHT, lw=1.5, zorder=0)
+    ax.text(42, 39, "identity", fontsize=7, color=GRAY, ha="right", va="top")
 
     # CV results
     ax.plot(
         agg["true_rank"],
         agg["median"],
         "o-",
-        color=CMAP[1],
+        color=TEAL,
         markersize=5,
         linewidth=1.5,
         zorder=3,
@@ -70,7 +69,7 @@ def plot_by_true_rank(df: pd.DataFrame, output_dir: Path) -> None:
         agg["true_rank"],
         agg["q25"],
         agg["q75"],
-        color=CMAP[1],
+        color=TEAL,
         alpha=0.2,
         linewidth=0,
         zorder=2,
@@ -103,15 +102,15 @@ def plot_by_alpha(df: pd.DataFrame, output_dir: Path) -> None:
     fig, ax = create_figure("single")
 
     # True rank reference
-    ax.axhline(20, color=GRAY["light"], linestyle="--", linewidth=1.5, zorder=0)
-    ax.text(0.12, 20.8, "true rank", fontsize=7, color=GRAY["medium"], ha="left")
+    ax.axhline(20, color=GRAY_LIGHT, linestyle="--", linewidth=1.5, zorder=0)
+    ax.text(0.12, 20.8, "true rank", fontsize=7, color=GRAY, ha="left")
 
     # CV results
     ax.plot(
         agg["alpha"],
         agg["median"],
         "o-",
-        color=CMAP[0],
+        color=ROSE,
         markersize=6,
         linewidth=1.5,
         zorder=3,
@@ -120,7 +119,7 @@ def plot_by_alpha(df: pd.DataFrame, output_dir: Path) -> None:
         agg["alpha"],
         agg["q25"],
         agg["q75"],
-        color=CMAP[0],
+        color=ROSE,
         alpha=0.2,
         linewidth=0,
         zorder=2,
@@ -156,18 +155,18 @@ def plot_by_snr(df: pd.DataFrame, output_dir: Path) -> None:
     fig, ax = create_figure("single")
 
     # Low SNR region shading
-    ax.axvspan(-0.05, 0.5, color=GRAY["faint"], zorder=0)
-    ax.text(0.25, 25, "low SNR", fontsize=7, color=GRAY["medium"], ha="center")
+    ax.axvspan(-0.05, 0.5, color=GRAY_PALE, zorder=0)
+    ax.text(0.25, 25, "low SNR", fontsize=7, color=GRAY, ha="center")
 
     # True rank reference
-    ax.axhline(20, color=GRAY["light"], linestyle="--", linewidth=1.5, zorder=1)
+    ax.axhline(20, color=GRAY_LIGHT, linestyle="--", linewidth=1.5, zorder=1)
 
     # CV results
     ax.plot(
         agg["snr"],
         agg["median"],
         "o-",
-        color=CMAP[2],
+        color=CYAN,
         markersize=5,
         linewidth=1.5,
         zorder=3,
@@ -176,7 +175,7 @@ def plot_by_snr(df: pd.DataFrame, output_dir: Path) -> None:
         agg["snr"],
         agg["q25"],
         agg["q75"],
-        color=CMAP[2],
+        color=CYAN,
         alpha=0.2,
         linewidth=0,
         zorder=2,
@@ -220,7 +219,7 @@ def plot_method_comparison(df: pd.DataFrame, output_dir: Path) -> None:
     sems = [errors[m]["sem"] for m in sorted_methods]
 
     # Color CV differently
-    colors = [CMAP[1] if m == "CV" else GRAY["medium"] for m in sorted_methods]
+    colors = [TEAL if m == "CV" else GRAY for m in sorted_methods]
 
     bars = ax.barh(y_pos, means, xerr=sems, color=colors, edgecolor="white", height=0.6)
 
@@ -265,11 +264,11 @@ def plot_method_comparison_by_condition(df: pd.DataFrame, output_dir: Path) -> N
     offsets = np.array([-2, -1, 0, 1, 2]) * width
 
     colors = {
-        "CV": CMAP[1],
-        "Kaiser": CMAP[0],
-        "Variance": CMAP[2],
-        "BIC": CMAP[3],
-        "AIC": GRAY["medium"],
+        "CV": TEAL,
+        "Kaiser": ROSE,
+        "Variance": CYAN,
+        "BIC": SAND,
+        "AIC": GRAY,
     }
 
     for i, method in enumerate(methods):

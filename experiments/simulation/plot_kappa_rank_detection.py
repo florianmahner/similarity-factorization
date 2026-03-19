@@ -23,7 +23,8 @@ import pandas as pd
 import sys
 sys.path.insert(0, str(Path(__file__).parents[2]))
 
-from src.utils.figure_theme import CMAP, GRAY, apply_theme, despine, save_figure
+from src.colors import GRAY_LIGHT, setup_style
+from src.utils.figure_theme import despine, save_figure
 
 PROJECT_ROOT = Path(__file__).parents[2]
 DATA_PATH = PROJECT_ROOT / "outputs/experiments/simulation/kappa_rank_detection/kappa_rank_detection.csv"
@@ -41,7 +42,7 @@ def _draw_panel(ax, df, rank_col, color_col, cmap, norm, title, show_ylabel):
     ranks = sorted(df["true_rank"].unique())
     lo, hi = 0, max(ranks) + 5
 
-    ax.plot([lo, hi], [lo, hi], color=GRAY["light"], lw=0.8, zorder=0)
+    ax.plot([lo, hi], [lo, hi], color=GRAY_LIGHT, lw=0.8, zorder=0)
 
     rng = np.random.default_rng(42)
     jx = rng.uniform(-0.8, 0.8, len(df))
@@ -80,7 +81,7 @@ def _draw_panel(ax, df, rank_col, color_col, cmap, norm, title, show_ylabel):
 
 def plot_vary_complexity(df, output_dir):
     """Fixed SNR=0.7, all alphas pooled, colored by alpha."""
-    apply_theme()
+    setup_style()
     sub = df[df["snr"] == 0.7].copy()
 
     alphas = sorted(sub["alpha"].unique())
@@ -108,7 +109,7 @@ def plot_vary_complexity(df, output_dir):
 
 def plot_vary_snr(df, output_dir):
     """Fixed alpha=2.0, all SNRs pooled, colored by SNR."""
-    apply_theme()
+    setup_style()
     sub = df[df["alpha"] == 2.0].copy()
 
     snrs = sorted(sub["snr"].unique())

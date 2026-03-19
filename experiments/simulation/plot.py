@@ -15,10 +15,8 @@ import numpy as np
 import pandas as pd
 from matplotlib.colors import LinearSegmentedColormap
 
+from src.colors import ROSE, TEAL, CYAN, GRAY, GRAY_LIGHT, GRAY_DARK, GRAY_PALE, setup_style, CYCLE
 from src.utils.figure_theme import (
-    CMAP,
-    GRAY,
-    apply_theme,
     create_figure,
     despine,
     save_figure,
@@ -46,7 +44,7 @@ def _plot_metric_by_alpha(
     fig, ax = create_figure("single")
 
     snr_values = sorted(df["snr"].unique())
-    theme_blue = CMAP[1]
+    theme_blue = TEAL
     light_blue = "#d6eaf8"
     cmap = LinearSegmentedColormap.from_list("blues", [light_blue, theme_blue])
 
@@ -105,7 +103,7 @@ def _plot_rank_scatter(
         ax.scatter(
             subset["true_jit"],
             subset["sel_jit"],
-            c=CMAP[i % len(CMAP)],
+            c=CYCLE[i % len(CYCLE)],
             s=30,
             alpha=0.6,
             marker=markers[i % len(markers)],
@@ -114,7 +112,7 @@ def _plot_rank_scatter(
             label=f"{val}",
         )
 
-    ax.plot(lims, lims, "--", color=GRAY["light"], lw=1, zorder=0)
+    ax.plot(lims, lims, "--", color=GRAY_LIGHT, lw=1, zorder=0)
     ax.set_xlim(lims)
     ax.set_ylim(lims)
     ax.set_xlabel("True rank")
@@ -140,13 +138,13 @@ def _plot_imputation(df: pd.DataFrame, output_dir: Path) -> None:
     agg = agg.dropna()
 
     # Colors from CMAP: red, blue, green
-    colors = {"SRF": CMAP[0], "KNN": CMAP[1], "Median": CMAP[2]}
+    colors = {"SRF": ROSE, "KNN": TEAL, "Median": CYAN}
 
     fig, ax = create_figure("single")
 
     # Underdetermined region
-    ax.axvspan(0, 1.0, color=GRAY["faint"], zorder=0)
-    ax.axvline(x=1.0, color=GRAY["light"], linestyle="--", linewidth=0.8, zorder=1)
+    ax.axvspan(0, 1.0, color=GRAY_PALE, zorder=0)
+    ax.axvline(x=1.0, color=GRAY_LIGHT, linestyle="--", linewidth=0.8, zorder=1)
     ax.text(
         0.9,
         50,
@@ -155,7 +153,7 @@ def _plot_imputation(df: pd.DataFrame, output_dir: Path) -> None:
         va="center",
         ha="center",
         fontsize=7,
-        color=GRAY["medium"],
+        color=GRAY,
     )
 
     for method in ["SRF", "KNN", "Median"]:
@@ -315,23 +313,23 @@ def _plot_dirichlet_properties(output_dir: Path) -> None:
     tick_positions = [0, 0.25, 0.5, 0.75, 1.0]
 
     # Reference line for uniform distribution (entropy = 1)
-    ax1.axhline(1.0, color=GRAY["light"], linestyle="--", linewidth=0.8, zorder=0)
-    ax1.text(0.12, 0.96, "uniform", fontsize=7, color=GRAY["medium"], ha="left")
+    ax1.axhline(1.0, color=GRAY_LIGHT, linestyle="--", linewidth=0.8, zorder=0)
+    ax1.text(0.12, 0.96, "uniform", fontsize=7, color=GRAY, ha="left")
 
     # Left axis: Normalized entropy (increases with alpha)
     entropy_mean = entropy_values.mean(axis=1)
     entropy_sem = entropy_values.std(axis=1) / np.sqrt(n_samples)
 
     ax1.plot(
-        ALPHAS, entropy_mean, "o-", color=CMAP[1], markersize=4, linewidth=1.5
+        ALPHAS, entropy_mean, "o-", color=TEAL, markersize=4, linewidth=1.5
     )
     ax1.fill_between(
         ALPHAS, entropy_mean - entropy_sem, entropy_mean + entropy_sem,
-        color=CMAP[1], alpha=0.2, linewidth=0
+        color=TEAL, alpha=0.2, linewidth=0
     )
     ax1.set_xscale("log")
     ax1.set_xlabel(r"$\alpha$")
-    ax1.set_ylabel("Normalized entropy", color=CMAP[1])
+    ax1.set_ylabel("Normalized entropy", color=TEAL)
     ax1.set_xlim(0.08, 120)
     ax1.set_ylim(0, 1.08)
     ax1.set_yticks(tick_positions)
@@ -344,13 +342,13 @@ def _plot_dirichlet_properties(output_dir: Path) -> None:
     sparsity_sem = sparsity_values.std(axis=1) / np.sqrt(n_samples)
 
     ax2.plot(
-        ALPHAS, sparsity_mean, "o-", color=CMAP[0], markersize=4, linewidth=1.5
+        ALPHAS, sparsity_mean, "o-", color=ROSE, markersize=4, linewidth=1.5
     )
     ax2.fill_between(
         ALPHAS, sparsity_mean - sparsity_sem, sparsity_mean + sparsity_sem,
-        color=CMAP[0], alpha=0.2, linewidth=0
+        color=ROSE, alpha=0.2, linewidth=0
     )
-    ax2.set_ylabel("Hoyer sparsity", color=CMAP[0])
+    ax2.set_ylabel("Hoyer sparsity", color=ROSE)
     ax2.set_ylim(0, 1.08)
     ax2.set_yticks(tick_positions)
     ax2.yaxis.set_minor_locator(MultipleLocator(0.125))
@@ -417,23 +415,23 @@ def _plot_srf_performance(output_dir: Path) -> None:
     tick_positions = [0, 0.25, 0.5, 0.75, 1.0]
 
     # Chance level reference line for factor recovery
-    ax1.axhline(0.07, color=GRAY["light"], linestyle="--", linewidth=0.8, zorder=0)
-    ax1.text(0.12, 0.10, "chance", fontsize=7, color=GRAY["medium"], ha="left")
+    ax1.axhline(0.07, color=GRAY_LIGHT, linestyle="--", linewidth=0.8, zorder=0)
+    ax1.text(0.12, 0.10, "chance", fontsize=7, color=GRAY, ha="left")
 
     # Left axis: Reconstruction R²
     ax1.plot(
         df_recon["alpha"], df_recon["mean"], "o-",
-        color=CMAP[1], markersize=4, linewidth=1.5
+        color=TEAL, markersize=4, linewidth=1.5
     )
     ax1.fill_between(
         df_recon["alpha"],
         df_recon["mean"] - df_recon["sem"],
         df_recon["mean"] + df_recon["sem"],
-        color=CMAP[1], alpha=0.2, linewidth=0
+        color=TEAL, alpha=0.2, linewidth=0
     )
     ax1.set_xscale("log")
     ax1.set_xlabel(r"$\alpha$")
-    ax1.set_ylabel(r"Reconstruction $R^2$", color=CMAP[1])
+    ax1.set_ylabel(r"Reconstruction $R^2$", color=TEAL)
     ax1.set_xlim(0.08, 120)
     ax1.set_ylim(0, 1.08)
     ax1.set_yticks(tick_positions)
@@ -444,15 +442,15 @@ def _plot_srf_performance(output_dir: Path) -> None:
     ax2 = ax1.twinx()
     ax2.plot(
         df_factor["alpha"], df_factor["mean"], "o-",
-        color=CMAP[0], markersize=4, linewidth=1.5
+        color=ROSE, markersize=4, linewidth=1.5
     )
     ax2.fill_between(
         df_factor["alpha"],
         df_factor["mean"] - df_factor["sem"],
         df_factor["mean"] + df_factor["sem"],
-        color=CMAP[0], alpha=0.2, linewidth=0
+        color=ROSE, alpha=0.2, linewidth=0
     )
-    ax2.set_ylabel("Factor recovery", color=CMAP[0])
+    ax2.set_ylabel("Factor recovery", color=ROSE)
     ax2.set_ylim(0, 1.08)
     ax2.set_yticks(tick_positions)
     ax2.yaxis.set_minor_locator(MultipleLocator(0.125))
@@ -472,10 +470,10 @@ def _plot_rank_detection_by_alpha(df: pd.DataFrame, output_dir: Path) -> None:
 
     fig, ax = create_figure("single")
 
-    alpha_colors = {0.1: CMAP[0], 1.0: CMAP[1], 10.0: CMAP[2]}
+    alpha_colors = {0.1: ROSE, 1.0: TEAL, 10.0: CYAN}
 
-    ax.plot([0, 32], [0, 32], "--", color=GRAY["light"], lw=1.5, zorder=0)
-    ax.text(28, 26, "identity", fontsize=7, color=GRAY["medium"], ha="right")
+    ax.plot([0, 32], [0, 32], "--", color=GRAY_LIGHT, lw=1.5, zorder=0)
+    ax.text(28, 26, "identity", fontsize=7, color=GRAY, ha="right")
 
     for alpha in [0.1, 1.0, 10.0]:
         subset = summary[summary["alpha"] == alpha].sort_values("true_rank")
@@ -512,10 +510,10 @@ def _plot_rank_detection_by_snr(df: pd.DataFrame, output_dir: Path) -> None:
     fig, ax = create_figure("single")
 
     snrs = [0.4, 0.6, 0.8, 1.0]
-    snr_colors = {0.4: GRAY["medium"], 0.6: CMAP[2], 0.8: CMAP[1], 1.0: CMAP[0]}
+    snr_colors = {0.4: GRAY, 0.6: CYAN, 0.8: TEAL, 1.0: ROSE}
 
-    ax.plot([0, 32], [0, 32], "--", color=GRAY["light"], lw=1.5, zorder=0)
-    ax.text(28, 26, "identity", fontsize=7, color=GRAY["medium"], ha="right")
+    ax.plot([0, 32], [0, 32], "--", color=GRAY_LIGHT, lw=1.5, zorder=0)
+    ax.text(28, 26, "identity", fontsize=7, color=GRAY, ha="right")
 
     for snr in snrs:
         subset = summary[summary["snr"] == snr].sort_values("true_rank")
@@ -594,13 +592,13 @@ def _plot_stability(output_dir: Path) -> None:
 
     tick_positions = [0, 0.25, 0.5, 0.75, 1.0]
 
-    ax.axhline(1.0, color=GRAY["light"], linestyle="--", linewidth=0.8, zorder=0)
-    ax.plot(df["alpha"], df["mean"], "o-", color=CMAP[1], markersize=4, linewidth=1.5)
+    ax.axhline(1.0, color=GRAY_LIGHT, linestyle="--", linewidth=0.8, zorder=0)
+    ax.plot(df["alpha"], df["mean"], "o-", color=TEAL, markersize=4, linewidth=1.5)
     ax.fill_between(
         df["alpha"],
         df["mean"] - df["sem"],
         df["mean"] + df["sem"],
-        color=CMAP[1],
+        color=TEAL,
         alpha=0.2,
         linewidth=0,
     )

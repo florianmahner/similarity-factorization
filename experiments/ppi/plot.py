@@ -13,9 +13,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from src.colors import ROSE, TEAL, CYAN, SAND, PURPLE, GRAY, GRAY_LIGHT, GRAY_DARK, GRAY_PALE
 from src.utils.figure_theme import (
-    CMAP,
-    GRAY,
     create_figure,
     despine,
     save_figure,
@@ -27,16 +26,16 @@ DATA_DIR = PPI_DIR / "data"
 PLOT_DIR = PPI_DIR / "plots"
 
 METHOD_COLORS = {
-    "srf": CMAP[0],       # red
-    "deepwalk": CMAP[1],  # blue
-    "node2vec": CMAP[2],  # green
-    "line": CMAP[3],      # purple
-    "spectral": GRAY["medium"],
-    "skipgnn": CMAP[4],   # orange
-    "aa": GRAY["dark"],
-    "cn": GRAY["medium"],
-    "ra": GRAY["light"],
-    "jc": GRAY["faint"],
+    "srf": ROSE,
+    "deepwalk": TEAL,
+    "node2vec": CYAN,
+    "line": SAND,
+    "spectral": GRAY,
+    "skipgnn": PURPLE,
+    "aa": GRAY_DARK,
+    "cn": GRAY,
+    "ra": GRAY_LIGHT,
+    "jc": GRAY_PALE,
 }
 
 METHOD_ORDER = ["srf", "deepwalk", "node2vec", "line", "spectral", "skipgnn"]
@@ -86,7 +85,7 @@ def plot_node_classification_by_bin() -> None:
 
     for i, method in enumerate(methods):
         values = [pivot.loc[method, b] for b in bins]
-        color = METHOD_COLORS.get(method, GRAY["medium"])
+        color = METHOD_COLORS.get(method, GRAY)
         ax.bar(
             x + offsets[i], values, width * 0.9,
             label=METHOD_LABELS.get(method, method),
@@ -115,7 +114,7 @@ def plot_node_classification_by_size() -> None:
     methods = [m for m in METHOD_ORDER if m in avg["Method"].unique()]
     for method in methods:
         subset = avg[avg["Method"] == method].sort_values("Nodes")
-        color = METHOD_COLORS.get(method, GRAY["medium"])
+        color = METHOD_COLORS.get(method, GRAY)
         ax.plot(
             subset["Nodes"], subset["Micro-F1"],
             marker="o", label=METHOD_LABELS.get(method, method),
@@ -136,8 +135,8 @@ def plot_corum_f1_distribution() -> None:
 
     fig, ax = create_figure("single")
 
-    ax.hist(df["f1"], bins=20, color=CMAP[0], edgecolor="white", linewidth=0.5)
-    ax.axvline(df["f1"].median(), color=GRAY["dark"], linestyle="--", linewidth=1)
+    ax.hist(df["f1"], bins=20, color=ROSE, edgecolor="white", linewidth=0.5)
+    ax.axvline(df["f1"].median(), color=GRAY_DARK, linestyle="--", linewidth=1)
 
     ax.set_xlabel("F1 score")
     ax.set_ylabel("Count")
@@ -160,7 +159,7 @@ def plot_corum_top_dimensions() -> None:
     fig, ax = create_figure("wide", pad_left=1.8)
 
     y = np.arange(len(top))
-    ax.barh(y, top["f1"].values, color=CMAP[0], height=0.7)
+    ax.barh(y, top["f1"].values, color=ROSE, height=0.7)
 
     labels = [f"Dim {d}: {c[:25]}..." if len(c) > 25 else f"Dim {d}: {c}"
               for d, c in zip(top["dimension"], top["best_complex"])]
@@ -216,7 +215,7 @@ def plot_link_prediction_by_dataset() -> None:
             else:
                 values.append(0)
                 errors.append(0)
-        color = METHOD_COLORS.get(method, GRAY["medium"])
+        color = METHOD_COLORS.get(method, GRAY)
         ax.bar(
             x + offsets[i], values, width * 0.9,
             yerr=errors, capsize=2,
@@ -263,7 +262,7 @@ def plot_link_prediction_summary() -> None:
             else:
                 values.append(0)
                 errors.append(0)
-        color = METHOD_COLORS.get(method, GRAY["medium"])
+        color = METHOD_COLORS.get(method, GRAY)
         ax.bar(
             x + offsets[i], values, width * 0.9,
             yerr=errors, capsize=2,
@@ -290,7 +289,7 @@ def plot_method_summary() -> None:
     fig, ax = create_figure("single", pad_left=0.8)
 
     methods = avg.index.tolist()
-    colors = [METHOD_COLORS.get(m, GRAY["medium"]) for m in methods]
+    colors = [METHOD_COLORS.get(m, GRAY) for m in methods]
 
     y = np.arange(len(methods))
     ax.barh(y, avg.values, color=colors, height=0.6)

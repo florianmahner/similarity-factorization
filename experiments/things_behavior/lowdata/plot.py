@@ -11,9 +11,8 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
+from src.colors import TEAL, GRAY, GRAY_LIGHT
 from src.utils.figure_theme import (
-    CMAP,
-    GRAY,
     add_reference_line,
     create_figure,
     despine,
@@ -66,11 +65,11 @@ def plot_accuracy_vs_percentage(df: pd.DataFrame) -> None:
     ci_low = np.array(ci_low)
     ci_high = np.array(ci_high)
 
-    ax.fill_between(percentages, ci_low, ci_high, alpha=0.3, color=CMAP[1])
-    ax.plot(percentages, means, "o-", color=CMAP[1], markersize=6, label="VICE")
+    ax.fill_between(percentages, ci_low, ci_high, alpha=0.3, color=TEAL)
+    ax.plot(percentages, means, "o-", color=TEAL, markersize=6, label="VICE")
 
-    add_reference_line(ax, 1/3, orientation="horizontal", color=GRAY["light"])
-    ax.text(percentages[-1] + 2, 1/3, "chance", va="center", fontsize=8, color=GRAY["medium"])
+    add_reference_line(ax, 1/3, orientation="horizontal", color=GRAY_LIGHT)
+    ax.text(percentages[-1] + 2, 1/3, "chance", va="center", fontsize=8, color=GRAY)
 
     ax.set_xlabel("Training data (%)")
     ax.set_ylabel("Triplet prediction accuracy")
@@ -105,8 +104,8 @@ def plot_dimensions_vs_percentage(df: pd.DataFrame) -> None:
     ci_low = np.array(ci_low)
     ci_high = np.array(ci_high)
 
-    ax.fill_between(percentages, ci_low, ci_high, alpha=0.3, color=CMAP[1])
-    ax.plot(percentages, means, "o-", color=CMAP[1], markersize=6, label="VICE")
+    ax.fill_between(percentages, ci_low, ci_high, alpha=0.3, color=TEAL)
+    ax.plot(percentages, means, "o-", color=TEAL, markersize=6, label="VICE")
 
     ax.set_xlabel("Training data (%)")
     ax.set_ylabel("Number of dimensions")

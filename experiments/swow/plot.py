@@ -18,10 +18,8 @@ from sklearn.linear_model import RidgeCV
 from sklearn.model_selection import KFold, cross_val_predict
 from sklearn.preprocessing import StandardScaler
 
+from src.colors import ROSE, TEAL, CYAN, GRAY, GRAY_LIGHT, CYCLE, setup_style
 from src.utils.figure_theme import (
-    CMAP,
-    GRAY,
-    apply_theme,
     create_figure,
     despine,
     save_figure,
@@ -42,7 +40,7 @@ def _plot_method_comparison(df: pd.DataFrame, output_path: Path) -> None:
     dimensions = ["concreteness", "valence", "animacy", "size", "heaviness"]
     methods = ["Ridge_CV", "Lasso_CV", "Gland_Projection"]
     method_labels = ["Ridge", "Lasso", "Projection"]
-    colors = [CMAP[1], CMAP[2], CMAP[0]]
+    colors = [TEAL, CYAN, ROSE]
 
     x = np.arange(len(dimensions))
     width = 0.25
@@ -68,7 +66,7 @@ def _plot_method_comparison(df: pd.DataFrame, output_path: Path) -> None:
             linewidth=0.5,
         )
 
-    ax.axhline(y=0, color=GRAY["light"], linestyle="-", linewidth=0.5)
+    ax.axhline(y=0, color=GRAY_LIGHT, linestyle="-", linewidth=0.5)
     ax.set_ylabel("Spearman correlation")
     ax.set_xticks(x)
     ax.set_xticklabels([d.capitalize() for d in dimensions], fontsize=8)
@@ -88,7 +86,7 @@ def _plot_dimension_bars(df: pd.DataFrame, method: str, output_path: Path) -> No
     method_df = method_df.sort_values("correlation", ascending=True)
 
     y = np.arange(len(method_df))
-    colors = [CMAP[i % len(CMAP)] for i in range(len(method_df))]
+    colors = [CYCLE[i % len(CYCLE)] for i in range(len(method_df))]
 
     ax.barh(
         y,

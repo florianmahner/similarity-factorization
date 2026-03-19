@@ -16,9 +16,8 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
+from src.colors import ROSE, TEAL, CYAN, GRAY, GRAY_LIGHT, GRAY_DARK, CYCLE
 from src.utils.figure_theme import (
-    CMAP,
-    GRAY,
     create_figure,
     despine,
     save_figure,
@@ -41,7 +40,7 @@ def _plot_pairwise_reconstruction(df: pd.DataFrame, output_path: Path) -> None:
         y="correlation",
         alpha=0.3,
         s=10,
-        color=CMAP[1],
+        color=TEAL,
         edgecolor="none",
         ax=ax,
         legend=False,
@@ -76,7 +75,7 @@ def _plot_low_data_accuracy(
         yerr=grouped["std"],
         marker="o",
         markersize=5,
-        color=CMAP[1],
+        color=TEAL,
         capsize=2,
         capthick=0.8,
         linewidth=1.2,
@@ -86,7 +85,7 @@ def _plot_low_data_accuracy(
     # Reference lines
     ax.axhline(
         y=33.33,
-        color=GRAY["light"],
+        color=GRAY_LIGHT,
         linestyle=":",
         linewidth=1,
         label="Chance",
@@ -94,7 +93,7 @@ def _plot_low_data_accuracy(
     )
     ax.axhline(
         y=66.67,
-        color=GRAY["medium"],
+        color=GRAY,
         linestyle=":",
         linewidth=1,
         label="Noise ceiling",
@@ -109,7 +108,7 @@ def _plot_low_data_accuracy(
         )
         ax.axhline(
             y=vice_acc,
-            color=CMAP[0],
+            color=ROSE,
             linestyle="--",
             linewidth=1,
             label=f"VICE",
@@ -117,7 +116,7 @@ def _plot_low_data_accuracy(
         )
         ax.axhline(
             y=spose_acc,
-            color=CMAP[2],
+            color=CYAN,
             linestyle="--",
             linewidth=1,
             label=f"SPoSE",
@@ -158,7 +157,7 @@ def _plot_lowdata_comparison(
         yerr=srf_grouped["std"] * 100,
         marker="o",
         markersize=5,
-        color=CMAP[1],
+        color=TEAL,
         capsize=2,
         capthick=0.8,
         linewidth=1.2,
@@ -175,7 +174,7 @@ def _plot_lowdata_comparison(
         yerr=vice_grouped["std"] * 100,
         marker="o",
         markersize=5,
-        color=CMAP[0],
+        color=ROSE,
         capsize=2,
         capthick=0.8,
         linewidth=1.2,
@@ -185,7 +184,7 @@ def _plot_lowdata_comparison(
     # Reference lines
     ax.axhline(
         y=33.33,
-        color=GRAY["light"],
+        color=GRAY_LIGHT,
         linestyle=":",
         linewidth=1,
         label="Chance",
@@ -193,7 +192,7 @@ def _plot_lowdata_comparison(
     )
     ax.axhline(
         y=66.67,
-        color=GRAY["medium"],
+        color=GRAY,
         linestyle=":",
         linewidth=1,
         label="Noise ceiling",
@@ -207,7 +206,7 @@ def _plot_lowdata_comparison(
         )
         ax.axhline(
             y=spose_acc,
-            color=CMAP[2],
+            color=CYAN,
             linestyle="--",
             linewidth=1,
             label="SPoSE",
@@ -234,7 +233,7 @@ def _plot_accuracy_comparison(df: pd.DataFrame, output_path: Path) -> None:
     fig, axes = create_figure("single", ncols=2)
 
     models = ["SRF", "SPoSE", "VICE"]
-    colors = [CMAP[1], CMAP[2], CMAP[0]]
+    colors = [TEAL, CYAN, ROSE]
 
     # Accuracy
     ax = axes[0]
@@ -249,7 +248,7 @@ def _plot_accuracy_comparison(df: pd.DataFrame, output_path: Path) -> None:
         edgecolor="white",
         linewidth=0.5,
     )
-    ax.axhline(y=33.33, color=GRAY["light"], linestyle="--", linewidth=1)
+    ax.axhline(y=33.33, color=GRAY_LIGHT, linestyle="--", linewidth=1)
     ax.set_ylabel("Accuracy (%)")
     ax.set_ylim(0, 70)
     despine(ax)
@@ -301,14 +300,14 @@ def _plot_predicted_similarity(df: pd.DataFrame, output_path: Path) -> None:
         true_norm,
         pred_norm,
         alpha=0.6,
-        color=CMAP[1],
+        color=TEAL,
         s=8,
         edgecolors="white",
         linewidth=0.3,
     )
 
     # Identity line
-    ax.plot([-0.05, 1.05], [-0.05, 1.05], "--", color=GRAY["dark"], linewidth=1, zorder=0)
+    ax.plot([-0.05, 1.05], [-0.05, 1.05], "--", color=GRAY_DARK, linewidth=1, zorder=0)
 
     correlation = np.corrcoef(true_norm, pred_norm)[0, 1]
     ax.text(0.05, 0.90, f"r = {correlation:.3f}", transform=ax.transAxes, fontsize=10)
@@ -331,7 +330,7 @@ def _plot_dimension_reliability(df: pd.DataFrame, output_path: Path, n_runs: int
     # Sort by reliability
     df_sorted = df.sort_values("Reliability", ascending=False).reset_index(drop=True)
 
-    colors = [CMAP[1] if r >= 0.9 else GRAY["medium"] for r in df_sorted["Reliability"]]
+    colors = [TEAL if r >= 0.9 else GRAY for r in df_sorted["Reliability"]]
 
     ax.bar(
         range(len(df_sorted)),
@@ -341,7 +340,7 @@ def _plot_dimension_reliability(df: pd.DataFrame, output_path: Path, n_runs: int
         width=0.8,
     )
 
-    ax.axhline(y=0.9, color=CMAP[0], linestyle="--", linewidth=1, zorder=0)
+    ax.axhline(y=0.9, color=ROSE, linestyle="--", linewidth=1, zorder=0)
 
     mean_rel = df["Reliability"].mean()
     ax.axhline(y=mean_rel, color="black", linestyle=":", linewidth=1, zorder=0)
@@ -369,7 +368,7 @@ def _plot_cross_validation_by_fraction(df: pd.DataFrame, output_path: Path) -> N
     fractions = sorted(df["observed_fraction"].unique())
     for i, frac in enumerate(fractions):
         subset = df[df["observed_fraction"] == frac].sort_values("rank")
-        color = CMAP[i % len(CMAP)]
+        color = CYCLE[i % len(CYCLE)]
         ax.plot(
             subset["rank"],
             subset["score"],
@@ -408,7 +407,7 @@ def _plot_optimal_rank_by_fraction(df: pd.DataFrame, output_path: Path) -> None:
     fig, ax = create_figure("single")
 
     n_bars = len(optimal_ranks)
-    colors = [CMAP[i % len(CMAP)] for i in range(n_bars)]
+    colors = [CYCLE[i % len(CYCLE)] for i in range(n_bars)]
 
     ax.bar(
         range(n_bars),
@@ -456,7 +455,7 @@ def _plot_cross_validation(df: pd.DataFrame, output_path: Path) -> None:
 
     ax.axvline(
         x=best_rank,
-        color=CMAP[0],
+        color=ROSE,
         linestyle="--",
         linewidth=1,
         label=f"Best: {best_rank}",

@@ -8,11 +8,11 @@ from pathlib import Path
 from scipy.stats import kstest
 
 import matplotlib.pyplot as plt
-from src.utils.figure_theme import CMAP, GRAY, create_figure, despine, save_figure, apply_theme
+from src.colors import ROSE, TEAL, CYAN, GRAY, GRAY_DARK, GRAY_LIGHT, setup_style
+from src.utils.figure_theme import create_figure, despine, save_figure
 
-# Paper style colors
-BLUE = "#3498db"
-RED = "#e74c3c"
+BLUE = TEAL
+RED = ROSE
 
 
 def _save_fig(fig: plt.Figure, path: Path, close: bool = True) -> None:
@@ -57,9 +57,9 @@ def plot_power(df: pd.DataFrame, output_path: Path, title: str = ""):
 
     fig, ax = create_figure("single")
     method_styles = [
-        ("RSA", CMAP[2], "^"),
-        ("SRF-LOO", CMAP[0], "o"),
-        ("SRF-Global", CMAP[1], "s"),
+        ("RSA", CYAN, "^"),
+        ("SRF-LOO", ROSE, "o"),
+        ("SRF-Global", TEAL, "s"),
     ]
     for method, color, marker in method_styles:
         m = power[power["method"] == method]
@@ -75,7 +75,7 @@ def plot_power(df: pd.DataFrame, output_path: Path, title: str = ""):
             label=method,
         )
 
-    ax.axhline(5, color=GRAY["dark"], ls="--", lw=1, alpha=0.7)
+    ax.axhline(5, color=GRAY_DARK, ls="--", lw=1, alpha=0.7)
     ax.set_xlabel("SNR")
     ax.set_ylabel("Power (%)")
     ax.set_ylim([-5, 105])
@@ -103,7 +103,7 @@ def plot_calibration(df: pd.DataFrame, output_path: Path):
     if ncols == 1:
         axes = [axes]
     bins = np.linspace(0, 1, 21)
-    colors = {"RSA": CMAP[2], "SRF-LOO": CMAP[0], "SRF-Global": CMAP[1]}
+    colors = {"RSA": CYAN, "SRF-LOO": ROSE, "SRF-Global": TEAL}
 
     for ax, method in zip(axes, methods_in_data):
         ps = snr0[snr0["method"] == method]["raw_p"]
@@ -117,7 +117,7 @@ def plot_calibration(df: pd.DataFrame, output_path: Path):
             alpha=0.8,
             density=True,
         )
-        ax.axhline(1, color=GRAY["dark"], ls="--", lw=1.5, label="Uniform")
+        ax.axhline(1, color=GRAY_DARK, ls="--", lw=1.5, label="Uniform")
         ax.axvline(0.05, color="red", ls=":", lw=1.5, label="α = 0.05")
         ax.set_xlabel("p-value")
         ax.set_ylabel("Density")
@@ -139,7 +139,7 @@ def plot_power_by_variance(df: pd.DataFrame, output_path: Path):
     df["var_group"] = np.where(df["dim_var"] <= median, "Low", "High")
 
     fig, axes = create_figure("wide", ncols=2)
-    for ax, (method, color) in zip(axes, [("RSA", CMAP[2]), ("SRF-LOO", CMAP[1])]):
+    for ax, (method, color) in zip(axes, [("RSA", CYAN), ("SRF-LOO", TEAL)]):
         m = df[df["method"] == method]
         for group, ls in [("High", "-"), ("Low", "--")]:
             g = m[m["var_group"] == group]
@@ -148,7 +148,7 @@ def plot_power_by_variance(df: pd.DataFrame, output_path: Path):
                 power.index, power.values, ls, color=color, lw=2, label=f"{group} var"
             )
 
-        ax.axhline(5, color=GRAY["dark"], ls=":", lw=1, alpha=0.7)
+        ax.axhline(5, color=GRAY_DARK, ls=":", lw=1, alpha=0.7)
         ax.set_xlabel("SNR")
         ax.set_ylabel("Power (%)")
         ax.set_ylim([-5, 105])
@@ -172,8 +172,8 @@ def plot_variance_effects(df: pd.DataFrame, output_path: Path, snr: float = 1.0)
 
     # Variance histogram
     ax = axes[0]
-    ax.hist(df["dim_var"], bins=30, color=GRAY["medium"], edgecolor="white", alpha=0.8)
-    ax.axvline(df["dim_var"].median(), color=CMAP[0], ls="--", lw=2)
+    ax.hist(df["dim_var"], bins=30, color=GRAY, edgecolor="white", alpha=0.8)
+    ax.axvline(df["dim_var"].median(), color=ROSE, ls="--", lw=2)
     ax.set_xlabel("Dimension variance")
     ax.set_ylabel("Count")
     ratio = df["dim_var"].max() / df["dim_var"].min()
@@ -183,7 +183,7 @@ def plot_variance_effects(df: pd.DataFrame, output_path: Path, snr: float = 1.0)
     # Power vs variance
     ax = axes[1]
     bins = pd.qcut(high_snr["dim_var"], q=5, duplicates="drop")
-    for method, color, marker in [("RSA", CMAP[2], "^"), ("SRF-LOO", CMAP[1], "s")]:
+    for method, color, marker in [("RSA", CYAN, "^"), ("SRF-LOO", TEAL, "s")]:
         m = high_snr[high_snr["method"] == method]
         grouped = m.groupby(bins, observed=True)["significant"].mean() * 100
         centers = [iv.mid for iv in grouped.index]
@@ -221,7 +221,7 @@ def plot_power_by_factor(df: pd.DataFrame, output_path: Path):
     fig, axes = create_figure("full_width" if ncols == 3 else "wide", ncols=ncols)
     if ncols == 1:
         axes = [axes]
-    colors = {"RSA": CMAP[2], "SRF-LOO": CMAP[0], "SRF-Global": CMAP[1]}
+    colors = {"RSA": CYAN, "SRF-LOO": ROSE, "SRF-Global": TEAL}
     factors = sorted(df["factor"].unique())
 
     for ax, method in zip(axes, methods_in_data):
@@ -234,7 +234,7 @@ def plot_power_by_factor(df: pd.DataFrame, output_path: Path):
             ls = "--" if n_cols == 2 else "-"
             ax.plot(power.index, power.values, ls, lw=2, label=f"{factor} ({n_cols})")
 
-        ax.axhline(5, color=GRAY["dark"], ls=":", lw=1, alpha=0.7)
+        ax.axhline(5, color=GRAY_DARK, ls=":", lw=1, alpha=0.7)
         ax.set_xlabel("SNR")
         ax.set_ylabel("Power (%)")
         ax.set_ylim([-5, 105])
@@ -353,7 +353,7 @@ def plot_power_paper(
     power = df.groupby(["snr", "method"])["significant"].mean().reset_index()
 
     # Significance level reference line (draw first, behind data)
-    ax.axhline(5, color=GRAY["medium"], ls="--", lw=1, zorder=1)
+    ax.axhline(5, color=GRAY, ls="--", lw=1, zorder=1)
 
     # RSA (red) and SRF (blue)
     styles = [
@@ -396,7 +396,7 @@ def plot_paper_combined(
     output_path: Path,
 ) -> None:
     """Create combined figure with factorial and SPOSE panels (paper style)."""
-    apply_theme()
+    setup_style()
 
     # Load data
     df_factorial = load_results(factorial_csv)
@@ -430,7 +430,7 @@ def plot_paper_single(
     srf_method: str = "SRF-LOO",
 ) -> None:
     """Create single panel paper-style power plot."""
-    apply_theme()
+    setup_style()
 
     df = load_results(csv_path)
     fig, ax = plt.subplots(1, 1, figsize=(3.3, 2.8))
@@ -449,7 +449,7 @@ def plot_linear_combination_explanation(output_path: Path) -> None:
     """
     import itertools as it
 
-    apply_theme()
+    setup_style()
 
     # Create simple factorial: 2 factors × 3 levels each = 9 items
     levels = {"Factor A": ["a1", "a2", "a3"], "Factor B": ["b1", "b2", "b3"]}
@@ -487,8 +487,8 @@ def plot_linear_combination_explanation(output_path: Path) -> None:
 
     # Bar plot of correlations
     ax = axes[3]
-    bars = ax.bar(["cor(H_A, S)", "cor(H_B, S)"], [r_a, r_b], color=[CMAP[0], CMAP[1]], width=0.6)
-    ax.axhline(1.0, color=GRAY["medium"], ls="--", lw=1)
+    bars = ax.bar(["cor(H_A, S)", "cor(H_B, S)"], [r_a, r_b], color=[ROSE, TEAL], width=0.6)
+    ax.axhline(1.0, color=GRAY, ls="--", lw=1)
     ax.set_ylim([0, 1.1])
     ax.set_ylabel("Correlation")
     ax.set_title("RSA signal dilution", fontsize=9)
@@ -508,17 +508,17 @@ def plot_variance_explanation(df: pd.DataFrame, output_path: Path) -> None:
     if "dim_var" not in df.columns:
         return
 
-    apply_theme()
+    setup_style()
 
     fig, axes = plt.subplots(1, 2, figsize=(6, 2.5))
     plt.subplots_adjust(left=0.12, right=0.95, bottom=0.18, top=0.88, wspace=0.35)
 
     # Left: variance distribution
     ax = axes[0]
-    ax.hist(df["dim_var"], bins=30, color=GRAY["medium"], edgecolor="white", alpha=0.8)
+    ax.hist(df["dim_var"], bins=30, color=GRAY, edgecolor="white", alpha=0.8)
     quartiles = df["dim_var"].quantile([0.25, 0.5, 0.75])
     for q, ls in zip(quartiles, [":", "--", ":"]):
-        ax.axvline(q, color=CMAP[1], ls=ls, lw=1.5)
+        ax.axvline(q, color=TEAL, ls=ls, lw=1.5)
     ax.set_xlabel("Dimension variance")
     ax.set_ylabel("Count")
     ax.set_title("Variance distribution")
@@ -557,7 +557,7 @@ def plot_variance_scatter(df: pd.DataFrame, output_path: Path, snr: float = 1.0)
     if "dim_var" not in df.columns:
         return
 
-    apply_theme()
+    setup_style()
 
     snr_df = df[df["snr"] == snr] if snr in df["snr"].values else df[df["snr"] == df["snr"].max()]
 
@@ -601,7 +601,7 @@ def plot_dimension_variance_ranking(output_path: Path) -> None:
     """
     from pathlib import Path
 
-    apply_theme()
+    setup_style()
 
     # Load SPOSE embedding
     current = Path(__file__).resolve()
@@ -632,7 +632,7 @@ def plot_dimension_variance_ranking(output_path: Path) -> None:
     y_pos = np.arange(n_show)
     low_labels = [labels[i] if i < len(labels) else f"dim_{i}" for i in low_idx]
     low_vars = var_per_dim[low_idx]
-    ax.barh(y_pos, low_vars, color=CMAP[0], height=0.7)
+    ax.barh(y_pos, low_vars, color=ROSE, height=0.7)
     ax.set_yticks(y_pos)
     ax.set_yticklabels(low_labels, fontsize=7)
     ax.set_xlabel("Variance")
@@ -644,7 +644,7 @@ def plot_dimension_variance_ranking(output_path: Path) -> None:
     ax = axes[1]
     high_labels = [labels[i] if i < len(labels) else f"dim_{i}" for i in high_idx]
     high_vars = var_per_dim[high_idx]
-    ax.barh(y_pos, high_vars, color=CMAP[1], height=0.7)
+    ax.barh(y_pos, high_vars, color=TEAL, height=0.7)
     ax.set_yticks(y_pos)
     ax.set_yticklabels(high_labels, fontsize=7)
     ax.set_xlabel("Variance")
@@ -660,7 +660,7 @@ def plot_variance_power_relationship(df: pd.DataFrame, output_path: Path) -> Non
     if "dim_var" not in df.columns:
         return
 
-    apply_theme()
+    setup_style()
 
     snr1 = df[df["snr"] == 1.0] if 1.0 in df["snr"].values else df[df["snr"] == df["snr"].max()]
 
@@ -684,7 +684,7 @@ def plot_variance_power_relationship(df: pd.DataFrame, output_path: Path) -> Non
             marker=marker, color=color, lw=1.5, ms=6, capsize=3, label=method
         )
 
-    ax.axhline(5, color=GRAY["medium"], ls="--", lw=1, zorder=0)
+    ax.axhline(5, color=GRAY, ls="--", lw=1, zorder=0)
     ax.set_xlabel("Dimension variance")
     ax.set_ylabel("Power (%)")
     ax.set_ylim([-5, 105])
@@ -723,7 +723,7 @@ def plot_all_with_explanations(csv_path: Path, output_dir: Path | None = None) -
     srf_method = "SRF-Global" if "SRF-Global" in df["method"].values else "SRF-LOO"
     title = "Simulation" if "factor" in df.columns else "SPoSE semantic embedding"
 
-    apply_theme()
+    setup_style()
     fig, ax = plt.subplots(1, 1, figsize=(3.3, 2.8))
     plt.subplots_adjust(left=0.17, right=0.96, bottom=0.18, top=0.88)
     plot_power_paper(ax, df, title=title, srf_method=srf_method)
