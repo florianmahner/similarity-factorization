@@ -14,8 +14,9 @@ import numpy as np
 import pandas as pd
 
 from src.coherence import masked_parallel_analysis
+from src.colors import ROSE, TEAL, GRAY, GRAY_LIGHT
 from src.utils import get_output_dir
-from src.utils.figure_theme import CMAP, GRAY, create_figure, despine
+from src.utils.figure_theme import create_figure, despine
 from src.utils.helpers import compute_similarity_matrix_from_triplets
 from src.utils.io import load_triplets
 
@@ -50,7 +51,7 @@ def plot_kstar_vs_data(records: list[dict], output_dir: Path) -> None:
     fig, ax = create_figure("single")
     pcts = [r["pct"] for r in records]
     kstars = [r["k_star"] for r in records]
-    ax.plot(pcts, kstars, marker="o", color=CMAP[1], linewidth=2, label="Parallel analysis")
+    ax.plot(pcts, kstars, marker="o", color=TEAL, linewidth=2, label="Parallel analysis")
     ax.set_xlabel("Triplet data (%)")
     ax.set_ylabel("Estimated rank (k*)")
     ax.set_xticks(pcts)
@@ -64,17 +65,17 @@ def plot_eigenvalue_spectrum(result_100: dict, output_dir: Path) -> None:
     """Eigenvalue spectrum vs null threshold at 100% data."""
     fig, ax = create_figure("wide")
     k = np.arange(1, len(result_100["evals_ref"]) + 1)
-    ax.plot(k, result_100["evals_observed"][:, -1], color=CMAP[1], label="Observed (p=0.95)")
+    ax.plot(k, result_100["evals_observed"][:, -1], color=TEAL, label="Observed (p=0.95)")
     ax.plot(
         k,
         result_100["thresholds"][:, -1],
-        color=GRAY["medium"],
+        color=GRAY,
         linestyle="--",
         label=f"Null ({int((1 - ALPHA) * 100)}th pctl)",
     )
     ax.axvline(
         result_100["k_star"],
-        color=CMAP[0],
+        color=ROSE,
         linestyle=":",
         linewidth=1.5,
         label=f'k*={result_100["k_star"]}',
@@ -96,9 +97,9 @@ def plot_pvalues(result_100: dict, output_dir: Path) -> None:
     """Bar plot of p-values for each component index."""
     fig, ax = create_figure("wide")
     k = np.arange(1, len(result_100["pvalues"]) + 1)
-    colors = [CMAP[1] if p < ALPHA else GRAY["light"] for p in result_100["pvalues"]]
+    colors = [TEAL if p < ALPHA else GRAY_LIGHT for p in result_100["pvalues"]]
     ax.bar(k, result_100["pvalues"], color=colors, width=1.0, edgecolor="white", linewidth=0.3)
-    ax.axhline(ALPHA, color=CMAP[0], linestyle="--", linewidth=1, label=f"alpha={ALPHA}")
+    ax.axhline(ALPHA, color=ROSE, linestyle="--", linewidth=1, label=f"alpha={ALPHA}")
     ax.set_xlabel("Component index (k)")
     ax.set_ylabel("p-value")
     ax.set_ylim(0, 1.05)
