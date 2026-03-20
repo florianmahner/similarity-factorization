@@ -1,0 +1,32 @@
+# Cross-validation rank estimation using kappa k* as center
+#
+# Reads k* from ../kappa/outputs/<dataset>.json
+# Estimates bounds inline via estimate_sampling_bounds_fast
+#
+# Usage:
+#   ./scripts/submit experiments/datasets/ranks/cv/run.py dataset=mur92
+#   ./scripts/submit experiments/datasets/ranks/cv/run.py dataset=nsd subject_id=1
+#   ./scripts/submit experiments/datasets/ranks/cv/run.py dataset=things_behavior kappa_name=things_100pct
+
+defaults:
+  - /base
+  - /dataset: ???
+  - _self_
+
+experiment_name: ranks
+task: cv
+
+subject_id: null
+
+# Override to map to kappa output filename when it differs from dataset.name
+# e.g., kappa_name=things_100pct for dataset=things_behavior
+kappa_name: null
+
+cv:
+  n_repeats: 5
+  sampling_selection: mean   # mean/min/max of (pmin, pmax)
+  n_ranks_around_kstar: 10   # search ±n_ranks_around_kstar * step from k*
+
+common:
+  n_jobs: -1
+  random_state: 42
