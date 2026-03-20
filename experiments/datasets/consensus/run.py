@@ -51,7 +51,8 @@ def _load_rank_estimation(dataset_name: str, subject_id: int | None) -> dict:
 def run(cfg: DictConfig) -> None:
     subject_id = cfg.get("subject_id")
 
-    output_dir = Path.cwd()
+    ds_name = cfg.dataset.name
+    output_dir = Path.cwd() / ds_name
     if subject_id is not None:
         output_dir = output_dir / f"subj{subject_id:02d}"
     output_dir.mkdir(parents=True, exist_ok=True)
