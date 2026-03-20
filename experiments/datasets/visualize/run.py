@@ -4,17 +4,17 @@ Reads consensus embedding from ../consensus/outputs/ and dataset
 labels/images, produces per-dimension image grids and combined overview.
 
 Usage:
-    ./scripts/submit experiments/datasets/visualize/plot.py -- --dataset mur92
-    ./scripts/submit experiments/datasets/visualize/plot.py -- --dataset things_behavior --k 15
+    ./scripts/submit experiments/datasets/visualize/run.py dataset=mur92
+    ./scripts/submit experiments/datasets/visualize/run.py dataset=peterson_animals k=15
 """
 from __future__ import annotations
 
-import argparse
 import logging
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from omegaconf import DictConfig
 from PIL import Image
 
 from datasets import load_dataset
@@ -23,9 +23,7 @@ from src.utils.figure_theme import despine, save_figure
 
 log = logging.getLogger(__name__)
 
-TASK_DIR = Path(__file__).resolve().parent
-CONSENSUS_DIR = TASK_DIR.parent / "consensus" / "outputs"
-OUTPUT_DIR = TASK_DIR / "outputs"
+CONSENSUS_DIR = Path(__file__).resolve().parent.parent / "consensus" / "outputs"
 
 
 def _get_item_labels(dataset, n_items: int) -> list[str]:
@@ -47,12 +45,7 @@ def _get_images(dataset) -> np.ndarray | list[Path] | None:
     return None
 
 
-def _plot_topk_text(
-    output_path: Path,
-    embedding: np.ndarray,
-    labels: list[str],
-    k: int = 10,
-) -> None:
+def _plot_topk_text(output_path, embedding, labels, k=10):
     n_dims = embedding.shape[1]
     fig, axes = plt.subplots(1, n_dims, figsize=(3 * n_dims, 6))
     if n_dims == 1:
@@ -62,7 +55,6 @@ def _plot_topk_text(
         top_idx = np.argsort(embedding[:, dim])[::-1][:k]
         top_labels = [labels[i] for i in top_idx]
         top_values = embedding[top_idx, dim]
-
         ax.barh(range(k), top_values[::-1], color=CYCLE[dim % len(CYCLE)])
         ax.set_yticks(range(k))
         ax.set_yticklabels(top_labels[::-1], fontsize=8)
@@ -75,12 +67,7 @@ def _plot_topk_text(
     plt.close(fig)
 
 
-def _plot_topk_images(
-    output_path: Path,
-    embedding: np.ndarray,
-    images: np.ndarray | list[Path],
-    k: int = 10,
-) -> None:
+def _plot_topk_images(output_path, embedding, images, k=10):
     n_dims = embedding.shape[1]
     is_array = isinstance(images, np.ndarray)
 
@@ -161,7 +148,6 @@ def _plot_single_dimension_text(output_dir, dim, embedding, labels, k=10):
 def _plot_individual_dimensions(output_dir, embedding, images, labels, k=10):
     dims_dir = output_dir / "dims"
     dims_dir.mkdir(exist_ok=True)
-
     for dim in range(embedding.shape[1]):
         if images is not None:
             _plot_single_dimension_images(dims_dir, dim, embedding, images, k=k)
@@ -169,41 +155,42 @@ def _plot_individual_dimensions(output_dir, embedding, images, labels, k=10):
             _plot_single_dimension_text(dims_dir, dim, embedding, labels, k=k)
 
 
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+def run(cfg: DictConfig) -> None:
+    subject_id = cfg.get("subject_id")
+    k = cfg.get("k", 10)
+    ds_name = cfg.dataset.name
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset", required=True, help="Dataset name (e.g., mur92, things_behavior)")
-    parser.add_argument("--k", type=int, default=10, help="Top-k items per dimension")
-    parser.add_argument("--subject-id", type=int, default=None)
-    args = parser.parse_args()
-
-    ds_dir = CONSENSUS_DIR / args.dataset
-    if args.subject_id:
-        ds_dir = ds_dir / f"subj{args.subject_id:02d}"
+    ds_dir = CONSENSUS_DIR / ds_name
+    if subject_id is not None:
+        ds_dir = ds_dir / f"subj{subject_id:02d}"
 
     embedding_path = ds_dir / "embedding.npy"
     if not embedding_path.exists():
-        log.error(f"Embedding not found: {embedding_path}")
-        raise SystemExit(1)
+        raise FileNotFoundError(
+            f"Embedding not found: {embedding_path}\n"
+            f"Run consensus first: ./scripts/submit experiments/datasets/consensus/run.py dataset={ds_name}"
+        )
 
     embedding = np.load(embedding_path)
     log.info(f"Embedding shape: {embedding.shape}")
 
-    dataset = load_dataset(args.dataset)
+    load_kwargs = {"root": cfg.dataset.get("path")}
+    if subject_id is not None:
+        load_kwargs["subject_id"] = subject_id
+    dataset = load_dataset(cfg.dataset.name, **load_kwargs)
     labels = _get_item_labels(dataset, embedding.shape[0])
     images = _get_images(dataset)
 
-    out = OUTPUT_DIR / args.dataset
-    out.mkdir(parents=True, exist_ok=True)
+    output_dir = Path.cwd() / ds_name
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     if images is not None:
-        log.info(f"Plotting top-{args.k} images per dimension...")
-        _plot_topk_images(out / "topk_images.pdf", embedding, images, k=args.k)
+        log.info(f"Plotting top-{k} images per dimension...")
+        _plot_topk_images(output_dir / "topk_images.pdf", embedding, images, k=k)
     else:
-        log.info(f"Plotting top-{args.k} labels per dimension...")
-        _plot_topk_text(out / "topk_items.pdf", embedding, labels, k=args.k)
+        log.info(f"Plotting top-{k} labels per dimension...")
+        _plot_topk_text(output_dir / "topk_items.pdf", embedding, labels, k=k)
 
     log.info("Plotting individual dimensions...")
-    _plot_individual_dimensions(out, embedding, images, labels, k=args.k)
-    log.info(f"Saved to {out}")
+    _plot_individual_dimensions(output_dir, embedding, images, labels, k=k)
+    log.info(f"Saved to {output_dir}")

@@ -1,0 +1,16 @@
+# Visualize top-k items per embedding dimension
+#
+# Usage:
+#   ./scripts/submit experiments/datasets/visualize/run.py dataset=mur92
+#   ./scripts/submit experiments/datasets/visualize/run.py dataset=peterson_animals k=15
+
+defaults:
+  - /base
+  - /dataset: ???
+  - _self_
+
+experiment_name: visualize
+task: ${dataset.name}
+
+k: 10
+subject_id: null
