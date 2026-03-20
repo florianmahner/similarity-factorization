@@ -21,7 +21,7 @@ from pathlib import Path
 import numpy as np
 from omegaconf import DictConfig
 from pysrf import SRF
-from pysrf.consensus import AlignedConsensus, EnsembleEmbedding
+from pysrf.consensus import ClusterEmbedding, EnsembleEmbedding
 from sklearn.pipeline import Pipeline
 
 from similarity import build_similarity
@@ -49,7 +49,6 @@ def _load_rank_estimation(dataset_name: str, subject_id: int | None) -> dict:
 
 
 def run(cfg: DictConfig) -> None:
-    """Generate consensus embedding using pre-computed optimal rank."""
     subject_id = cfg.get("subject_id")
 
     output_dir = Path.cwd()
@@ -57,65 +56,58 @@ def run(cfg: DictConfig) -> None:
         output_dir = output_dir / f"subj{subject_id:02d}"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load pre-computed rank (required)
     rank_est = _load_rank_estimation(cfg.dataset.name, subject_id)
     optimal_rank = rank_est["optimal_rank"]
     log.info(f"Optimal rank: {optimal_rank}")
 
-    # Build similarity matrix
     log.info(f"Building similarity matrix for {cfg.dataset.name}...")
     similarity = build_similarity(cfg.dataset, subject_id=subject_id)
     n_samples = similarity.shape[0]
     log.info(f"Similarity matrix shape: ({n_samples}, {n_samples})")
 
-    # Fit ensemble and consensus
     n_runs = cfg.generate.n_stable_runs
     log.info(f"Running {n_runs} SRF fits for consensus...")
 
-    pipeline = Pipeline(
-        [
-            (
-                "ensemble",
-                EnsembleEmbedding(
-                    SRF(rank=optimal_rank, random_state=cfg.common.random_state),
-                    n_runs=n_runs,
-                    random_state=cfg.common.random_state,
-                    n_jobs=cfg.common.n_jobs,
-                ),
-            ),
-            ("consensus", AlignedConsensus(rank=optimal_rank, aggregation="select")),
-        ]
-    )
+    pipeline = Pipeline([
+        ("ensemble", EnsembleEmbedding(
+            SRF(rank=optimal_rank, random_state=cfg.common.random_state),
+            n_runs=n_runs,
+            random_state=cfg.common.random_state,
+            n_jobs=cfg.common.n_jobs,
+        )),
+        ("cluster", ClusterEmbedding(
+            min_clusters=optimal_rank,
+            max_clusters=optimal_rank,
+            random_state=cfg.common.random_state,
+            n_jobs=cfg.common.n_jobs,
+        )),
+    ])
 
     pipeline.fit(similarity)
     embedding = pipeline.transform(similarity)
 
-    # Extract results
     ensemble = pipeline.named_steps["ensemble"]
-    consensus = pipeline.named_steps["consensus"]
-    ensemble_embeddings = ensemble.embeddings_
+    cluster = pipeline.named_steps["cluster"]
+
+    # Reshape ensemble embeddings: (n_samples, rank*n_runs) -> (n_runs, n_samples, rank)
+    stacked = ensemble.embeddings_
+    runs = stacked.reshape(n_samples, n_runs, optimal_rank).transpose(1, 0, 2)
 
     log.info(f"Consensus embedding shape: {embedding.shape}")
-    log.info(f"Selected run: {consensus.selected_run_idx_}")
-    log.info(
-        f"Agreement: {consensus.agreement_scores_.mean():.3f} ± {consensus.agreement_scores_.std():.3f}"
-    )
+    log.info(f"Cluster k: {cluster.best_k_}")
 
     # Quality metrics
     recon = embedding @ embedding.T
-    recon_error = np.linalg.norm(similarity - recon, "fro") / np.linalg.norm(
-        similarity, "fro"
-    )
-    sparsity = (embedding == 0).mean()
-    purity = (embedding.max(axis=1) / (embedding.sum(axis=1) + 1e-10)).mean()
+    recon_error = np.linalg.norm(similarity - recon, "fro") / np.linalg.norm(similarity, "fro")
+    sparsity = float((embedding == 0).mean())
+    purity = float((embedding.max(axis=1) / (embedding.sum(axis=1) + 1e-10)).mean())
 
     log.info(f"Reconstruction error: {recon_error:.4f}")
     log.info(f"Sparsity: {sparsity:.3f}")
     log.info(f"Purity: {purity:.3f}")
 
-    # Save outputs
     np.save(output_dir / "embedding.npy", embedding)
-    np.save(output_dir / "runs.npy", ensemble_embeddings)
+    np.save(output_dir / "runs.npy", runs)
 
     summary = {
         "dataset": cfg.dataset.name,
@@ -123,13 +115,10 @@ def run(cfg: DictConfig) -> None:
         "n_samples": n_samples,
         "rank": optimal_rank,
         "n_runs": n_runs,
-        "selected_run_idx": int(consensus.selected_run_idx_),
-        "agreement_scores": consensus.agreement_scores_.tolist(),
-        "centrality_scores": consensus.centrality_scores_.tolist(),
+        "cluster_k": int(cluster.best_k_),
         "reconstruction_error": float(recon_error),
-        "sparsity": float(sparsity),
-        "purity": float(purity),
+        "sparsity": sparsity,
+        "purity": purity,
     }
     (output_dir / "summary.json").write_text(json.dumps(summary, indent=2))
-
     log.info(f"Saved to {output_dir}")
