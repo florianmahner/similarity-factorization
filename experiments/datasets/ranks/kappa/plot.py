@@ -15,8 +15,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from src.colors import ROSE, TEAL, CYAN, GRAY
-from src.utils.figure_theme import CMAP, create_figure, despine, save_figure
+from src.colors import ROSE, TEAL, CYAN, GRAY, CYCLE
+from src.utils.figure_theme import create_figure, despine, save_figure
 
 log = logging.getLogger(__name__)
 
@@ -222,7 +222,7 @@ def plot_kappa_overlay(records: list[dict], result_dir: Path, output_dir: Path) 
 
     fig, ax = create_figure("wide")
     n_ds = len(datasets)
-    colors = CMAP[:n_ds] if n_ds <= len(CMAP) else plt.cm.tab10(np.linspace(0, 1, n_ds))
+    colors = CYCLE[:n_ds] if n_ds <= len(CYCLE) else plt.cm.tab10(np.linspace(0, 1, n_ds))
 
     for i, name in enumerate(datasets):
         npz = np.load(result_dir / f"{name}.npz")

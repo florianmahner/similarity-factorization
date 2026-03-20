@@ -14,7 +14,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from src.utils.figure_theme import CMAP, GRAY, add_reference_line, create_figure, despine, save_figure
+from src.colors import CYCLE, GRAY, GRAY_DARK, GRAY_LIGHT
+from src.utils.figure_theme import add_reference_line, create_figure, despine, save_figure
 
 log = logging.getLogger(__name__)
 
@@ -60,7 +61,7 @@ def plot_pct_overlay(results: dict[str, dict], result_dir: Path, output_dir: Pat
 
     fig, ax = create_figure("wide")
     n_ds = len(datasets)
-    colors = CMAP[:n_ds] if n_ds <= len(CMAP) else plt.cm.tab10(np.linspace(0, 1, n_ds))
+    colors = CYCLE[:n_ds] if n_ds <= len(CYCLE) else plt.cm.tab10(np.linspace(0, 1, n_ds))
 
     for i, name in enumerate(datasets):
         npz = np.load(result_dir / f"{name}.npz")
@@ -69,8 +70,8 @@ def plot_pct_overlay(results: dict[str, dict], result_dir: Path, output_dir: Pat
         ax.plot(k_range, pvalues, color=colors[i], linewidth=1.2,
                 label=DATASET_LABELS.get(name, name), alpha=0.85)
 
-    add_reference_line(ax, 0.05, color=GRAY["dark"], linestyle="--", linewidth=0.8)
-    ax.text(1, 0.06, r"$\alpha = 0.05$", fontsize=7, color=GRAY["dark"], va="bottom")
+    add_reference_line(ax, 0.05, color=GRAY_DARK, linestyle="--", linewidth=0.8)
+    ax.text(1, 0.06, r"$\alpha = 0.05$", fontsize=7, color=GRAY_DARK, va="bottom")
     ax.set_xlabel("Dimension (k)")
     ax.set_ylabel("p-value")
     ax.set_ylim(-0.05, 1.05)
@@ -96,11 +97,11 @@ def plot_pct_per_dataset(results: dict[str, dict], result_dir: Path, output_dir:
         nonsig_mask = ~sig_mask
 
         fig, ax = create_figure("single")
-        ax.scatter(k_range[sig_mask], pvalues[sig_mask], s=12, color=CMAP[3], zorder=3, label="p < 0.05")
-        ax.scatter(k_range[nonsig_mask], pvalues[nonsig_mask], s=12, color=GRAY["light"], zorder=2, label="n.s.")
-        add_reference_line(ax, 0.05, color=CMAP[0], linestyle="--", linewidth=0.8)
-        ax.axvline(k_star, color=GRAY["medium"], linestyle="--", linewidth=0.8, zorder=0)
-        ax.text(k_star, 0.85, f"k*={k_star}", ha="left", va="top", fontsize=7, color=GRAY["dark"])
+        ax.scatter(k_range[sig_mask], pvalues[sig_mask], s=12, color=CYCLE[3], zorder=3, label="p < 0.05")
+        ax.scatter(k_range[nonsig_mask], pvalues[nonsig_mask], s=12, color=GRAY_LIGHT, zorder=2, label="n.s.")
+        add_reference_line(ax, 0.05, color=CYCLE[0], linestyle="--", linewidth=0.8)
+        ax.axvline(k_star, color=GRAY, linestyle="--", linewidth=0.8, zorder=0)
+        ax.text(k_star, 0.85, f"k*={k_star}", ha="left", va="top", fontsize=7, color=GRAY_DARK)
         ax.set_xlabel("Dimension (k)")
         ax.set_ylabel("p-value")
         ax.set_ylim(-0.05, 1.05)

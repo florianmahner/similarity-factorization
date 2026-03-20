@@ -18,9 +18,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from src.colors import CYCLE, GRAY, GRAY_DARK, GRAY_LIGHT
 from src.utils.figure_theme import (
-    CMAP,
-    GRAY,
     add_reference_line,
     create_figure,
     despine,
@@ -35,10 +34,10 @@ PCT_DIR = TASK_DIR.parent / "pct" / "outputs"
 OUTPUT_DIR = TASK_DIR / "outputs"
 
 METHOD_COLORS = {
-    "activation": CMAP[1],
-    "kappa": CMAP[0],
-    "cluster": CMAP[2],
-    "pct": CMAP[3],
+    "activation": CYCLE[1],
+    "kappa": CYCLE[0],
+    "cluster": CYCLE[2],
+    "pct": CYCLE[3],
 }
 
 METHOD_LABELS = {
@@ -146,7 +145,7 @@ def _plot_coherence_panel(ax, kappa_dir, name):
     for i, idx in enumerate(selected):
         ax.plot(p_list, x_median[idx], color=cmap[i], linewidth=1.2, label=f"k={k_list[idx]}")
     if tau_kp.size > 0:
-        ax.plot(p_list, tau_kp[selected[0]], color=GRAY["medium"], linestyle="--", linewidth=0.8, label="null")
+        ax.plot(p_list, tau_kp[selected[0]], color=GRAY, linestyle="--", linewidth=0.8, label="null")
     ax.set_xlabel("Sampling fraction (p)")
     ax.set_ylabel("Coherence (Iproj)")
     ax.set_ylim(-0.05, 1.05)
@@ -157,10 +156,10 @@ def _plot_coherence_panel(ax, kappa_dir, name):
 def _plot_kappa_panel(ax, kappa_dir, name, k_star):
     npz = np.load(kappa_dir / f"{name}.npz")
     k_list, kappa = npz["k_list"], npz["kappa"]
-    ax.plot(k_list[:len(kappa)], kappa, color=CMAP[0], linewidth=1.5)
-    ax.axvline(k_star, color=GRAY["medium"], linestyle="--", linewidth=0.8, zorder=0)
+    ax.plot(k_list[:len(kappa)], kappa, color=CYCLE[0], linewidth=1.5)
+    ax.axvline(k_star, color=GRAY, linestyle="--", linewidth=0.8, zorder=0)
     ax.text(k_star + (k_list[-1] - k_list[0]) * 0.02, kappa.max() * 0.92,
-            f"k*={k_star}", ha="left", va="top", fontsize=7, color=GRAY["dark"])
+            f"k*={k_star}", ha="left", va="top", fontsize=7, color=GRAY_DARK)
     ax.set_xlabel("Rank (k)")
     ax.set_ylabel("Kappa")
     despine(ax)
@@ -172,11 +171,11 @@ def _plot_pct_panel(ax, pct_dir, name, k_star):
     k_range = np.arange(1, len(pvalues) + 1)
     sig_mask = pvalues < 0.05
 
-    ax.scatter(k_range[sig_mask], pvalues[sig_mask], s=12, color=CMAP[3], zorder=3, label="p < 0.05")
-    ax.scatter(k_range[~sig_mask], pvalues[~sig_mask], s=12, color=GRAY["light"], zorder=2, label="n.s.")
-    add_reference_line(ax, 0.05, color=CMAP[0], linestyle="--", linewidth=0.8)
-    ax.axvline(k_star, color=GRAY["medium"], linestyle="--", linewidth=0.8, zorder=0)
-    ax.text(k_star, 0.85, f"k*={k_star}", ha="left", va="top", fontsize=7, color=GRAY["dark"])
+    ax.scatter(k_range[sig_mask], pvalues[sig_mask], s=12, color=CYCLE[3], zorder=3, label="p < 0.05")
+    ax.scatter(k_range[~sig_mask], pvalues[~sig_mask], s=12, color=GRAY_LIGHT, zorder=2, label="n.s.")
+    add_reference_line(ax, 0.05, color=CYCLE[0], linestyle="--", linewidth=0.8)
+    ax.axvline(k_star, color=GRAY, linestyle="--", linewidth=0.8, zorder=0)
+    ax.text(k_star, 0.85, f"k*={k_star}", ha="left", va="top", fontsize=7, color=GRAY_DARK)
     ax.set_xlabel("Dimension (k)")
     ax.set_ylabel("p-value")
     ax.set_ylim(-0.05, 1.05)
