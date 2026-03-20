@@ -1,0 +1,87 @@
+# Permutation Coherence Test (PCT) rank estimation across datasets
+#
+# center=true for kernel-based similarities (RBF, gaussian kernel) where
+# entries have a large constant offset. center=false for raw empirical
+# similarities (triplet proportions, correlations, PPMI).
+#
+# Usage:
+#   ./scripts/submit experiments/datasets/ranks/pct/run.py --bg
+
+defaults:
+  - /base
+  - _self_
+
+experiment_name: ranks
+task: pct
+
+pct:
+  B: 15
+  J: 50
+  n_p: 10
+  p_min: 0.30
+  p_max: 0.95
+  alpha: 0.05
+  random_state: 42
+
+datasets:
+  # --- Small datasets: raw empirical RSMs (no centering) ---
+  - name: mur92
+    config: mur92
+    k_max: 80
+    center: false
+  - name: peterson_animals
+    config: peterson_animals
+    k_max: 100
+    center: false
+  - name: peterson_various
+    config: peterson_various
+    k_max: 100
+    center: false
+
+  # --- THINGS behavioral triplets: raw proportions (no centering) ---
+  - name: things_5pct
+    config: things_behavior
+    triplet_pct: 5
+    triplet_partition: 0
+    k_max: 60
+    center: false
+  - name: things_10pct
+    config: things_behavior
+    triplet_pct: 10
+    triplet_partition: 0
+    k_max: 60
+    center: false
+  - name: things_20pct
+    config: things_behavior
+    triplet_pct: 20
+    triplet_partition: 0
+    k_max: 60
+    center: false
+  - name: things_50pct
+    config: things_behavior
+    triplet_pct: 50
+    triplet_partition: 0
+    k_max: 60
+    center: false
+  - name: things_100pct
+    config: things_behavior
+    triplet_pct: 100
+    k_max: 60
+    center: false
+
+  # --- Kernel-based similarities (center=true) ---
+  - name: dinov3
+    config: dinov3
+    k_max: 120
+    center: true
+  - name: nsd_subj01
+    config: nsd
+    subject_id: 1
+    k_max: 200
+    center: true
+
+  # --- SWOW PPMI: raw empirical (no centering) ---
+  - name: swow
+    config: swow
+    k_max: 200
+    center: false
