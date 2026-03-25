@@ -36,7 +36,7 @@ OUTPUT = Path(__file__).resolve().parent / "outputs"
 
 FIG_WIDTH_MM = 180
 FIG_WIDTH_IN = FIG_WIDTH_MM / 25.4
-ROW_H = 40 / 25.4  # 40mm row height, same as main figures
+ROW_H = 55 / 25.4  # 55mm height — gives ~4:3 ratio per panel at 180mm/2 width
 
 
 def _nature_rc(font_size: float) -> dict:
