@@ -2,7 +2,7 @@
 
 Figures:
   S1: variance_quartile.pdf -- Power vs dimension variance + example dimensions
-  S2: similarity_benchmarks.pdf -- SimLex-999 scatter plot
+  S2: similarity_benchmarks.pdf -- SimLex-999 and WordSim-353 scatter plots
 
 Data sources (all from stable experiments/analyses/ or data/):
   - experiments/analyses/rsa/spose/outputs/spose.csv
@@ -10,6 +10,7 @@ Data sources (all from stable experiments/analyses/ or data/):
   - data/things/labels_spose_66d_short.txt
   - experiments/datasets/consensus/outputs/swow/embedding.npy
   - data/word_similarity/SimLex-999/SimLex-999.txt
+  - data/word_similarity/WordSim-353/wordsim353.tsv
   - data/small-world-of-words/ (vocabulary via loader)
 
 Usage:
@@ -35,6 +36,7 @@ OUTPUT = Path(__file__).resolve().parent / "outputs"
 
 FIG_WIDTH_MM = 180
 FIG_WIDTH_IN = FIG_WIDTH_MM / 25.4
+ROW_H = 40 / 25.4  # 40mm row height, same as main figures
 
 
 def _nature_rc(font_size: float) -> dict:
@@ -72,7 +74,7 @@ def _save(fig: plt.Figure, name: str) -> None:
 # ---------------------------------------------------------------------------
 
 def _panel_power_vs_variance(ax: plt.Axes, df: pd.DataFrame, fs: float) -> None:
-    """Left panel: binned power curves for RSA and SRF."""
+    """Binned power curves for RSA and SRF."""
     snr_val = 1.0 if 1.0 in df["snr"].values else df["snr"].max()
     snr_df = df[df["snr"] == snr_val]
     ann = fs - 0.5
@@ -105,7 +107,7 @@ def _panel_power_vs_variance(ax: plt.Axes, df: pd.DataFrame, fs: float) -> None:
 
 
 def _panel_example_dimensions(ax: plt.Axes, fs: float) -> None:
-    """Right panel: bar chart of example SPoSE dimensions sorted by variance."""
+    """Bar chart of example SPoSE dimensions sorted by variance."""
     embed_path = PROJECT_ROOT / "data" / "things" / "spose_embedding_66d.txt"
     x = np.maximum(np.loadtxt(embed_path), 0)
     label_path = PROJECT_ROOT / "data" / "things" / "labels_spose_66d_short.txt"
@@ -148,7 +150,6 @@ def plot_variance_quartile():
     df = load_results(spose_csv)
 
     fs = 5
-    ROW_H = 35 / 25.4
     fig, axes = plt.subplots(
         1, 2, figsize=(FIG_WIDTH_IN, ROW_H),
         gridspec_kw={"width_ratios": [1.2, 1], "wspace": 0.50},
@@ -166,7 +167,7 @@ def plot_variance_quartile():
 
 
 # ---------------------------------------------------------------------------
-# Fig S2: Similarity benchmarks -- SimLex-999
+# Fig S2: Similarity benchmarks -- SimLex-999 + WordSim-353
 # ---------------------------------------------------------------------------
 
 def _load_swow_embedding():
@@ -206,10 +207,34 @@ def _compute_cosine_similarity(embedding, word_to_idx, word1_list, word2_list, s
     return {"sims": emb_sims, "scores": human_scores, "rho": rho, "n": len(emb_sims)}
 
 
+def _panel_scatter(ax: plt.Axes, result: dict, xlabel: str, fs: float) -> None:
+    """Scatter plot of embedding similarity vs human ratings."""
+    ax.scatter(
+        result["scores"], result["sims"],
+        color=TEAL, alpha=0.4, s=4,
+        linewidths=0.2, edgecolors="white", zorder=2, rasterized=True,
+    )
+
+    z = np.polyfit(result["scores"], result["sims"], 1)
+    x_line = np.linspace(result["scores"].min(), result["scores"].max(), 100)
+    ax.plot(x_line, np.poly1d(z)(x_line), color=GRAY_DARK,
+            linewidth=0.6, linestyle="--", zorder=1)
+
+    ax.text(
+        0.05, 0.95,
+        f"$\\rho$ = {result['rho']:.2f}\nn = {result['n']}",
+        transform=ax.transAxes, va="top", fontsize=fs,
+    )
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel("SRF embedding similarity")
+    despine(ax)
+
+
 def plot_similarity_benchmarks():
-    """Fig S2: SimLex-999 scatter plot (single panel, centered at 180mm)."""
+    """Fig S2: SimLex-999 + WordSim-353 scatter plots, side by side."""
     embedding, word_to_idx = _load_swow_embedding()
 
+    # SimLex-999
     simlex_path = (
         PROJECT_ROOT / "data" / "word_similarity"
         / "SimLex-999" / "SimLex-999.txt"
@@ -221,37 +246,33 @@ def plot_similarity_benchmarks():
         simlex_df["SimLex999"].to_numpy(),
     )
 
+    # WordSim-353
+    wordsim_path = (
+        PROJECT_ROOT / "data" / "word_similarity"
+        / "WordSim-353" / "wordsim353.tsv"
+    )
+    wordsim_df = pd.read_csv(wordsim_path, sep="\t", header=None,
+                              names=["word1", "word2", "score"])
+    wordsim = _compute_cosine_similarity(
+        embedding, word_to_idx,
+        wordsim_df["word1"].tolist(), wordsim_df["word2"].tolist(),
+        wordsim_df["score"].to_numpy(),
+    )
+
     fs = 5
-    ROW_H = 35 / 25.4
-    PANEL_W = 45 / 25.4  # single panel width
-
-    fig, ax = plt.subplots(1, 1, figsize=(FIG_WIDTH_IN, ROW_H))
-
-    # Center the axes within the full-width figure
-    panel_frac = PANEL_W / FIG_WIDTH_IN
-    left = (1 - panel_frac) / 2
-    ax.set_position([left, 0.18, panel_frac, 0.72])
-
-    ax.scatter(
-        simlex["scores"], simlex["sims"],
-        color=TEAL, alpha=0.4, s=4,
-        linewidths=0.2, edgecolors="white", zorder=2, rasterized=True,
+    fig, axes = plt.subplots(
+        1, 2, figsize=(FIG_WIDTH_IN, ROW_H),
+        gridspec_kw={"wspace": 0.35},
     )
 
-    z = np.polyfit(simlex["scores"], simlex["sims"], 1)
-    x_line = np.linspace(simlex["scores"].min(), simlex["scores"].max(), 100)
-    ax.plot(x_line, np.poly1d(z)(x_line), color=GRAY_DARK,
-            linewidth=0.6, linestyle="--", zorder=1)
+    _panel_scatter(axes[0], simlex, "Human similarity (SimLex-999)", fs)
+    _panel_scatter(axes[1], wordsim, "Human relatedness (WordSim-353)", fs)
 
-    ax.text(
-        0.05, 0.95,
-        f"$\\rho$ = {simlex['rho']:.2f}\nn = {simlex['n']}",
-        transform=ax.transAxes, va="top", fontsize=fs,
-    )
-    ax.set_xlabel("Human similarity (SimLex-999)")
-    ax.set_ylabel("SRF embedding similarity")
-    despine(ax)
+    for label, ax in zip("ab", axes):
+        ax.text(-0.15, 1.12, label, transform=ax.transAxes,
+                fontsize=8, fontweight="bold", va="top", ha="right")
 
+    fig.subplots_adjust(left=0.08, right=0.97, bottom=0.18, top=0.90)
     _save(fig, "similarity_benchmarks")
 
 
