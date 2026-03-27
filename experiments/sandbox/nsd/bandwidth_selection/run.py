@@ -1,14 +1,14 @@
-"""RBF bandwidth selection for DINOv3 features (1854 images).
+"""RBF bandwidth selection for NSD subject 1.
 
-Runs select_rbf_bandwidth to find optimal alpha* that maximizes
-H(stability, R^2) at the kappa-estimated rank per bandwidth.
+Runs select_rbf_bandwidth on NSD fMRI betas to find optimal alpha* that
+maximizes H(stability, R^2) at the kappa-estimated rank per bandwidth.
 """
 
 import logging
-from pathlib import Path
 
 import numpy as np
 
+from datasets import load_dataset
 from src.tools.bandwidth import select_rbf_bandwidth
 from src.utils import get_output_dir
 
@@ -16,15 +16,23 @@ log = logging.getLogger(__name__)
 
 OUTPUT_DIR = get_output_dir()
 
-FEATURES_PATH = Path("experiments/sandbox/things/dino_extract/outputs/latest/dinov3_features.npy")
+SUBJECT_ID = 1
 ALPHA_GRID = [0.2, 0.4, 0.6, 0.8, 1.0]
 
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-    log.info(f"Loading features from {FEATURES_PATH}")
-    features = np.load(FEATURES_PATH)
+    log.info(f"Loading NSD subject {SUBJECT_ID} features...")
+    ds = load_dataset(
+        "nsd",
+        subject_id=SUBJECT_ID,
+        root="/LOCAL/LABSHARE/natural-scenes-dataset",
+        roi_name="nsdgeneral",
+        space="func1pt8mm",
+        zscore_betas=True,
+    )
+    features = ds.data
     log.info(f"Features shape: {features.shape}")
 
     result = select_rbf_bandwidth(
@@ -39,6 +47,7 @@ def main():
     df = result["results"]
     df.to_csv(OUTPUT_DIR / "results.csv", index=False)
 
+    # Save per-dim reliability arrays
     per_dim = {}
     for _, row in df.iterrows():
         per_dim[str(row["alpha"])] = row["reliability_per_dim"]
