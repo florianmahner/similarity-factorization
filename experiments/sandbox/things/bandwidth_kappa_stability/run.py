@@ -1,7 +1,9 @@
-"""Joint bandwidth-rank selection via kappa sharpness and profile stability.
+"""Joint bandwidth-rank selection via kappa sharpness and harmonic mean criterion.
 
-Tests whether kappa changepoint SNR predicts factorization stability across
-RBF bandwidth multipliers on DINOv3 features (1854 images).
+For each bandwidth multiplier alpha, estimates rank via kappa, then runs 5 SRF
+fits to measure factorization stability and explained variance. Selects alpha*
+that maximizes H(stability, R^2) = 2 * stability * R^2 / (stability + R^2).
+Also tests whether kappa changepoint SNR predicts the harmonic mean ranking.
 """
 
 import logging
@@ -166,16 +168,29 @@ def _align_and_correlate(w_a: np.ndarray, w_b: np.ndarray) -> np.ndarray:
     return per_dim_corr
 
 
-def _compute_stability(s: np.ndarray, rank: int) -> dict:
-    """Run N_SRF_RUNS independent SRF fits and compute pairwise embedding stability.
+def _explained_variance(s: np.ndarray, w: np.ndarray) -> float:
+    """R^2 of the low-rank reconstruction WW^T relative to S."""
+    reconstruction = w @ w.T
+    ss_res = np.sum((s - reconstruction) ** 2)
+    ss_tot = np.sum((s - s.mean()) ** 2)
+    return float(1.0 - ss_res / ss_tot)
 
-    Returns dict with mean/min stability and per-dimension reliability.
+
+def _compute_stability_and_variance(s: np.ndarray, rank: int) -> dict:
+    """Run N_SRF_RUNS independent SRF fits, compute stability and explained variance.
+
+    Stability: mean pairwise correlation of Hungarian-aligned embeddings (Fisher-z averaged).
+    Explained variance: mean R^2 of WW^T reconstructions across runs.
     """
     embeddings = Parallel(n_jobs=-1)(
         delayed(_fit_one_srf)(s, rank, seed) for seed in range(N_SRF_RUNS)
     )
 
-    # All pairwise correlations (C(5,2) = 10 pairs)
+    # Explained variance: mean R^2 across all runs
+    r2_values = np.array([_explained_variance(s, w) for w in embeddings])
+    r2_mean = float(np.mean(r2_values))
+
+    # Pairwise stability (C(5,2) = 10 pairs)
     n_runs = len(embeddings)
     all_per_dim = []
 
@@ -186,20 +201,30 @@ def _compute_stability(s: np.ndarray, rank: int) -> dict:
 
     all_per_dim = np.array(all_per_dim)  # (n_pairs, k)
 
-    # Average in Fisher-z space for correctness
+    # Average in Fisher-z space
     z_scores = np.arctanh(np.clip(all_per_dim, -0.999, 0.999))
     mean_z = np.mean(z_scores, axis=0)
     reliability_per_dim = np.tanh(mean_z)
+    stability_mean = float(np.mean(reliability_per_dim))
+
+    # Harmonic mean of stability and R^2
+    if stability_mean > 0 and r2_mean > 0:
+        h_mean = float(2 * stability_mean * r2_mean / (stability_mean + r2_mean))
+    else:
+        h_mean = 0.0
 
     return {
-        "stability_mean": float(np.mean(reliability_per_dim)),
+        "stability_mean": stability_mean,
         "stability_min": float(np.min(reliability_per_dim)),
         "reliability_per_dim": reliability_per_dim,
+        "r2_mean": r2_mean,
+        "r2_std": float(np.std(r2_values)),
+        "h_mean": h_mean,
     }
 
 
 def run_stage2(features: np.ndarray, stage1_records: list[dict]) -> list[dict]:
-    """Stage 2: Compute profile stability for each bandwidth at its kappa-estimated rank."""
+    """Stage 2: Compute stability, R^2, and harmonic mean for each bandwidth."""
     stability_records = []
 
     for rec in stage1_records:
@@ -208,16 +233,14 @@ def run_stage2(features: np.ndarray, stage1_records: list[dict]) -> list[dict]:
         log.info(f"Stage 2: sigma_mult={mult}, rank={k_star}")
 
         s, _ = _build_rbf(features, mult)
-        stab = _compute_stability(s, k_star)
-        log.info(f"  stability_mean={stab['stability_mean']:.3f}, "
-                 f"stability_min={stab['stability_min']:.3f}")
+        result = _compute_stability_and_variance(s, k_star)
+        log.info(f"  stability={result['stability_mean']:.3f}, "
+                 f"R2={result['r2_mean']:.3f}, H={result['h_mean']:.3f}")
 
         stability_records.append({
             "sigma_mult": mult,
             "k_star": k_star,
-            "stability_mean": stab["stability_mean"],
-            "stability_min": stab["stability_min"],
-            "reliability_per_dim": stab["reliability_per_dim"],
+            **result,
         })
 
     return stability_records
@@ -247,12 +270,12 @@ def main():
             "sigma": s1["sigma"],
             "k_star": s1["k_star"],
             "snr": s1["snr"],
-            "mad": s1["mad"],
-            "max_abs_delta": s1["max_abs_delta"],
             "sim_mean": s1["sim_mean"],
-            "sim_min": s1["sim_min"],
             "stability_mean": s2["stability_mean"],
             "stability_min": s2["stability_min"],
+            "r2_mean": s2["r2_mean"],
+            "r2_std": s2["r2_std"],
+            "h_mean": s2["h_mean"],
         })
         stability_per_dim[str(s1["sigma_mult"])] = s2["reliability_per_dim"]
 
@@ -266,22 +289,27 @@ def main():
 
     # Stage 3: Validation -- compare rankings
     log.info("\n=== Stage 3: Validation ===")
-    snr_rank = np.argsort(-df["snr"].values)  # descending
-    stab_rank = np.argsort(-df["stability_mean"].values)  # descending
-
-    snr_best = df.iloc[snr_rank[0]]["sigma_mult"]
-    stab_best = df.iloc[stab_rank[0]]["sigma_mult"]
-
     from scipy.stats import spearmanr
-    rho, p_val = spearmanr(df["snr"].values, df["stability_mean"].values)
 
-    log.info(f"Best by SNR:       sigma_mult={snr_best}")
-    log.info(f"Best by stability: sigma_mult={stab_best}")
-    log.info(f"Spearman rho(SNR, stability) = {rho:.3f} (p={p_val:.4f})")
-    log.info(f"Argmax agreement: {'YES' if snr_best == stab_best else 'NO'}")
+    h_best_idx = int(df["h_mean"].idxmax())
+    h_best_mult = df.loc[h_best_idx, "sigma_mult"]
+    snr_best_idx = int(df["snr"].idxmax())
+    snr_best_mult = df.loc[snr_best_idx, "sigma_mult"]
+
+    rho_snr_h, p_snr_h = spearmanr(df["snr"].values, df["h_mean"].values)
+    rho_snr_stab, p_snr_stab = spearmanr(df["snr"].values, df["stability_mean"].values)
+
+    log.info(f"Best by H(stab, R2): sigma_mult={h_best_mult} "
+             f"(stab={df.loc[h_best_idx, 'stability_mean']:.3f}, "
+             f"R2={df.loc[h_best_idx, 'r2_mean']:.3f}, "
+             f"H={df.loc[h_best_idx, 'h_mean']:.3f})")
+    log.info(f"Best by SNR:         sigma_mult={snr_best_mult}")
+    log.info(f"Spearman rho(SNR, H) = {rho_snr_h:.3f} (p={p_snr_h:.4f})")
+    log.info(f"Spearman rho(SNR, stability) = {rho_snr_stab:.3f} (p={p_snr_stab:.4f})")
 
     log.info(f"\n=== Summary table ===")
-    log.info(df.to_string(index=False))
+    log.info(df[["sigma_mult", "k_star", "snr", "stability_mean", "r2_mean",
+                 "h_mean", "sim_mean"]].to_string(index=False))
 
 
 if __name__ == "__main__":
