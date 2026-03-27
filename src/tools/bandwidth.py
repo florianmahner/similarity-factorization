@@ -263,9 +263,10 @@ def factorization_quality(
     reliability_per_dim = np.tanh(mean_z)
     stability_mean = float(np.mean(reliability_per_dim))
 
-    # Harmonic mean
-    if stability_mean > 0 and r2_mean > 0:
-        h_mean = float(2.0 * stability_mean * r2_mean / (stability_mean + r2_mean))
+    # Harmonic mean (clamp R^2 at 0 -- negative R^2 means worse than mean predictor)
+    r2_clamped = max(r2_mean, 0.0)
+    if stability_mean > 0 and r2_clamped > 0:
+        h_mean = float(2.0 * stability_mean * r2_clamped / (stability_mean + r2_clamped))
     else:
         h_mean = 0.0
 
