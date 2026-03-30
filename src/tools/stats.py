@@ -213,6 +213,98 @@ def split_half_reliability(data: list | Array, num_splits: int = 1000) -> float 
     return corrected_reliability
 
 
+def dimension_reliability(
+    embeddings: Array,
+    n_splits: int = 100,
+    random_state: int = 42,
+) -> Array:
+    """Cross-validated split-half reliability per dimension across multiple runs.
+
+    For each random split of objects into halves A and B:
+      - Match dimensions between all pairs of runs using A-objects (argmax corr)
+      - Evaluate matched dimensions on held-out B-objects
+    This prevents overfitting in the dimension matching step.
+
+    Parameters
+    ----------
+    embeddings : (n_runs, n_objects, n_dims) array
+        Aligned embeddings from multiple SRF runs.
+    n_splits : int
+        Number of random object splits.
+    random_state : int
+        Random seed.
+
+    Returns
+    -------
+    reliability : (n_dims,) array
+        Cross-validated per-dimension reliability (Spearman-Brown corrected).
+    """
+    n_runs, n_objects, n_dims = embeddings.shape
+    rng = np.random.default_rng(random_state)
+    emb = embeddings.astype(np.float64)
+
+    # Precompute all unique pairs
+    pairs_i, pairs_j = np.triu_indices(n_runs, k=1)
+    n_pairs = len(pairs_i)
+
+    all_split_reliabilities = np.zeros((n_splits, n_dims))
+
+    for s in range(n_splits):
+        mask_a = rng.random(n_objects) < 0.5
+        mask_b = ~mask_a
+
+        # Normalize all runs on each half once: (n_runs, n_half, k) -> (n_runs, k, n_half)
+        emb_a = _normalize_cols(emb[:, mask_a])  # (n_runs, n_a, k)
+        emb_b = _normalize_cols(emb[:, mask_b])  # (n_runs, n_b, k)
+
+        pair_per_dim = np.zeros((n_pairs, n_dims))
+
+        for p in range(n_pairs):
+            i, j = pairs_i[p], pairs_j[p]
+            # Match on A: (k x k) corr matrix via normalized dot product
+            corr_a = emb_a[i].T @ emb_a[j]  # (k, k)
+            best_j = np.argmax(np.abs(corr_a), axis=1)  # (k,)
+
+            # Evaluate on B
+            corr_b = emb_b[i].T @ emb_b[j]  # (k, k)
+            pair_per_dim[p] = np.abs(corr_b[np.arange(n_dims), best_j])
+
+        z = np.arctanh(np.clip(pair_per_dim, -0.999, 0.999))
+        all_split_reliabilities[s] = np.tanh(np.mean(z, axis=0))
+
+    # Average across splits in Fisher-z space
+    z_splits = np.arctanh(np.clip(all_split_reliabilities, -0.999, 0.999))
+    raw_reliability = np.tanh(np.mean(z_splits, axis=0))
+
+    # Spearman-Brown correction (split-half -> full)
+    return 2 * raw_reliability / (1 + raw_reliability)
+
+
+def _normalize_cols(x: Array) -> Array:
+    """Center and L2-normalize columns for each matrix in a batch.
+
+    Input: (batch, n_samples, k) -> Output: (batch, n_samples, k)
+    After normalization, col_i.T @ col_j = Pearson r between columns i and j.
+    """
+    x_c = x - x.mean(axis=-2, keepdims=True)
+    norms = np.sqrt(np.sum(x_c ** 2, axis=-2, keepdims=True))
+    return x_c / np.maximum(norms, 1e-12)
+
+
+def _fast_col_corr(a: Array, b: Array) -> Array:
+    """Fast (k x k) Pearson correlation between columns of a and b.
+
+    Both a and b are (n_samples, k). Returns (k, k) correlation matrix.
+    """
+    a_c = a - a.mean(axis=0, keepdims=True)
+    b_c = b - b.mean(axis=0, keepdims=True)
+    a_n = np.sqrt(np.sum(a_c ** 2, axis=0, keepdims=True))
+    b_n = np.sqrt(np.sum(b_c ** 2, axis=0, keepdims=True))
+    a_normed = a_c / np.maximum(a_n, 1e-12)
+    b_normed = b_c / np.maximum(b_n, 1e-12)
+    return a_normed.T @ b_normed
+
+
 def fisher_z_transform(pearson_r: Array) -> Array:
     """Perform Fisher Z-transform on Pearson r values, ensuring valid input range."""
     pearson_r = np.asarray(pearson_r, dtype=np.float64)  # Ensure floating point type
