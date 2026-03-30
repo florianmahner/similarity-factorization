@@ -15,7 +15,7 @@ valid_subjects: [1, 2, 5, 7]
 # Loading parameters
 similarity_fn: gaussian_kernel
 loader_kwargs:
-  roi_name: nsdgeneral
+  roi_name: streams
   space: func1pt8mm
   zscore_betas: true
 
@@ -25,4 +25,3 @@ requires:
 
 # Cross-experiment references
 bounds_task: nsd  # -> outputs/experiments/bounds/nsd/subject_{id}/
-rank_range: [5, 100, 5]
