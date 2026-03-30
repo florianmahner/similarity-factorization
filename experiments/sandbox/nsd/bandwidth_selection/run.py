@@ -1,7 +1,8 @@
-"""RBF bandwidth selection for NSD subject 1.
+"""RBF bandwidth selection for NSD subject 1 (ventral stream ROI).
 
 Runs select_rbf_bandwidth on NSD fMRI betas to find optimal alpha* that
 maximizes H(stability, R^2) at the kappa-estimated rank per bandwidth.
+Uses streams ROI (ventral visual stream) for focused, lower-noise features.
 """
 
 import logging
@@ -28,7 +29,7 @@ def main():
         "nsd",
         subject_id=SUBJECT_ID,
         root="/LOCAL/LABSHARE/natural-scenes-dataset",
-        roi_name="nsdgeneral",
+        roi_name="streams",
         space="func1pt8mm",
         zscore_betas=True,
     )
