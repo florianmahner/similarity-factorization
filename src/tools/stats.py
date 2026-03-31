@@ -239,45 +239,88 @@ def dimension_reliability(
     reliability : (n_dims,) array
         Cross-validated per-dimension reliability (Spearman-Brown corrected).
     """
+    # _cv_split_half returns (n_splits, n_pairs, n_dims)
+    pair_rel = _cv_split_half(embeddings, n_splits, random_state)
+    # Average over pairs, then splits
+    z = np.arctanh(np.clip(pair_rel, -0.999, 0.999))
+    per_split = np.tanh(np.mean(z, axis=1))  # (n_splits, n_dims)
+    z_splits = np.arctanh(np.clip(per_split, -0.999, 0.999))
+    raw = np.tanh(np.mean(z_splits, axis=0))  # (n_dims,)
+    return 2 * raw / (1 + raw)
+
+
+def run_reliability(
+    embeddings: Array,
+    n_splits: int = 100,
+    random_state: int = 42,
+) -> tuple[Array, int]:
+    """Per-run cross-validated reliability and index of most reliable run.
+
+    For each run i, computes mean CV split-half reliability of its dimensions
+    against all other runs. Returns per-run scores and the best run index.
+
+    Parameters
+    ----------
+    embeddings : (n_runs, n_objects, n_dims) array
+        Aligned embeddings from multiple SRF runs.
+    n_splits : int
+        Number of random object splits.
+    random_state : int
+        Random seed.
+
+    Returns
+    -------
+    scores : (n_runs,) array
+        Mean CV split-half reliability per run (Spearman-Brown corrected).
+    best_idx : int
+        Index of the most reliable run.
+    """
+    n_runs = embeddings.shape[0]
+    pair_rel = _cv_split_half(embeddings, n_splits, random_state)
+    # pair_rel: (n_splits, n_pairs, n_dims)
+
+    pairs_i, pairs_j = np.triu_indices(n_runs, k=1)
+
+    # For each run, collect all pairs it participates in
+    run_scores = np.zeros(n_runs)
+    for r in range(n_runs):
+        mask = (pairs_i == r) | (pairs_j == r)
+        # Average over splits and dims for pairs involving run r
+        z = np.arctanh(np.clip(pair_rel[:, mask, :], -0.999, 0.999))
+        raw = np.tanh(np.mean(z))
+        run_scores[r] = 2 * raw / (1 + raw)
+
+    return run_scores, int(np.argmax(run_scores))
+
+
+def _cv_split_half(
+    embeddings: Array, n_splits: int, random_state: int
+) -> Array:
+    """Core CV split-half computation. Returns (n_splits, n_pairs, n_dims)."""
     n_runs, n_objects, n_dims = embeddings.shape
     rng = np.random.default_rng(random_state)
     emb = embeddings.astype(np.float64)
 
-    # Precompute all unique pairs
     pairs_i, pairs_j = np.triu_indices(n_runs, k=1)
     n_pairs = len(pairs_i)
 
-    all_split_reliabilities = np.zeros((n_splits, n_dims))
+    result = np.zeros((n_splits, n_pairs, n_dims))
 
     for s in range(n_splits):
         mask_a = rng.random(n_objects) < 0.5
         mask_b = ~mask_a
 
-        # Normalize all runs on each half once: (n_runs, n_half, k) -> (n_runs, k, n_half)
-        emb_a = _normalize_cols(emb[:, mask_a])  # (n_runs, n_a, k)
-        emb_b = _normalize_cols(emb[:, mask_b])  # (n_runs, n_b, k)
-
-        pair_per_dim = np.zeros((n_pairs, n_dims))
+        emb_a = _normalize_cols(emb[:, mask_a])
+        emb_b = _normalize_cols(emb[:, mask_b])
 
         for p in range(n_pairs):
             i, j = pairs_i[p], pairs_j[p]
-            # Match on A: (k x k) corr matrix via normalized dot product
-            corr_a = emb_a[i].T @ emb_a[j]  # (k, k)
-            best_j = np.argmax(np.abs(corr_a), axis=1)  # (k,)
+            corr_a = emb_a[i].T @ emb_a[j]
+            best_j = np.argmax(np.abs(corr_a), axis=1)
+            corr_b = emb_b[i].T @ emb_b[j]
+            result[s, p] = np.abs(corr_b[np.arange(n_dims), best_j])
 
-            # Evaluate on B
-            corr_b = emb_b[i].T @ emb_b[j]  # (k, k)
-            pair_per_dim[p] = np.abs(corr_b[np.arange(n_dims), best_j])
-
-        z = np.arctanh(np.clip(pair_per_dim, -0.999, 0.999))
-        all_split_reliabilities[s] = np.tanh(np.mean(z, axis=0))
-
-    # Average across splits in Fisher-z space
-    z_splits = np.arctanh(np.clip(all_split_reliabilities, -0.999, 0.999))
-    raw_reliability = np.tanh(np.mean(z_splits, axis=0))
-
-    # Spearman-Brown correction (split-half -> full)
-    return 2 * raw_reliability / (1 + raw_reliability)
+    return result
 
 
 def _normalize_cols(x: Array) -> Array:
