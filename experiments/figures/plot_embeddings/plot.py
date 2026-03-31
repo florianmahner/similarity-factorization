@@ -365,20 +365,18 @@ def panel_rank_bars(ax, metrics):
 
 
 def panel_reliability_bars(ax, metrics):
-    """Vertical bar chart of CV split-half reliability, sorted ascending."""
+    """Vertical bar chart of CV split-half reliability, same order as rank bars."""
     rel_summary = _load_reliability_summary()
 
-    # Map dataset labels to CV reliability
     label_to_cv = {}
     if rel_summary is not None:
         for _, row in rel_summary.iterrows():
             label_to_cv[row["dataset"]] = row["cv_rel_mean"]
 
-    # Match metrics order and get CV values
+    # Same sort order as panel_rank_bars: ascending k*
     order = np.argsort([m["k_star"] for m in metrics])
     labels = [metrics[i]["label"] for i in order]
 
-    # Map metric labels back to dataset keys for CSV lookup
     label_to_key = {}
     for ds in DATASETS:
         key = ds["consensus"]
@@ -398,22 +396,24 @@ def panel_reliability_bars(ax, metrics):
     ax.set_axisbelow(True)
     ax.yaxis.grid(True, color=GRAY_PALE, linewidth=0.3, zorder=0)
 
+    # Same gray gradient style as panel_rank_bars
+    max_val = max(v for v in cv_vals if not np.isnan(v))
     for i, (xi, val) in enumerate(zip(x, cv_vals)):
         if np.isnan(val):
             continue
-        t = val
-        fill = lighten(ROSE, 0.65 - 0.35 * t)
-        edge = ROSE
+        t = val / max_val
+        fill = lighten(GRAY, 0.55 - 0.35 * t)
+        edge = lighten(GRAY_DARK, 0.3 - 0.2 * t)
         ax.bar(xi, val, width=0.52, color=fill, edgecolor=edge,
                linewidth=0.7, zorder=2)
-        ax.text(xi, val + 0.01, f"{val:.2f}", ha="center", va="bottom",
+        ax.text(xi, val + max_val * 0.01, f"{val:.2f}",
+                ha="center", va="bottom",
                 fontsize=FS, fontweight="bold", color=GRAY_DARK)
 
     ax.set_xticks(x)
     ax.set_xticklabels(labels, fontsize=FS, linespacing=0.9, rotation=45, ha="right")
     ax.set_ylabel("CV split-half reliability")
-    ax.set_ylim(0.75, 1.08)
-    ax.axhline(0.8, color=GRAY_LIGHT, linewidth=0.4, linestyle="--", zorder=0)
+    ax.set_ylim(0.75, max_val * 1.08)
     despine(ax)
     ax.tick_params(bottom=False)
 
