@@ -1,8 +1,0 @@
-project_root: /LOCAL/fmahner/similarity-factorization
-data_dir: ${project_root}/data/ppi
-n_nodes: 500
-rank: 25
-seed: 42
-n_jobs: 4
-top_k: 30
-min_complex_size: 5

@@ -81,3 +81,8 @@ dist/
 *.egg-info/
 
 .worktrees/
+
+# AI assistant configs (keep local only)
+CLAUDE.md
+GEMINI.md
+.tickets/
