@@ -54,58 +54,48 @@ s_completed = model.reconstruct()
 The model learns from the observed entries and predicts the held-out ones
 in the reconstruction.
 
-## Cross-validation for rank selection
+## Rank estimation and cross-validation
 
-The number of dimensions is a free parameter. Cross-validation selects
-the rank that best generalizes to unseen similarities. Set
-`estimate_sampling_fraction=True` to automatically derive the hold-out
-fraction from the data:
+The number of dimensions is estimated first. Cross-validation then checks
+whether nearby ranks produce a lower held-out error.
 
 ```python
-from pysrf import cross_val_score, SRF
+from pysrf import cross_val_score, estimate_rank
 
-cv = cross_val_score(
+estimate = estimate_rank(s, random_state=42)
+ranks = range(max(1, estimate.rank - 3), estimate.rank + 4)
+curve = cross_val_score(
     s,
-    estimate_sampling_fraction=True,
-    param_grid={"rank": [5, 10, 15, 20]},
+    ranks=ranks,
+    sampling_fraction=estimate.sampling_fraction,
     n_repeats=5,
-    n_jobs=-1,
     random_state=42,
+    n_jobs=-1,
 )
 
-print(f"Best rank: {cv.best_params_['rank']}")
-print(f"Best score: {cv.best_score_:.4f}")
+mean_mse = curve.groupby("rank")["val_mse"].mean()
+print(f"Estimated rank: {estimate.rank}")
+print(f"CV minimum: {int(mean_mse.idxmin())}")
 ```
 
 ## Consensus embeddings
 
 Symmetric NMF is non-convex. Different random initializations can
 converge to different solutions. To obtain a stable embedding, fit
-multiple runs and align them. `EnsembleEmbedding` does this
-automatically: it runs the factorization `n_runs` times, aligns the
-columns using the Hungarian algorithm, and selects the most central
-solution. `ClusterEmbedding` then applies consensus clustering to find
-stable groups of items.
+multiple runs and align them. `EnsembleFit` runs the base model from
+several random starts; `AlignedConsensus` aligns runs and returns the most
+central embedding.
 
 ```python
 from sklearn import pipeline
-from pysrf.consensus import EnsembleEmbedding, ClusterEmbedding
-from pysrf import SRF, cross_val_score
+from pysrf import AlignedConsensus, EnsembleFit, SRF, estimate_rank
 
-# 1. Select the rank
-cv = cross_val_score(
-    s,
-    estimate_sampling_fraction=True,
-    param_grid={"rank": [5, 10, 15, 20]},
-    n_repeats=5,
-    n_jobs=-1,
-)
+estimate = estimate_rank(s, random_state=42)
 
-# 2. Build the ensemble-clustering pipeline
 pipe = pipeline.Pipeline(
     [
-        ("ensemble", EnsembleEmbedding(SRF(cv.best_params_), n_runs=50)),
-        ("cluster", ClusterEmbedding(min_clusters=2, max_clusters=6, step=1)),
+        ("ensemble", EnsembleFit(SRF(rank=estimate.rank), n_runs=50)),
+        ("align", AlignedConsensus(rank=estimate.rank)),
     ]
 )
 
@@ -129,29 +119,6 @@ assert s_reconstructed.min() >= 0
 assert s_reconstructed.max() <= 1
 ```
 
-## Sampling-bound estimation
-
-Before running cross-validation, you can estimate the range of hold-out
-fractions that produce reliable scores. This is useful for very sparse
-matrices where holding out too many entries leaves insufficient data for
-fitting:
-
-```python
-from pysrf import estimate_sampling_bounds_fast
-
-pmin, pmax, s_denoised = estimate_sampling_bounds_fast(
-    s,
-    n_jobs=-1,
-    random_state=42,
-)
-
-print(f"Minimum sampling rate: {pmin:.4f}")
-print(f"Maximum sampling rate: {pmax:.4f}")
-
-# Use the midpoint for cross-validation
-sampling_rate = 0.5 * (pmin + pmax)
-```
-
 ## Complete workflow
 
 A full analysis combines rank selection, ensemble fitting, and
@@ -159,7 +126,7 @@ evaluation:
 
 ```python
 import numpy as np
-from pysrf import SRF, cross_val_score, estimate_sampling_bounds_fast
+from pysrf import SRF, cross_val_score, estimate_rank
 
 # 1. Generate a noisy, incomplete similarity matrix
 np.random.seed(42)
@@ -171,28 +138,26 @@ s = (s + s.T) / 2
 mask = np.random.rand(n, n) < 0.2
 s[mask] = np.nan
 
-# 2. Estimate sampling bounds
-pmin, pmax, _ = estimate_sampling_bounds_fast(s, n_jobs=-1)
-print(f"Sampling bounds: [{pmin:.3f}, {pmax:.3f}]")
+estimate = estimate_rank(s, random_state=42, n_jobs=-1)
+ranks = range(max(1, estimate.rank - 3), estimate.rank + 4)
 
-# 3. Cross-validate to find the best rank
-result = cross_val_score(
+curve = cross_val_score(
     s,
-    param_grid={"rank": range(5, 21)},
-    estimate_sampling_fraction=True,
+    ranks=ranks,
+    sampling_fraction=estimate.sampling_fraction,
     n_repeats=3,
-    n_jobs=-1,
     random_state=42,
+    n_jobs=-1,
 )
-best_rank = result.best_params_["rank"]
-print(f"Best rank: {best_rank} (true rank: {true_rank})")
+mean_mse = curve.groupby("rank")["val_mse"].mean()
+print(f"Estimated rank: {estimate.rank}; CV minimum: {int(mean_mse.idxmin())}")
 
-# 4. Fit the final model
-model = SRF(rank=best_rank, max_outer=20, random_state=42)
+# 3. Fit the final model
+model = SRF(rank=estimate.rank, max_outer=20, random_state=42)
 w = model.fit_transform(s)
 s_completed = model.reconstruct()
 
-# 5. Evaluate
+# 4. Evaluate
 score = model.score(s)
 print(f"Reconstruction error: {score:.4f}")
 ```

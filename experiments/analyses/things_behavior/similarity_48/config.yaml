@@ -1,0 +1,24 @@
+# THINGS Behavior: 48-object performance comparison
+
+defaults:
+  - /base
+  - _self_
+
+experiment_name: things_behavior
+task: accuracy
+
+# === Parameters ===
+seed: [0, 1, 2, 3, 4]
+dims: 66
+srf_rank: 35  # SRF model rank (consensus CV-argmin from dimensionality/outputs/things_behavior); dims=66 is for SPoSE loading
+n_items: 1854
+triplet_version: "4.7mio"
+
+# === Compute ===
+n_jobs: 16
+
+# === Paths ===
+dataset_path: ${paths.data_dir}/things
+images_path: /SSD/datasets/things/behav1854
+vice_embedding_path: ${paths.data_dir}/things/vice_embedding_66d.txt
+data_dir: ${paths.output_dir}/experiments/things_behavior/data

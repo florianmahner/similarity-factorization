@@ -5,28 +5,3 @@
       show_root_heading: true
       show_source: true
       heading_level: 3
-
-## Grid Search
-
-::: pysrf.GridSearchCV
-    options:
-      show_root_heading: true
-      show_source: true
-      heading_level: 3
-
-## CV Strategy
-
-::: pysrf.EntryMaskSplit
-    options:
-      show_root_heading: true
-      show_source: true
-      heading_level: 3
-
-
-## Scoring
-
-::: pysrf.cross_validation.fit_and_score
-    options:
-      show_root_heading: true
-      show_source: true
-      heading_level: 3

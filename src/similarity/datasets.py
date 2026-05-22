@@ -9,11 +9,10 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 from omegaconf import DictConfig, OmegaConf
+from scipy.sparse import issparse
 
 from datasets import load_dataset
 from tools.rsa import compute_similarity
-from utils.helpers import compute_similarity_matrix_from_triplets
-from utils.io import load_triplets
 
 log = logging.getLogger(__name__)
 
@@ -42,7 +41,9 @@ def build_neural_features(cfg: DictConfig, subject_id: int | None = None) -> np.
         return ds.rsm
 
     similarity_fn = cfg.get("similarity_fn", "gaussian_kernel")
-    return compute_similarity(ds.data, ds.data, similarity_fn)
+    raw_kwargs = cfg.get("similarity_kwargs", {})
+    similarity_kwargs = OmegaConf.to_container(raw_kwargs, resolve=True) if raw_kwargs else {}
+    return compute_similarity(ds.data, ds.data, similarity_fn, **similarity_kwargs)
 
 
 def build_feature_file(cfg: DictConfig, subject_id: int | None = None) -> np.ndarray:
@@ -56,15 +57,24 @@ def build_feature_file(cfg: DictConfig, subject_id: int | None = None) -> np.nda
         features = features[mask.values, :]
 
     similarity_fn = cfg.get("similarity_fn", "gaussian_kernel")
-    return compute_similarity(features, features, similarity_fn)
+    raw_kwargs = cfg.get("similarity_kwargs", {})
+    similarity_kwargs = OmegaConf.to_container(raw_kwargs, resolve=True) if raw_kwargs else {}
+    return compute_similarity(features, features, similarity_fn, **similarity_kwargs)
 
 
 def build_triplet(cfg: DictConfig, subject_id: int | None = None) -> np.ndarray:
     """Build RSM from triplet data with Laplace smoothing."""
     path = Path(cfg.get("path"))
-    triplets, _ = load_triplets(path, number=cfg.triplet_number)
-    alpha = cfg.get("alpha", 1.0)
-    return compute_similarity_matrix_from_triplets(cfg.n_objects, triplets, alpha=alpha)
+    ds = load_dataset(
+        cfg.name,
+        root=path,
+        triplet_number=cfg.triplet_number,
+        n_objects=cfg.n_objects,
+        split=cfg.get("split", "train"),
+        alpha=cfg.get("alpha", 1.0),
+        build_rsm=True,
+    )
+    return ds.rsm
 
 
 def build_graph(cfg: DictConfig, subject_id: int | None = None) -> np.ndarray:
@@ -90,11 +100,14 @@ def build_word_association(
     """Build similarity matrix from word association data (SWOW).
 
     Supports both PPMI (local) and random walk (global) similarity.
+    When similarity_method='ppmi' and zeros_as_missing is true, off-diagonal
+    zero entries are replaced with NaN (treated as unobserved by SRF).
     """
+    similarity_method = cfg.get("similarity_method", "ppmi")
     ds = load_dataset(
         cfg.name,
         root=cfg.get("path"),
-        similarity_method=cfg.get("similarity_method", "ppmi"),
+        similarity_method=similarity_method,
         use_all_responses=cfg.get("use_all_responses", False),
         top_n_words=cfg.get("top_n_words"),
         min_word_length=cfg.get("min_word_length", 1),
@@ -102,7 +115,16 @@ def build_word_association(
         bidirectional_only=cfg.get("bidirectional_only", False),
         alpha=cfg.get("alpha", 0.75),
     )
-    return ds.rsm
+    rsm = ds.rsm
+    if issparse(rsm):
+        rsm = np.array(rsm.todense())
+    rsm = np.asarray(rsm, dtype=np.float64)
+
+    if similarity_method == "ppmi" and cfg.get("zeros_as_missing", False):
+        diag = np.diag(rsm).copy()
+        rsm[rsm == 0] = np.nan
+        np.fill_diagonal(rsm, diag)
+    return rsm
 
 
 DATASET_HANDLERS: dict[str, Callable] = {

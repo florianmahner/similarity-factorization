@@ -1,6 +1,0 @@
-#!/bin/bash
-
-# Start Dashboard
-cd "$(dirname "$0")/dashboard" || exit
-./start_dashboard.sh
-

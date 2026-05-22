@@ -66,27 +66,36 @@ both the observed and the previously missing entries.
 ## Select the number of dimensions
 
 Choosing the right number of dimensions (rank) is critical. Too few
-dimensions miss important structure; too many overfit. pysrf provides
-entry-wise cross-validation: it holds out individual similarity values,
-fits the model on the remaining entries, and evaluates prediction accuracy
-on the held-out values.
+dimensions miss important structure; too many overfit. `estimate_rank`
+estimates the rank and the sampling fraction used for CV; `cross_val_score`
+then gives a confirmation curve around that estimate.
 
 ```python
-from pysrf import cross_val_score
+from pysrf import SRF, cross_val_score, estimate_rank
 
 s = np.random.rand(100, 100)
 s = (s + s.T) / 2
 
-# Evaluate candidate ranks
-cv = cross_val_score(s, param_grid={"rank": [5, 10, 15, 20]})
+estimate = estimate_rank(s, random_state=42)
+ranks = range(max(1, estimate.rank - 3), estimate.rank + 4)
+curve = cross_val_score(
+    s,
+    ranks=ranks,
+    sampling_fraction=estimate.sampling_fraction,
+    random_state=42,
+)
 
-print(f"Best rank: {cv.best_params_}")
-print(f"Best score: {cv.best_score_:.4f}")
+cv_mean = curve.groupby("rank")["val_mse"].mean()
+print(f"Estimated rank: {estimate.rank}")
+print(f"CV minimum: {int(cv_mean.idxmin())}")
+
+model = SRF(rank=estimate.rank, random_state=42)
+w = model.fit_transform(s)
 ```
 
-This approach respects the dependency structure of similarity matrices,
-unlike standard cross-validation methods designed for independent
-observations.
+Cross-validation starts from the observed entries and artificially hides
+some of them as validation entries. Entries that were not measured in the
+input remain missing throughout fitting.
 
-For consensus embeddings, sampling-bound estimation, and the full analysis
-pipeline, see the [Examples](examples.md) page.
+For consensus embeddings and the full analysis pipeline, see the
+[Examples](examples.md) page.

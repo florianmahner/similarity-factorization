@@ -4,5 +4,7 @@ type: feature_file
 path: ${paths.data_dir}/features/dinov3
 features_file: dinov3_features.npy
 similarity_fn: gaussian_kernel
+similarity_kwargs:
+  sigma_scale: 0.4  # same tightening as clip_vit_l14 -> better SRF reliability
 bounds_task: dinov3
 rank_range: [5, 100, 5]

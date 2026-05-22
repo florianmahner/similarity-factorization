@@ -1,3 +1,9 @@
 # Local Paths
 data_dir: ${project_root}/data
 output_dir: ${project_root}/outputs
+
+# Shared data roots on the labshare server.
+# Previously /SSD and /LOCAL/LABSHARE on the old server -- when the server
+# moves again, update these two lines instead of every dataset config.
+ssd: /data/labshare/_stachelschwein/SSD
+labshare: /data/labshare/_stachelschwein/LOCAL/LABSHARE

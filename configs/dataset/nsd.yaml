@@ -7,13 +7,15 @@
 
 name: nsd
 type: neural_features
-path: /LOCAL/LABSHARE/natural-scenes-dataset
+path: ${paths.labshare}/natural-scenes-dataset
 
 # Only these subjects completed all trials - use for bounds estimation
 valid_subjects: [1, 2, 5, 7]
 
 # Loading parameters
 similarity_fn: gaussian_kernel
+similarity_kwargs:
+  sigma_scale: 0.4  # following Mahner et al. 2026 (deep-similarity) — selected via H(stability, R²) sweep
 loader_kwargs:
   roi_name: streams
   space: func1pt8mm

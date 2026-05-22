@@ -1,0 +1,28 @@
+# @package dataset
+# Natural Scenes Dataset (NSD) — σ_scale=0.5 sweep variant.
+#
+# Only subjects 1, 2, 5, 7 completed all trials (37/40 sessions, ~9841 stimuli).
+# Subjects 3, 4, 6, 8 are incomplete and have fewer stimuli.
+
+name: nsd
+type: neural_features
+path: ${paths.labshare}/natural-scenes-dataset
+
+# Only these subjects completed all trials - use for bounds estimation
+valid_subjects: [1, 2, 5, 7]
+
+# Loading parameters
+similarity_fn: gaussian_kernel
+similarity_kwargs:
+  sigma_scale: 0.5
+loader_kwargs:
+  roi_name: streams
+  space: func1pt8mm
+  zscore_betas: true
+
+# Multi-subject dataset
+requires:
+  - subject_id
+
+# Cross-experiment references
+bounds_task: nsd

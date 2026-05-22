@@ -4,11 +4,9 @@ Uses AlignedConsensus with Hungarian alignment to produce a principled
 consensus: aligns all runs via optimal permutation matching, then selects
 the most central run (preserving valid factorization WW^T ~ S).
 
-Requires ranks/kappa/ to have been run first for the dataset.
-
 Usage:
-    ./scripts/submit experiments/datasets/consensus/run.py dataset=mur92
-    ./scripts/submit experiments/datasets/consensus/run.py dataset=nsd subject_id=1
+    poetry run python experiments/datasets/consensus/run.py dataset=mur92
+    poetry run python experiments/datasets/consensus/run.py dataset=nsd subject_id=1
 
 Outputs:
     embedding.npy  - Final consensus embedding (n_samples, rank)
@@ -25,14 +23,17 @@ from pathlib import Path
 import numpy as np
 from omegaconf import DictConfig
 from pysrf import SRF
-from pysrf.consensus import AlignedConsensus, EnsembleEmbedding
+from pysrf.consensus import AlignedConsensus, EnsembleFit
 from sklearn.pipeline import Pipeline
 
 from similarity import build_similarity
+from tools.stats import dimension_reliability
 
 log = logging.getLogger(__name__)
 
-KAPPA_DIR = Path(__file__).resolve().parent.parent / "ranks" / "kappa" / "outputs"
+DIMENSIONALITY_DIR = (
+    Path(__file__).resolve().parent.parent / "dimensionality" / "outputs"
+)
 
 
 def _compute_dimension_reliability(aligned: np.ndarray) -> np.ndarray:
@@ -68,20 +69,37 @@ def _compute_dimension_reliability(aligned: np.ndarray) -> np.ndarray:
     return reliability
 
 
-def _load_kappa_rank(dataset_name: str, subject_id: int | None) -> int:
-    """Load k* from kappa outputs."""
+def _load_optimal_rank(
+    dataset_name: str, subject_id: int | None, kind: str = "argmin"
+) -> int:
+    """Load optimal rank from the dimensionality CV outputs.
+
+    Reads ``experiments/datasets/dimensionality/outputs/<name>[/subj{NN}]/cross_validation.json``
+    and returns ``payload["validations"][payload["primary_variant"]][f"{kind}_rank"]``.
+
+    Parameters
+    ----------
+    dataset_name : str
+        Dataset name (e.g. ``"things_behavior"``, ``"nsd"``).
+    subject_id : int or None
+        Subject id (for per-subject datasets like NSD).
+    kind : {"argmin", "one_se"}
+        Which rank to load from the primary CV variant.
+    """
     name = dataset_name.replace("-", "_")
     if subject_id is not None:
         name = f"{name}_subj{subject_id:02d}"
-    path = KAPPA_DIR / f"{name}.json"
+    path = DIMENSIONALITY_DIR / name / "cross_validation.json"
     if not path.exists():
         raise FileNotFoundError(
-            f"Kappa results not found: {path}\n"
-            f"Run kappa first: ./scripts/submit experiments/datasets/ranks/kappa/run.py --bg"
+            f"Dimensionality CV results not found: {path}\n"
+            f"Run first: poetry run python experiments/datasets/dimensionality/run.py "
+            f"dataset={dataset_name}"
         )
     with open(path) as f:
-        data = json.load(f)
-    return data.get("k_star") or data.get("k_star_kappa")
+        payload = json.load(f)
+    primary = payload["primary_variant"]
+    return int(payload["validations"][primary][f"{kind}_rank"])
 
 
 def run(cfg: DictConfig) -> None:
@@ -93,17 +111,17 @@ def run(cfg: DictConfig) -> None:
         output_dir = output_dir / f"subj{subject_id:02d}"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    optimal_rank = _load_kappa_rank(cfg.dataset.name, subject_id)
-    log.info(f"Kappa k*: {optimal_rank}")
+    rank_kind = cfg.get("rank_kind", "argmin")
+    optimal_rank = _load_optimal_rank(cfg.dataset.name, subject_id, kind=rank_kind)
+    log.info(f"Optimal rank ({rank_kind}): {optimal_rank}")
 
     log.info(f"Building similarity matrix for {cfg.dataset.name}...")
     similarity = build_similarity(cfg.dataset, subject_id=subject_id)
     n_samples = similarity.shape[0]
     log.info(f"Similarity matrix shape: ({n_samples}, {n_samples})")
 
-    aggregation = cfg.get("aggregation", "select")
     n_runs = cfg.generate.n_stable_runs
-    log.info(f"Running {n_runs} SRF fits, aggregation={aggregation}...")
+    log.info(f"Running {n_runs} SRF fits...")
 
     srf_kwargs = {}
     if "srf" in cfg:
@@ -111,16 +129,13 @@ def run(cfg: DictConfig) -> None:
         srf_kwargs["max_inner"] = cfg.srf.get("max_inner", 20)
 
     pipeline = Pipeline([
-        ("ensemble", EnsembleEmbedding(
+        ("ensemble", EnsembleFit(
             SRF(rank=optimal_rank, random_state=cfg.common.random_state, **srf_kwargs),
             n_runs=n_runs,
             random_state=cfg.common.random_state,
             n_jobs=cfg.common.n_jobs,
         )),
-        ("consensus", AlignedConsensus(
-            rank=optimal_rank,
-            aggregation=aggregation,
-        )),
+        ("consensus", AlignedConsensus(rank=optimal_rank)),
     ])
 
     pipeline.fit(similarity)
@@ -151,35 +166,37 @@ def run(cfg: DictConfig) -> None:
 
     # Per-dimension reliability across aligned runs
     aligned = consensus.aligned_embeddings_
-    n_runs_actual = aligned.shape[0]
-    reliability = _compute_dimension_reliability(aligned)
-    mean_reliability = float(np.mean(reliability))
+    naive_reliability = _compute_dimension_reliability(aligned)
+    cv_reliability = dimension_reliability(aligned)
+    mean_cv = float(np.mean(cv_reliability))
 
     log.info(f"Reconstruction RMSE: {recon_error:.4f}, r: {recon_r:.4f}")
     log.info(f"Sparsity: {sparsity:.3f}, Purity: {purity:.3f}")
-    log.info(f"Dimension reliability: mean={mean_reliability:.3f}, "
-             f"min={reliability.min():.3f}, max={reliability.max():.3f}")
+    log.info(f"CV reliability: mean={mean_cv:.3f}, "
+             f"min={cv_reliability.min():.3f}, max={cv_reliability.max():.3f}")
 
     # Save
     np.save(output_dir / "embedding.npy", embedding)
     np.save(output_dir / "runs.npy", consensus.aligned_embeddings_)
-    np.save(output_dir / "reliability.npy", reliability)
+    np.save(output_dir / "reliability.npy", naive_reliability)
+    np.save(output_dir / "cv_reliability.npy", cv_reliability)
 
     summary = {
         "dataset": cfg.dataset.name,
         "subject_id": subject_id,
         "n_samples": n_samples,
         "rank": optimal_rank,
+        "rank_kind": rank_kind,
         "n_runs": n_runs,
-        "aggregation": aggregation,
         "selected_run_idx": int(consensus.selected_run_idx_),
         "reconstruction_rmse": recon_error,
         "reconstruction_r": recon_r,
         "sparsity": sparsity,
         "purity": purity,
-        "mean_reliability": mean_reliability,
-        "min_reliability": float(reliability.min()),
-        "max_reliability": float(reliability.max()),
+        "naive_reliability_mean": float(np.mean(naive_reliability)),
+        "cv_reliability_mean": mean_cv,
+        "cv_reliability_min": float(cv_reliability.min()),
+        "cv_reliability_max": float(cv_reliability.max()),
     }
     (output_dir / "summary.json").write_text(json.dumps(summary, indent=2))
     log.info(f"Saved to {output_dir}")

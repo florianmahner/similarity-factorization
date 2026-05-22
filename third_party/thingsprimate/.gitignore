@@ -1,0 +1,33 @@
+# Exclude data and figures directories
+data/
+figures/
+symbol/cca_state/
+symbol/results/
+
+# Exclude common data and image file types
+*.npy
+*.mat
+*.pkl
+*.nii.gz
+*.csv
+*.tsv
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tiff
+*.tif
+
+# Exclude macOS files
+.DS_Store
+
+# Exclude Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Exclude env files
+*.yml

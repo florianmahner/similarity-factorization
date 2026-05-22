@@ -45,34 +45,60 @@ def correlate_rsms(
     return (corr, p) if return_pval else corr
 
 
-@njit(parallel=True, fastmath=True)
-def matmul(x: Array, y: Array) -> Array:
-    n_i, n_k = x.shape
-    _, n_j = y.shape
-    f = np.zeros((n_i, n_j))
-    for i in prange(n_i):
-        for j in prange(n_j):
-            for k in prange(n_k):
-                f[i, j] += x[i, k] * y[k, j]
-    return f
+def reconstruct_rsm(
+    w: np.ndarray,
+    batch_size: int = 10_000,
+) -> np.ndarray:
+    """Reconstruct RSM from embedding using softmax normalization.
 
+    Uses torch (GPU if available) with batched pair processing.
+    Ported from objdim.utils.rsa.rsm_pred_torch.
+    """
+    import torch
 
-@njit(parallel=True, fastmath=True)
-def reconstruct_rsm(w: Array) -> Array:
-    """Reconstruct RSM from embedding using softmax normalization."""
-    n = len(w)
-    s = matmul(w, w.T)
-    s_e = np.exp(s)
-    rsm = np.zeros((n, n))
-    for i in prange(n):
-        for j in prange(i + 1, n):
-            for k in prange(n):
-                if k != i and k != j:
-                    rsm[i, j] += s_e[i, j] / (s_e[i, j] + s_e[i, k] + s_e[j, k])
-    rsm /= n - 2
-    rsm += rsm.T
-    np.fill_diagonal(rsm, 1)
-    return rsm
+    if isinstance(w, np.ndarray):
+        w = torch.tensor(w, dtype=torch.double)
+    if w.dtype != torch.double:
+        w = w.double()
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    sim_matrix = torch.matmul(w, w.T).to(dtype=torch.double, device=device)
+    sim_matrix.exp_()
+
+    n_objects = sim_matrix.shape[0]
+    indices = torch.triu_indices(n_objects, n_objects, offset=1)
+
+    n_indices = indices.shape[1]
+    batch_size = min(n_indices, batch_size)
+    n_batches = (n_indices + batch_size - 1) // batch_size
+
+    rsm = torch.zeros_like(sim_matrix).double()
+
+    for batch_idx in range(n_batches):
+        start_idx = batch_idx * batch_size
+        end_idx = min(start_idx + batch_size, n_indices)
+        batch_indices = indices[:, start_idx:end_idx]
+        i, j = batch_indices
+        s_ij = sim_matrix[i, j]
+        s_ik = sim_matrix[i, :]
+        s_jk = sim_matrix[j, :]
+
+        n = end_idx - start_idx
+        n_range = np.arange(n)
+        s_ik[n_range, i] = 0
+        s_ik[n_range, j] = 0
+        s_jk[n_range, j] = 0
+        s_jk[n_range, i] = 0
+
+        s_ij = s_ij.unsqueeze(1)
+        softmax_ij = s_ij / (s_ij + s_jk + s_ik)
+        proba_sum = softmax_ij.sum(1) - 2
+        mean_proba = proba_sum / (n_objects - 2)
+        rsm[i, j] = mean_proba
+
+    rsm = rsm + rsm.T
+    rsm.fill_diagonal_(1)
+    return rsm.cpu().numpy()
 
 
 def mantel_test(

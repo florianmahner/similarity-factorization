@@ -8,6 +8,8 @@ path: ${paths.data_dir}/things
 # Loading parameters
 triplet_number: "4.7mio"
 n_objects: 1854
+split: train
+alpha: 1.0
 
 # Cross-experiment references
 bounds_task: things_behavior  # -> outputs/experiments/bounds/things_behavior/

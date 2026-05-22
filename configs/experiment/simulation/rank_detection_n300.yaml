@@ -1,0 +1,31 @@
+# Simulation: Rank Detection (n=300, with coherence)
+#
+# Same three slices as rank_detection.yaml but with n=300.
+
+defaults:
+  - /base
+  - _self_
+
+experiment_name: simulation
+task: rank_detection
+
+# === Sweep ===
+seed: 42
+
+# === Simulation ===
+n: 300
+true_ranks: [10, 15, 20, 25, 30, 35, 40]
+alphas: [0.1, 0.5, 2.0, 5.0]
+snrs: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+reference_rank: 20
+n_seeds: 5
+
+# === CV ===
+cv_repeats: 10
+grid_span: 15
+
+# === Compute ===
+n_jobs: 16
+
+# === Paths ===
+data_dir: ${paths.output_dir}/experiments/simulation/data/rank_detection_n300

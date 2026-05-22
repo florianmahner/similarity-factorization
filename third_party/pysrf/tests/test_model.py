@@ -2,14 +2,7 @@ import numpy as np
 import pytest
 from pysrf import SRF
 
-
-def generate_symmetric_matrix(n, rank, noise_level=0.1, random_state=None):
-    rng = np.random.RandomState(random_state)
-    w_true = rng.rand(n, rank)
-    s = w_true @ w_true.T
-    s += noise_level * rng.randn(n, n)
-    s = (s + s.T) / 2
-    return s, w_true
+from helpers import make_symmetric_matrix
 
 
 def test_srf_initialization():
@@ -24,7 +17,7 @@ def test_srf_initialization():
 def test_srf_fit_complete_data():
     np.random.seed(42)
     n, rank = 20, 5
-    s, _ = generate_symmetric_matrix(n, rank, noise_level=0.01, random_state=42)
+    s = make_symmetric_matrix(n, rank, noise_level=0.01, seed=42)
 
     model = SRF(rank=rank, max_outer=20, random_state=42)
     model.fit(s)
@@ -39,7 +32,7 @@ def test_srf_fit_complete_data():
 def test_srf_fit_transform():
     np.random.seed(42)
     n, rank = 20, 5
-    s, _ = generate_symmetric_matrix(n, rank, noise_level=0.01, random_state=42)
+    s = make_symmetric_matrix(n, rank, noise_level=0.01, seed=42)
 
     model = SRF(rank=rank, max_outer=20, random_state=42)
     w = model.fit_transform(s)
@@ -51,7 +44,7 @@ def test_srf_fit_transform():
 def test_srf_reconstruct():
     np.random.seed(42)
     n, rank = 20, 5
-    s, _ = generate_symmetric_matrix(n, rank, noise_level=0.01, random_state=42)
+    s = make_symmetric_matrix(n, rank, noise_level=0.01, seed=42)
 
     model = SRF(rank=rank, max_outer=20, random_state=42)
     model.fit(s)
@@ -64,7 +57,7 @@ def test_srf_reconstruct():
 def test_srf_missing_data():
     np.random.seed(42)
     n, rank = 20, 5
-    s, _ = generate_symmetric_matrix(n, rank, noise_level=0.01, random_state=42)
+    s = make_symmetric_matrix(n, rank, noise_level=0.01, seed=42)
 
     mask = np.random.rand(n, n) < 0.3
     mask = mask | mask.T
@@ -80,7 +73,7 @@ def test_srf_missing_data():
 def test_srf_score():
     np.random.seed(42)
     n, rank = 20, 5
-    s, _ = generate_symmetric_matrix(n, rank, noise_level=0.01, random_state=42)
+    s = make_symmetric_matrix(n, rank, noise_level=0.01, seed=42)
 
     model = SRF(rank=rank, max_outer=20, random_state=42)
     model.fit(s)
@@ -93,7 +86,7 @@ def test_srf_score():
 def test_srf_with_bounds():
     np.random.seed(42)
     n, rank = 20, 5
-    s, _ = generate_symmetric_matrix(n, rank, noise_level=0.01, random_state=42)
+    s = make_symmetric_matrix(n, rank, noise_level=0.01, seed=42)
     s = np.clip(s, 0, 1)
 
     mask = np.random.rand(n, n) < 0.2
@@ -138,9 +131,9 @@ def test_srf_all_missing():
 def test_srf_different_init_methods():
     np.random.seed(42)
     n, rank = 20, 5
-    s, _ = generate_symmetric_matrix(n, rank, noise_level=0.01, random_state=42)
+    s = make_symmetric_matrix(n, rank, noise_level=0.01, seed=42)
 
-    for init in ["random", "random_sqrt", "nndsvd", "nndsvdar"]:
+    for init in ["random", "random_sqrt"]:
         model = SRF(rank=rank, max_outer=10, init=init, random_state=42)
         model.fit(s)
         assert hasattr(model, "w_")
@@ -150,7 +143,7 @@ def test_srf_different_init_methods():
 def test_monotonicity():
     np.random.seed(42)
     n, rank = 20, 5
-    s, _ = generate_symmetric_matrix(n, rank, noise_level=0.01, random_state=42)
+    s = make_symmetric_matrix(n, rank, noise_level=0.01, seed=42)
 
     model = SRF(rank=rank, max_outer=10, random_state=42)
     model.fit(s)

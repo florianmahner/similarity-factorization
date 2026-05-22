@@ -17,8 +17,8 @@ export PYTHONUNBUFFERED=1
 PYTHON=${PYTHON:-python3}
 
 echo "=== Correctness Test ==="
-$PYTHON -u benchmarks/correctness.py
+$PYTHON -u tests/test_bsum_correctness.py
 
 echo ""
 echo "=== Performance Benchmark ==="
-$PYTHON -u benchmarks/benchmark.py
+$PYTHON -u benchmarks/bench_bsum.py

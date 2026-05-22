@@ -14,8 +14,8 @@
 ---
 
 Sparse non-negative factorization of similarity matrices: $S \approx WW^\top$.
-Handles missing data, estimates dimensionality via cross-validation, and
-produces stable consensus embeddings.
+Handles missing data, estimates dimensionality, and produces stable consensus
+embeddings.
 
 <p align="center">
   <img src="assets/factorization.svg" alt="S ≈ W × Wᵀ factorization diagram" width="800">
@@ -30,9 +30,10 @@ git clone https://github.com/florianmahner/pysrf.git && cd pysrf && ./setup.sh
 ## Usage
 
 ```python
-from pysrf import SRF
+from pysrf import SRF, estimate_rank
 
-model = SRF(rank=10, random_state=42)
+estimate = estimate_rank(s, random_state=42)
+model = SRF(rank=estimate.rank, random_state=42)
 w = model.fit_transform(s)
 ```
 

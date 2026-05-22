@@ -1,0 +1,12 @@
+# @package dataset
+# VGG16 penultimate layer features for THINGS+ images (1854 categories)
+#
+# Post-ReLU features (4096-dim) from classifier[5].
+# Non-negative, suitable for linear kernel with /max normalization.
+
+name: vgg16
+type: feature_file
+path: ${paths.data_dir}/features/vgg16
+features_file: vgg16_features.npy
+similarity_fn: linear
+bounds_task: vgg16

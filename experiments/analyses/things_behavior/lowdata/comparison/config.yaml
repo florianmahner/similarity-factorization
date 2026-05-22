@@ -1,0 +1,12 @@
+# THINGS Behavior: Low Data Comparison (SRF vs VICE)
+
+defaults:
+  - /base
+  - _self_
+
+experiment_name: things_behavior
+task: comparison
+
+# === Paths ===
+dataset_path: ${paths.data_dir}/things
+data_dir: ${paths.output_dir}/experiments/things_behavior/data

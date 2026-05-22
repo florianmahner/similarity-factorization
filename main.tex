@@ -1,0 +1,1085 @@
+\documentclass{article}
+\input{math_commands.tex}
+\usepackage{preamble}
+
+\begin{document}
+\maketitle
+
+% Here is the link to the cover letter
+% https://docs.google.com/document/d/1D86WhP2KTQWCje6LYbi3yszm08fbwempGBgI_z3HRpA/edit?usp=sharing
+
+\begin{abstract}
+The study of representations is widespread across fields, including neuroscience, psychology, and artificial intelligence. While representations have been studied and compared extensively using similarities between stimuli, current methods provide only limited access to the dimensions that shape these representations and are often limited in interpretability. To overcome these challenges, here we introduce Similarity-Based Representation Factorization (SRF), a general computational method for recovering low-dimensional non-negative interpretable embeddings directly from similarity data. Across simulations and many neural, behavioral, and computational datasets, SRF recovers interpretable dimensions from diverse similarity measurements, even for very sparsely sampled, incomplete data. The dimensions derived from these datasets match those obtained by task-specific models, predict independent behavioral properties, improve exploratory analysis, and offer higher power for confirmatory hypothesis testing than comparing similarity matrices. Together, these results establish SRF as a general-purpose method with broad applications for uncovering, understanding and leveraging the dimensions underlying representations.
+\end{abstract}
+
+\section{Introduction}
+
+A central goal in neuroscience, psychology, and artificial intelligence is to understand how biological and artificial systems organize sensory input into representations that support flexible behavior. A long-standing approach is to model stimulus items as points in a multidimensional space, whose distances reflect similarity relationships between them\citep{Torgerson1952,Shepard1957,Shepard1962,Nosofsky1986}. While researchers can and do postulate dimensional spaces, asking study participants to place items in a space is resource intensive, and potentially biased. This motivated much on inferring both representation dimensions and item positions from item similarity relationships, using methods such as multidimensional scaling (MDS, \cite{Torgerson1952}), principal component analysis (PCA, \cite{Jolliffe1986} ), non-negative matrix factorization (NMF, \cite{Lee1999}) or t-distributed stochastic neighbor embedding (t-SNE, \cite{Maaten2008}). In neuroscience, such dimensions can support theories about brain mechanisms x\citep{Naselaris2011, Kriegeskorte2021, Bracci2023}, and predict which stimulus properties drive neural responses \citep{Contier2024, Khosla2022, Sorscher2022, Jagadeesh2022, Bao2020} and behavior \citep{Roads2024-01, Hebart2020}. In artificial intelligence and machine learning, they can reveal where and why models fail \citep{Geirhos2021,Geirhos2024}, define what individual deep neural network units encode \citep{Bau2017,Olah2017}, and pinpoint where models align with or diverge from human perception \citep{Sucholutsky2025,Mahner2025, Du2025}.
+
+An alternative approach is to sidestep the representation in a dimensional space, and simply compare stimulus item similarities with those that would be expected under a particular representational hypothesis. Representational Similarity Analysis (RSA, \citep{Kriegeskorte2008-01}) has been applied to similarity matrices obtained from behavior or brain imaging or other recording modalities, across species and systems. Despite these advances, similarities alone remain limited in revealing the properties -- or dimensions -- that give rise to them. For example, knowing that a dog is judged more similar to a cow than to a car does not tell us whether that similarity is driven by properties related to \textit{animacy}, \textit{naturalness}, \textit{real-world size}, or another, potentially unknown, property. 
+
+Methods that infer dimensional representations have a number of shortcomings. The first is that, in order to be able to identify a solution, they have to make assumptions about the dimensions (e.g. orthogonality in PCA) or the data structure (e.g. for t-SNE, local structure matters more) that may not match researcher expectations. Second, the granularity of representation may not be appropriate, e.g. an item has values in every one of a few dimensions (PCA or MDS), versus being represented in only a few of many dimensions that are more akin to properties (NMF). Third, existing methods generally require fully observed similarity matrices. Behavioral similarity judgments are commonly sampled for few stimuli, because pairwise judgments grow super-linearly with the number of stimuli. This makes exhaustive sampling infeasible for larger matrices, which would lead to many unobserved entries in the similarity matrix. Other datasets sample a selective subset \citep{DeDeyne2019,Hebart2020}, but then often cannot be used for whole-matrix analyses or require time-intensive iterative methods for optimization \citep{Zheng2019}. A workaround is to impute values, but this requires making strong assumptions about the structure of missing data (e.g. local similarity or linear relationships) and treats filled-in values as real observations, which may mischaracterize the missing entries. Finally, other methods require specification a priori of the number of dimensions to identify, or use of separate methods to decide, after the fact, which dimensionality better fits the data. Common heuristics such as elbow plots or information criteria are often subjective, yield inconsistent results, and are less well suited to pairwise similarities, because as they are not independent observations. More generally, these approaches do not directly test generalization to unseen data, and have the potential for overfitting.
+
+%a principled approach for discovering interpretable factors across systems, domains, and forms of measurement has been lacking. 
+%While RSA is powerful for comparing similarities and testing specific hypotheses \citep{Kriegeskorte2008-01,Schutt2023}, it do not a priori recover the dimensions underlying them. 
+%While PCA and MDS  provide dimensions that are often difficult to interpret beyond the first few dimensions. Non-negative matrix factorization (NMF) yields parts-based, interpretable components by allowing only additive combinations \citep{Lee2000, Ding2005, Kuang2012}. However, its link to similarities has remained incomplete, for two reasons. First, existing formulations require fully observed similarity matrices and provide no principled way to select dimensionality, limiting their usefulness. 
+%Second, despite strong potential, these methods have not been developed or validated as a general approach for recovering interpretable dimensions from similarity data across cognitive science, neuroscience, and artificial intelligence.
+
+To address these challenges, we introduce Similarity-Based Representation Factorization (SRF), a general method for recovering interpretable dimensions directly from similarities. SRF can operate on full or partially sample similarity matrices, and estimates dimensionality through a cross-validation procedure designed specifically for this application. We first validate SRF in simulations with ground truth and then apply it across human behavioral judgments, electrophysiology, neuroimaging, semantic association data, and deep neural network representations. The use cases feature both pairwise matrices obtained through various processes, and similarities derived from computing item similarities in complex feature spaces. Across these settings, SRF recovered interpretable dimensions even from highly sparse and undersampled similarity data. 
+These dimensions supported both exploratory discovery and confirmatory hypothesis testing, affording greater statistical power than the dominant RSA framework, particularly under sparsity and higher noise. Together, these results establish SRF as a general method for translating research from studying representational similarity to the dimensions that organize it.
+
+\begin{figure}[]
+    \centering
+    \includegraphics[width=1.0\linewidth]{figures/General.pdf}
+    \caption{\textbf{Deriving non-negative, interpretable dimensions from similarity matrices.}
+    \textbf{a},~Pairwise similarities between items can be represented as a matrix or, equivalently, as a weighted graph where edges connect similar items. Our method decomposes this similarity matrix into a small number of latent dimensions. In the illustrative graph, each color-coded community corresponds to a discovered dimension. Each item receives a non-negative loading on every dimension, yielding soft memberships. For example, \textit{lion} loads strongly on the \textit{animate} dimension, while \textit{ball} loads on both \textit{round} and \textit{natural}. These memberships reorganize the original similarity matrix into interpretable clusters, grouping items with soft contributions to one or multiple dimensions. \textbf{b},~To estimate dimensionality, observed similarity entries are split into training and held-out validation sets that we treat as missing values. Using our model, we factorize the training entries into an embedding with $k$ dimensions.
+    Using the dot product similarity on this embedding gives a fully sampled similarity matrix that predicts also the held-out (or missing) entries. The optimal rank $k^*$ is selected at the minimum of the validation error curve.
+    }
+    \label{fig:overview}
+\end{figure}
+
+\section{Results}
+\label{sec:result}
+SRF is a general purpose method for deriving interpretable dimensions from datasets that measure representations. It targets the broad class of non-negative, symmetric similarity matrices that pervade cognitive science, neuroscience, and machine learning, including behavioral similarity judgments (Likert ratings, multi-arrangement, triplet-derived co-occurrence), kernel-based similarities for continuous feature representations (e.g., radial basis function or linear kernels on non-negative features), and association-based measures derived from co-occurrence statistics. SRF was built around symmetric non-negative matrix factorization \citep[SNMF,][]{Ding2005, Kuang2012}. We chose this formulation for three main reasons. First, assuming that similarities are sufficient for capturing the relevant representations, the more complex problem of identifying every dimension underlying the original data matrices need not be solved directly. Rather, it is sufficient to identify dimensions that underlie similarities between stimuli, which -- depending on the chosen similarity metric -- can be invariant to rotations, reflections and translations in the original feature space. This focuses dimensions on the robust relational structure between stimuli, rather than irrelevant or noisy variation in that space.
+%Second, unlike many methods \citep{Lee1999}, the symmetric factorization yields a single embedding matrix rather than requiring a mapping matrix, simplifying interpretation. 
+Second, the formulation yields non-negative, naturally sparse dimensions. Both properties yield a parts-based decomposition, which supports interpretability \citep{Hebart2020, Fyshe2015}. Finally, symmetric NMF works natively with similarities, allowing the decomposition of data acquired directly as similarities or associations.
+
+In addition to the characteristics above, SRF was designed to handle partial similarity matrices, either due to restricted sampling or missing data. In tandem, SRF automatically determines the dimensionality of the learned representation from data. This is critical for preserving meaningful distinctions between representational dimensions: Too few dimensions may miss important structure, whereas too many may overfit noise. To avoid this, SRF uses cross-validation to test generalization to held-out similarity data. However, the correlation structure inherent in a similarity matrix does not allow for arbitrarily holding out matrix entries. We therefore proposed a cross validation protocol using a restricted hold-out scheme that allows dimensionality to be evaluated from held-out similarities. This framework is what also allows the handling of missing data, as  we can leave out cells as a validation set, treat them as missing in training, and then use SRF optimization to predict them. This is illustrated in Fig.~\ref{fig:overview}b, and discussed further in Methods.
+
+
+\subsection{Recovering dimensions from simulated data}
+
+\begin{figure}[]
+    \centering
+    \includegraphics[width=1.0\linewidth]{figures/Simulation.pdf}
+    \caption{\textbf{Recovering latent dimensions from simulated representations.}
+    \textbf{a},~Ground-truth embeddings were generated from a Dirichlet model with concentration parameter $\alpha$ controlling representational complexity. Low $\alpha$ produces sparse, cluster-like memberships where each item belongs to few dimensions, while high $\alpha$ produces diffuse, overlapping memberships where items spread across many dimensions. The top row shows the resulting factor matrices and the bottom row the corresponding similarity matrices for three complexity levels.
+    \textbf{b},~Left: properties of the simulated ground-truth embeddings as a function of $\alpha$, measured by Hoyer sparsity and normalized entropy. Right: factor alignment, the correlation between recovered and ground-truth dimensions after optimal matching, shown for different noise levels.
+    \textbf{c},~Our model achieves high reconstruction performance on missing similarities. The top panel shows the fraction of held-out variance explained and the bottom panel shows factor recovery, both as a function of observed samples per model parameter. The gray region marks the under-determined regime where fewer similarities are observed than there are parameters to estimate. The model outperforms $k$-nearest neighbor and median imputation across all sparsity levels. \textbf{d},~Rank detection accuracy for three methods. Cross-validation (ours) selects the rank that best predicts held-out similarities. Parallel analysis retains dimensions with eigenvalues exceeding those of random data. The scree test selects the rank where eigenvalues level off. Each dot represents one simulation and the diagonal marks perfect detection. Simulations in the top row vary the sparsity of the ground-truth embedding (color) and in the bottom row the signal-to-noise ratio. Mean absolute error (MAE) is shown for each method.}
+    \label{fig:simulation}
+\end{figure}
+
+We first validated our method through simulations. This allowed us to control the data-generating representations and determine the degree to which (1) we can recover them and their dimensionality, (2) our method can handle missing data, and (3) cross-validation leads to valid inferences. We generated synthetic similarity matrices from a small set of underlying dimensions (see Methods) and controlled representational complexity via a single parameter $\alpha$. This parameter determines the structure of the representations (Fig.~\ref{fig:simulation}a), from sparse, cluster-like dimensions at low $\alpha$ (high Hoyer sparsity, low entropy) to nearly uniform dimensions at high $\alpha$ (Fig.~\ref{fig:simulation}b, left). We then attempted to recover the dimensions that generated the similarity matrix as a function of complexity. The model achieved excellent recovery of the underlying dimensions at low and moderate complexity. This recovery declined gradually with increasing complexity as the dimensions became more diffuse and overlapping. Since real similarity judgments are often noisy, we next tested robustness to measurement noise by perturbing the ground-truth dimensions. Recovery degraded only modestly as the signal-to-noise ratio decreased (Fig.~\ref{fig:simulation}b, right), indicating reliable recovery even under moderate noise levels.
+
+Second, we tested whether SRF could recover dimensions from incomplete similarity data. We quantified the degree of missingness as the ratio of observed similarities to model parameters, where values below 1 mark an under-determined regime with fewer observations than parameters to estimate (gray region in Fig.~\ref{fig:simulation}c). We compared our model against $k$-nearest neighbor and median imputation, two standard baselines for handling missing data. The method predicted held-out similarities more accurately than both baselines across nearly all levels of missingness (Fig.~\ref{fig:simulation}c, top), with the same pattern for recovery of the underlying dimensions (Fig.~\ref{fig:simulation}c, bottom). Notably, applying $k$-nearest neighbor or median imputation before fitting yielded worse recovery than leaving them unobserved. This suggests that imputation distorts pairwise similarity structure, and biases inference about the generating dimensions.
+
+Finally, we tested whether our cross-validation could identify the correct number of underlying dimensions. We evaluated recovery across true dimensionalities, degrees of missing data, and signal-to-noise ratios. Across these settings, our approach identified the true dimensionality more accurately than the scree test and Horn's parallel analysis, two common methods used in the cognitive sciences (Fig.~\ref{fig:simulation}d). Together, these simulations show that the model recovers the dimensions underlying representational similarities even under noise and heavy under-sampling, and that our cross-validation provides a reliable way to estimate dimensionality.
+
+
+\subsection{Deriving dimensions from similarities improves statistical power over RSA}
+
+\begin{figure}[]
+    \centering
+    \includegraphics[width=1.0\linewidth]{figures/RSA.pdf}
+    \caption{\textbf{SRF improves statistical power for hypothesis testing compared to RSA.}
+    \textbf{a},~Schematic of the comparison. Four orthogonal factors (colored bars) generate a factorial design, from which a noisy similarity matrix is measured. RSA tests each hypothesis factor against the full similarity matrix, where the signal from any single factor is diluted by contributions from all other factors and noise. SRF first decomposes the similarity matrix into individual dimensions and then tests each hypothesis against its matched dimension, isolating the relevant signal.
+    \textbf{b},~Statistical power, defined as the fraction of true factors correctly detected as significant, as a function of signal-to-noise ratio. SRF detects the true factors at substantially lower signal-to-noise ratios than RSA. The dashed line indicates the chance level at a significance threshold of $\alpha = 0.05$.
+    \textbf{c},~Same comparison using dimensions sampled from the SPoSE semantic embedding \citep{Hebart2020}, which are sparse, non-negative, and correlated, providing a more stringent test than orthogonal factors. The advantage of SRF is even more pronounced, particularly at low signal-to-noise ratios.}
+    \label{fig:rsa}
+\end{figure}
+
+
+In many applications, the goal is not only to discover which dimensions structure representations (exploratory), but also to test whether specific properties (e.g.\ \textit{animacy} or \textit{real-world size}) explain them (confirmatory). A common tool for confirmatory inferences is RSA, which correlates the observed similarity matrix with a model matrix that encodes a specific theory, for example one in which all animate objects are maximally similar. 
+
+However, observed similarity matrices typically reflect variation along multiple properties at once. A hypothesis about a single property is therefore compared against a matrix shaped by many other properties and measurement noise, which reduces statistical power. Because our method separates these sources of variation into distinct dimensions, comparing a hypothesis to the relevant dimension rather than to the full matrix should yield a more sensitive test (Fig.~\ref{fig:rsa}a).
+
+We first compared the sensitivity of our approach with RSA. We used a factorial design with four orthogonal dimensions (Fig.~\ref{fig:rsa}a, Methods). From this design, we generated pairwise similarities, added noise across signal-to-noise ratios, and used our method to derive dimensions from the noisy similarities. Finally, we compared power for detecting the data-generating dimension using our approach against classical RSA, in which a property (e.g. \textit{animacy}) is correlated with the full noisy similarity matrix. Across all noise levels, our method detected the data-generating dimensions with greater sensitivity than RSA (Fig.~\ref{fig:rsa}b). Thus,  deriving dimensions from noisy similarities can increase the sensitivity of confirmatory hypothesis testing.
+
+To assess whether this advantage extends to data-driven discovery, we next validated the finding on empirical data with correlated dimensions. To this end, we used dimensions from the SPoSE embedding \citep{Hebart2020}, which provides sparse, non-negative and interpretable dimensions derived from human similarity judgments. Unlike the factorial design, these dimensions vary in their contribution to the overall similarity structure and are not statistically independent. Applying the same testing across noise levels, we found that our method outperformed RSA, with a more pronounced advantage than in the factorial design (Fig.~\ref{fig:rsa}c).
+
+To understand this advantage, we examined statistical power as a function of how much variance each dimension contributed to the overall similarity matrix (Supplementary Fig.~\ref{fig:variance_quartile}). RSA had low power for dimensions that contributed little variance, because they contribute weakly to the full similarity matrix against which hypotheses are tested. Our method, in contrast, retained high sensitivity by isolating these dimensions from the overall similarity structure. Thus, dimensions that would be difficult to detect using conventional RSA can become accessible through data-driven decomposition. Together, these results indicate that decomposing similarity structure into dimensions can substantially increase statistical power for confirmatory hypothesis testing, while enabling the discovery of low-variance dimensions otherwise obscured in the full similarity matrix.
+
+
+\subsection{SRF reveals interpretable dimensions across empirical datasets}
+
+\begin{figure}[]
+    \centering
+    \includegraphics[width=1.0\linewidth]{figures/Visualization.pdf}
+    \caption{\textbf{Dimension discovery across empirical datasets}
+\textbf{a},~Optimal number of dimensions $k^*$ across diverse empirical datasets, obtained by the cross-validation procedure. \textbf{b},~Example dimensions (top) and observed vs.\ predicted similarity (bottom) across several datasets. The predicted similarity reveals that a few dimensions account for much variance in the original similarities.}
+    \label{fig:overview}
+\end{figure}
+
+
+The simulations on synthetic and empirical data confirmed that our method can recover the underlying dimensions from similarity matrices. To test the applicability of SRF across a broad domain, we applied it in exploratory fashion to empirical datasets it spanning human similarity judgments, neural recordings, and deep neural network activations. The first dataset contains triplet odd-one-out judgments across 1{,}854 object concepts, providing densely sampled behavioral data \citep[THINGS;][]{Hebart2023}. Second, Peterson-animals and Peterson-various comprise pairwise similarity ratings for animal species and object categories \citep{Peterson2018}. Third, Mur-92 consists of similarity ratings between 92 object images obtained with a multi-arrangement task \citep{Mur2013}. We also included ImageNet-trained VGG-16 feature activations \citep{Simonyan2015,Deng2009}, and electrophysiological recordings from macaque inferior temporal cortex \citep{Papale2025}. Finally, we used roughly 2.4 million free associations across 8{,}647 cue words from the Small World of Words project \citep[SWOW;][]{DeDeyne2019}, which -- unlike the other datasets -- forms a sparse graph in which only 1.27\% of word pairs are connected (Methods).
+
+Across datasets, our cross-validation yielded similarity embeddings with dimensionality ranging from 2 to 61. These dimensions reconstructed the original similarities accurately: across densely sampled datasets, the median $R^2$ was 0.88, demonstrating excellent reconstruction performance. For SWOW, where similarities form a sparse graph rather than a full matrix, we evaluated reconstruction as link prediction, obtaining an AUC of 0.91 (Fig.~\ref{fig:overview}c, Supplementary Fig.~\ref{fig:dimension_stability}b), demonstrating that the recovered dimensions separated true associations from non-associations even under extreme sparsity. Beyond fitting the dimensions were stable. Mean cross-validated split-half reliabilities of across model initializations exceeded 0.83 for all datasets (Supplementary Fig.~\ref{fig:dimension_stability}), indicating that the same dimensions reappear across independent dataset halves rather than reflecting noise.
+
+The recovered dimensions were also interpretable across behavioral, neural, and model-derived data (Fig.~\ref{fig:overview}d). Items loading most strongly on each dimension formed coherent groupings, often matching distinctions known from the cognitive and neural sciences. In Mur-92, the model recovered a face-selective dimension, mirroring the well-established role of faces as a major organizing axis of human object representation \citep{Kanwisher2010}. In Peterson-animals, it separated taxonomic groups such as birds and insects. In VGG-16, it recovered perceptual dimensions, such as color, and semantic dimensions, such as animacy, in line with prior evidence that deep networks capture both kinds of structure \citep{Mahner2025}.
+In SWOW, the model recovered interpretable dimensions spanning multiple levels of abstraction, from taxonomic groupings such as food-related items to abstract themes such as physical strength or affection (Fig.~\ref{fig:words}a,b). Together, these findings show that representational similarities from human judgments, neural recordings, and deep networks can be summarized by a small number of stable and interpretable dimensions, allowing the same dimensions to be compared across brains, behavior, and AI.
+
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=1.0\linewidth]{figures/Word-Association.pdf}
+    \caption{\textbf{SRF recovers interpretable semantic dimensions from word association data.}
+    \textbf{a},~The Small World of Words dataset \citep{DeDeyne2019} provides free word associations that can be represented as a weighted graph (left). SRF decomposes the association similarity matrix into dimensions, shown as color-coded communities in the graph (middle). The resulting embedding is then used as input to cross-validated ridge regression to predict independent behavioral ratings (right).
+    \textbf{b},~Example dimensions recovered by SRF, displayed as word clouds where word size is proportional to loading. The dimensions capture meaning at multiple levels of abstraction, from concrete categories such as alcoholic drinks or food to more abstract groupings such as physical strength or affection.
+    \textbf{c},~Predicted versus actual behavioral ratings for nine properties from the Glasgow Norms \citep{Scott2019}, with Spearman correlations shown for each. AoA = age of acquisition.}
+    \label{fig:words}
+\end{figure}
+
+\subsection{Word associations yield interpretable semantic dimensions that predict behavior}
+
+%TODO Find a place to add things!!
+
+In the previous section, we examined the fidelity of similarity matrices reconstructed via the SRF dimensions estimated from the original matrices. Beyond this, the degree to which relevant domain information is captured by the dimensions is also important. We measure this by using the dimensions to support downstream inference, namely as inputs to prediction models for independent information. In SWOW, participants were presented with a cue word and reported three words as free associations. We used these responses to understand the latent semantic dimensions underlying sparse word-association structure and test whether these dimensions generalize to behavior. The dataset consists of approximately 2.4 million responses across 8{,}647 cue words. Word associations are more naturally represented as a sparse graph of semantic links than as a similarity matrix. We therefore converted the graph into pairwise similarities using positive pointwise mutual information \citep{Church1990}, measuring whether two words co-occur more often than expected by chance (Methods). The resulting similarity matrix was extremely sparse, with only 1.27\% of word pairs showing positive association, making it a stringent test for our model.
+
+We then tested whether these dimensions predicted independent behavioral ratings from the Glasgow Norms \citep{Scott2019}, available for a subset of SWOW words (Fig.~\ref{fig:words}a,c). Predictions were strong to very strong across all properties, ranging from $\rho = 0.58$ (familiarity) to $\rho = 0.79$ (valence, Fig.~\ref{fig:words}c). Beyond the Glasgow Norms, the embedding predicted independent benchmarks of semantic similarity and relatedness (Supplementary Fig.~\ref{fig:similarity_benchmarks}).
+
+%Together with previous results, these findings show that the model can uncover the dimensions structuring human mental representations across empirical datasets, even from sparse and indirect behavioral measures, demonstrating broad applicability across the cognitive sciences, neuroscience and psychology.
+
+\section{Discussion}
+
+We introduced Similarity-Based Representation Factorization (SRF), a method that decomposes similarities into non-negative, interpretable dimensions. Across simulated and real-world data spanning human behavior, neural recordings, semantic networks, and deep neural networks, the model recovered interpretable dimensions sufficient for capturing core representations. Compared to standard RSA hypothesis testing, the method provides substantially higher statistical power, particularly for testing fine-grained structure in noisy matrices.
+
+Across neuroscience and machine learning, interpretable, dimension-wise representations are increasingly used for mechanistic explanation. Non-negative embeddings have been used to contrast category-selective and distributed accounts of neural organization \citep{Khosla2022,Contier2024}, to compare human and deep network representations \citep{Mahner2025,Du2025}, and to build encoding models of neural representations \citep{Zeng2025,Klindt2025}. In machine learning, sparse autoencoders decompose network activations into interpretable units that can be individually examined and manipulated \citep{Bricken2023,Cunningham2024}. In each case, dimensions make it possible to go beyond a scalar measure of similarity toward an explanation of which factors determine the underlying representation. 
+
+SRF uses a linear combination of non-negative dimensions to explain representations. Linear readouts are widely used as a proxy for representational content \citep{DiCarlo2012,Majaj2015}, but nonlinear relationships between dimensions and similarities could capture additional structure that the model misses. Another open question is how dimensions are organized. SRF treats all dimensions as equally structured, but representations may be hierarchical, with broad categorical distinctions scaffolding finer-grained features \citep{Costa2025}. Such hierarchical organization has been suggested to differentiate human from artificial representations \citep{Muttenthaler2025}, and extending SRF to derive hierarchically structured dimensions could improve understanding. Finally, because SRF learns separate dimensions for each system, cross-system comparison requires post-hoc alignment, leaving open joint factorizations that identify shared and system-specific dimensions \citep{Thasarathan2025}.
+
+Representational similarities can be viewed as weighted graphs, with stimuli as nodes and similarities as edges. From this perspective, SRF dimensions correspond to soft community memberships, assigning each stimulus a graded role across latent groups rather than hard clusters. The word association results illustrate this directly: SRF identified dimensions from the sparse association graph that captured coherent semantic categories, from concrete groupings like body parts and food to abstract function words. This suggests that SRF may be useful beyond the cognitive and neural domains. In protein interaction networks, brain connectivity graphs, and social networks, pairwise relationships are typically partially observed, yet they are thought to reflect underlying modular structure. Its ability to learn from incomplete data and predict unobserved relationships from the factored structure makes it suitable for these settings. Whether sparse, non-negative dimensions that proved interpretable for perceptual and semantic representations also capture meaningful organization in biological or social networks remains untested.
+
+\section{Methods}
+
+\subsection{Similarity-based representation factorization (SRF)}
+
+SRF assumes a non-negative similarity matrix $S \in \mathbb{R}_{\geq 0}^{n \times n}$ for $n$ items as
+
+\begin{equation}
+S \approx W W^\top,
+\end{equation}
+
+where $W \in \mathbb{R}_{\geq 0}^{n \times r}$ and $r \ll n$. This implicitly assumes $S$ to be symmetric and positive semi-definite, consistent with the similarity matrices considered in Section~\ref{sec:result}.. Each row $w_i$ of $W$ represents item $i$ as a non-negative weight vector over $r$ dimensions, and the similarity between items $i$ and $j$ is approximated by $w_i^\top w_j$. This supports an additive and part-based representation in which dimensions contribute positively to similarity and can therefore be interpreted more directly. Because $W$ is not normalized, columns of $W$ can differ in scale, and columns with larger norm contribute proportionally more to the reconstructed similarity.
+
+When all similarities are observed, SRF estimates $W$ by minimizing the Frobenius reconstruction error between $S$ and $WW^\top$. In many applications, however, only a subset of pairwise similarities is observed. To accommodate this case, we define a symmetric binary mask $M \in \{0,1\}^{n \times n}$ where $M_{ij}=M_{ji}=1$ if $S_{ij}$ is observed, and $0$ otherwise. We assume the diagonal is observed, so $M_{ii}=1$. We then estimate $W$ by solving
+
+\begin{equation}
+\min_{W \ge 0} \frac{1}{2} \lVert M \odot (S - W W^\top) \rVert_F^2,
+\end{equation}
+where $\odot$ denotes element-wise multiplication and $\lVert \cdot \rVert_F$ is the Frobenius norm. Thus, only observed similarities contribute to the loss. Unobserved entries are excluded from the fitting objective, but after fitting, the model still yields predictions $(WW^\top)_{ij}$ for those unobserved pairs. We use this observation for our cross-validated rank selection (see Supplementary Information~\ref{sec:cross-validation}). We optimize the objective using the alternating direction method of multipliers (ADMM) \citep{Boyd2011}. Full derivations, update rules, and implementation details are provided in Supplementary Information~\ref{sec:srf-optim}.
+
+
+\subsection{Model fitting, dimensionality selection, and stability}
+
+The appropriate dimensionality $r$ is typically unknown, and often itself a question of interest. We therefore fit SRF across candidate ranks and select the rank that best predicts held-out observed similarities. For each candidate dimensionality, we partition the observed similarities into training and validation folds, fit SRF on the training entries, and evaluate mean squared prediction error on the held-out entries. Because entries in a similarity matrix are not independent, we do not use a standard entrywise matrix cross-validation. Instead, we use a restricted hold-out scheme designed specifically for similarity data (see Supplementary Information~\ref{sec:cross-validation}. The dimensionality $\hat r$ that minimizes the average prediction error across folds is selected, and SRF is then refit at that rank on the full data.
+
+A useful property of the symmetric non-negative factorization used by SRF is that it is relatively insensitive to rank misspecification. The lower bound on the dimension recovery error grows only slowly with $\vert r - r^{\star} \vert$ (see Supplementary Information~\ref{subsec:misspecify_k}). Modest mis-estimates of $r$ incur modest costs in reconstruction and prediction. Accurate rank selection nevertheless remains important for interpretability. If $r > r^{\star}$, SRF can use the extra dimensions to model noise or sampling variation. Such dimensions may appear semantically coherent, even though they do not reflect stable structure in the similarity data.
+
+Cross-validating is, however, more delicate for low-rank similarity matrices than cross-validating for standard regression or classification models. The entries of $S$ are not independent observations but interdependent (coupled) through the same low-dimensional structure. As a result, holding out individual entries does not necessarily create genuinely new prediction targets.  Once the number of observed entries exceeds the matrix-completion threshold of $O(nr\,\mathrm{polylog}\,n)$ \citep{CandesRecht2009, Gross2011}, the validation entries can be determined from the training entries with high probability (see Supplementary Information~\ref{subsec:info_leakage}). Validation error can therefore measure consistency with values already implied by the training data, rather than prediction of genuinely unseen similarities. This creates an information leakage problem: validation entries may no longer provide an independent test of prediction performance. It can bias rank selection toward overly large $r$, because higher-rank models may be rewarded for matching values that are already implied by the training entries. To reduce this problem, we use a restricted hold-out scheme that fixes an a-priori sparse observation pattern before cross-validation. Through this, we keep each fold's training set below the matrix completion threshold. Validation is then performed within this masked design, yielding a more conservative estimate of predictive performance. A detailed treatment of the leakage problem in standard alternatives is given in Appendix~\ref{subsec:cv_protocol}.
+
+To assess the stability of the recovered embeddings, we fit SRF repeatedly from random initializations. Since the SRF objective is non-convex, these runs can converge to different factorizations even for the same dimensionality. Some of this variability is due only to permutation ambiguity in the recovered dimensions: if $W$ is a solution, then $W P$ is an equivalent solution for any permutation matrix $P$. Beyond this, different initializations may also converge to distinct but similarly good local minima. We therefore align the recovered dimensions across runs using the Hungarian algorithm based on pairwise column similarities. We then select the most central run as the final solution. We report this representative run instead of averaging embeddings, since averaging need not correspond to a solution of the SRF objective and can distort the reconstructed pairwise similarities. To quantify dimension stability across repeated fits, we compute cross-validated split-half reliability. For each random split of objects into two halves, dimensions are matched between pairs of runs on one half and evaluated on the other. Reliabilities are then averaged across run pairs and splits and corrected with the Spearman--Brown formula (see Supplementary Table~\ref{tab:datasets}).
+
+\subsection{Constructing similarity matrices}
+\label{sec:similarity_construction}
+
+SRF operates on symmetric, non-negative similarity matrices. We constructed such matrices differently depending on the data source. For datasets that already provided direct pairwise judgments, we used the reported pairwise structure directly after symmetrizing it when necessary and rescaling it to a non-negative similarity measure.
+
+For triplet odd-one-out judgments, participants viewed three items and selected the item that was least similar to the other two. For each pair $(i,j)$, let $s_{ij}$ denote the number of triplets in which the pair was shown and $c_{ij}$ the number in which both items were retained as the most similar pair. We estimated pairwise similarity as
+\[
+m_{ij} = \frac{c_{ij} + \alpha}{s_{ij} + 2\alpha},
+\]
+with $\alpha = 1$ for mild Laplace smoothing. This yielded a symmetric similarity matrix bounded in $[0,1]$, with pairs that were never sampled treated as unobserved.
+
+For word associations, we constructed a weighted association graph from cue-response counts, removed isolated nodes, and retained the largest strongly connected component. We then summed association counts in both directions for each word pair and converted these counts to Positive Pointwise Mutual Information \citep[PPMI;][]{Church1990}, yielding a sparse, symmetric, non-negative semantic similarity matrix.
+
+For continuous feature vectors, such as neural responses or deep neural network activations, we constructed similarities using kernels that produce non-negative matrices. For non-negative features, we used the linear kernel $k(\mathbf{x}_i, \mathbf{x}_j) = \mathbf{x}_i^\top \mathbf{x}_j$. For signed features, we used the radial basis function kernel
+\begin{equation}
+    k(\mathbf{x}_i, \mathbf{x}_j) = \exp\left(-\frac{\|\mathbf{x}_i - \mathbf{x}_j\|^2}{2\sigma^2}\right),    
+\end{equation}
+
+with bandwidth $\sigma$ set by the median heuristic \citep{Scholkopf2002}.
+
+\subsection{Simulated data}
+
+Ground-truth factor matrices $W \in \mathbb{R}_{\geq 0}^{n \times k}$ were generated by drawing each row independently from a symmetric Dirichlet distribution,
+\begin{equation}
+    \mathbf{w}_i \sim \mathrm{Dir}(\alpha, \ldots, \alpha),    
+\end{equation}
+
+
+so that rows summed to one. The concentration parameter $\alpha$ controlled representational complexity: small values produced sparse, cluster-like dimensions, whereas large values produced more diffuse and overlapping dimensions. Ground-truth similarity matrices were generated using a linear kernel $S = W W^\top$. When noise was included, we added Gaussian noise to $S$ and chose the noise scale by binary search so that the resulting matrix matched a prespecified signal-to-noise ratio (SNR), defined as the ratio of signal variance to total variance. Negative entries were clipped to zero and $S$ was symmetrized.
+
+We used these simulations for three evaluations. For dimension recovery, we varied $\alpha$ and SNR and fit SRF at the true rank. Reconstruction quality was measured as explained variance between ground-truth and recovered similarity matrices, and dimension recovery as the correlation between dimensions after Hungarian matching. For missing-value recovery, we randomly masked off-diagonal entries at varying retention rates and compared SRF with $k$-nearest neighbor and median imputation. We quantified sampling density as the number of observed similarities per model parameter,
+
+\begin{equation}
+    \text{sampling density} = \frac{m_{\mathrm{obs}}}{nk},    
+\end{equation}
+
+where $m_{\mathrm{obs}}$ is the number of observed off-diagonal similarities and $nk$ is the number of free parameters in the latent embedding. This quantity indexes observations relative to model size, not the effective number of independent samples. Performance was evaluated on held-out similarities and on recovery of the ground-truth dimensions. For rank detection, we varied the true rank, complexity, and SNR and compared SRF cross-validation with parallel analysis and the scree test. Accuracy was quantified as the mean absolute error between the selected and true rank.
+
+
+\subsection{Statistical power comparison}
+We compared RSA and SRF in two simulation designs. In the factorial design, we crossed four orthogonal categorical factors with three or more levels each and encoded the resulting design in a one-hot feature matrix $X$. In the SPoSE design, each repeat sampled 50 objects and 5 dimensions from the SPoSE embedding \citep{Hebart2020}, yielding a continuous, sparse, and correlated feature matrix $X$. In both cases, clean similarity matrices were generated using a dot-product kernel $S = X X^\top$. We then added Gaussian noise and chose the noise scale by binary search so that the resulting matrix matched a prespecified signal-to-noise ratio (SNR). Negative entries were clipped to zero and matrices were symmetrized.
+
+For RSA, each ground-truth column $x_j$ defined a hypothesis matrix $H_j = x_j x_j^\top$. Significance was assessed with a Mantel test by correlating the upper-triangular entries of $H_j$ and $S$ and comparing the result with a null distribution obtained by jointly permuting the rows and columns of $S$. For SRF, we factorized $S$ at the true rank and matched recovered dimensions to ground-truth columns with the Hungarian algorithm using absolute correlations. To avoid selection bias in the matching step, we used leave-one-out alignment, in which the permutation for each object was determined from the remaining $n-1$ objects, and recomputed this alignment under each permutation when constructing the null distribution. All tests were one-sided with 1{,}000 permutations and Benjamini--Hochberg correction at $\alpha = 0.05$. Statistical power was defined as the fraction of ground-truth hypotheses detected as significant across 1{,}000 independent repeats.
+
+\subsection{Empirical datasets}
+We applied SRF to seven datasets spanning human similarity judgments, neural recordings, deep neural network activations, and semantic association data. The behavioral datasets comprised the Mur-92 dataset \citep{Mur2013}, which contains 92 images of faces, bodies, and objects collected with the multi-arrangement task, and two datasets from Peterson et al. \citep{Peterson2018}, which provide pairwise similarity ratings for animal images and for images spanning diverse categories. For neural data, we used electrophysiological recordings from macaque inferior temporal cortex in response to 22{,}248 THINGS images \citep{Papale2025} and fMRI responses to natural scenes from the Natural Scenes Dataset \citep{Allen2022}. For model representations, we extracted penultimate-layer activations from VGG-16 \citep{Simonyan2015} in response to 1{,}854 object images from THINGS-plus \citep{Stoinski2024}. For semantic association data, we used the Small World of Words English dataset \citep{DeDeyne2019}.
+
+For datasets that already provided pairwise similarities, we used the reported similarity matrices directly. For the macaque electrophysiology dataset, we retained only channels with split-half reliability greater than 0.3 before constructing similarity matrices from these channels. For the remaining datasets, we constructed similarity matrices using the RBF kernel. For the SWOW dataset, we constructed a PPMI-based similarity matrix from association counts. All datasets were then factorized with SRF using the same fitting, rank-selection, and stability procedures. Reconstruction quality was reported as $R^2$ for dense similarity matrices. For SWOW, where positive PPMI entries form a sparse graph and zero entries indicate no positive association above chance, we reported ROC-AUC for discriminating all 476{,}383 upper-triangular positive PPMI pairs from 476{,}383 upper-triangular zero-PPMI pairs sampled without replacement, using reconstructed similarities $WW^\top$ as scores. We used all positive pairs and an equal-size sample of zero pairs because zero-PPMI pairs vastly outnumber positive pairs. This gives a balanced and computationally tractable estimate of the probability that a positive association is ranked above a zero association.
+
+
+\subsection{THINGS behavioral prediction}
+
+We used crowd-sourced odd-one-out judgments from the THINGS database \citep{Hebart2019}, comprising 4.7 million triplet responses across 1{,}854 objects. Pairwise similarities were constructed from the triplets as described above. SRF rank was selected by cross-validation on the training set, and the final model was evaluated on a held-out test set. To predict triplet judgments, we reconstructed pairwise similarities from the fitted embedding and predicted the odd-one-out as the object not in the most similar pair. Prediction accuracy was measured as the percentage of correctly predicted odd-one-out choices on the held-out test set. We compared SRF with the published 66-dimensional SPoSE embedding \citep{Hebart2020}, which was trained directly on the original triplet judgments. To test whether the recovered pairwise similarities captured behavior beyond the triplet task itself, we additionally correlated SRF-predicted similarities for a separate set of 48 objects with independent human similarity ratings.
+
+\subsection{Word association analysis}
+
+We used the Small World of Words English dataset \citep{DeDeyne2019}, comprising word association data from more than 90{,}000 participants. Each participant saw cue words and provided three associated responses. We used the preprocessed strength file (R123), which aggregates responses across approximately 100 participants per cue. Pairwise similarities were constructed from the association data as described above. To test whether the recovered dimensions generalized beyond the association data themselves, we predicted independent behavioral ratings from the Glasgow Norms \citep{Scott2019} for words present in both datasets. We used ratings including valence, arousal, concreteness, imageability, size, familiarity, and age of acquisition, all collected in separate behavioral experiments. For each rating variable, we fit a ridge-regression model using SRF embeddings as predictors. Predictions were generated with 5-fold nested cross-validation. Within each fold, embedding dimensions were standardized and the regularization strength was selected from $\alpha \in \{0.01, 0.1, 1, 10, 100\}$. Prediction quality was measured as the Spearman correlation between out-of-fold predictions and observed ratings.
+
+
+\section{Author Contributions}
+
+F.P.M. and K.C.L. jointly conceived the method and developed the optimization algorithm, with additional input from F.P. F.P.M. implemented the software. F.P.M. and M.N.H. designed the experiments. F.P.M. performed the experiments. F.P.M. and K.C.L wrote the original draft. M.N.H. conceived the project, supervised the research, provided critical revisions, and acquired funding. All authors reviewed and approved the final manuscript.
+
+
+\section{Acknowledgments}
+
+F.P.M. and M.N.H. acknowledge support from a Max Planck Research Group grant of the Max Planck Society awarded to M.N.H. M.N.H. acknowledges support from the ERC Starting Grant COREDIM (ERC-StG-2021-101039712) and the Hessian Ministry of Higher Education, Science, Research and Art (LOEWE Start Professorship and Excellence Program ``The Adaptive Mind''). This study used the high-performance computing capabilities of the Raven and Cobra Linux clusters at the Max Planck Computing \& Data Facility (MPCDF), Garching, Germany (\url{https://www.mpcdf.mpg.de/services/supercomputing/}).
+K.C.L. and F. P. were supported by the National Institute of Mental Health Intramural Research Program (ZICMH002968). The contributions of the NIH authors are considered Works of the United States Government. The findings and conclusions presented in this paper are those of the author(s) and do not necessarily reflect the views of the NIH or the U.S. Department of Health and Human Services. The funders had no role in the study design, data collection and analysis, decision to publish, or preparation of the manuscript.
+
+\section{Software}
+
+A publicly available Python package implementing our method is available at \href{https://github.com/florianmahner/pysrf}{https://github.com/florianmahner/pysrf}. A repository containing all analyses is available at \href{https://github.com/florianmahner/similarity-factorization}{https://github.com/florianmahner/similarity-factorization}.
+
+\clearpage
+
+\bibliography{bibliography}
+\bibliographystyle{plainnat}
+
+
+\clearpage
+
+\appendix
+\setcounter{figure}{0}
+\renewcommand{\thefigure}{S\arabic{figure}}
+
+\section{Uncovering behavioral dimensions from trial-based data}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=1.0\linewidth]{figures/THINGS.pdf}
+  \caption{\textbf{SRF recovers behavioral similarity structure from sparse triplet data.}
+  \textbf{a},~In the THINGS odd-one-out task \citep{Hebart2019}, participants view three object images and select the least similar one. These triplet judgments are aggregated into pairwise similarities with Laplace smoothing and factorized by SRF into interpretable dimensions.
+  \textbf{b},~Predicted pairwise similarities from SRF correlate strongly with independent human similarity ratings collected for a separate set of 48 objects.
+  \textbf{c},~Held-out triplet prediction accuracy. SRF at the cross-validated rank matches the published SPoSE embedding while using substantially fewer dimensions, and reaches 89.66\% of the behavioral noise ceiling.}
+  \label{fig:things}
+\end{figure}
+
+Here we ask whether SRF can match a state-of-the-art neural-network approach for discovering interpretable dimensions from large-scale behavioral judgments. We answered this on the THINGS odd-one-out dataset \citep{Hebart2023}, which contains 4.7 million triplet odd-one-out judgments across 1{,}854 object concepts. In each trial, participants selected the image that least fit with two others (Fig.~\ref{fig:things}a). We compare SRF to the neural network model SPoSE \citep{Hebart2020}, a very influential model that learns interpretable dimensions directly from triplet trials and has been used to study brain organization \citep{Contier2024,Teichmann2026} and extended to other domains \citep{Josephs2023,Bockes2025}. Our model, in contrast, receives only the pairwise similarity matrix aggregated from the trial-level responses (see Methods).
+
+Cross-validation selected 26 dimensions, compared with 66 for the published SPoSE embedding \citep{Hebart2023}. While the dimensionality was notably lower, it remained open to what degree this more compact representation preserved the ability to predict independent behavioral data. To evaluate the predictive performance of this embedding, we carried out two tests. First, we reconstructed pairwise similarities from the learned similarity embedding and correlated them with independent human similarity ratings collected for a separate set of 48 objects not used during estimation \citep{Hebart2020}. The correlation was high ($r = 0.91$, Fig.~\ref{fig:things}b), matching the result reported in the original SPoSE paper ($r = 0.90$) while using substantially fewer dimensions. Second, we tested whether the embedding could predict held-out triplets odd-one-out judgments. The embedding achieved $64.12\% \pm 0.01\%$ accuracy, on par with SPoSE ($64.12\%$, Fig.~\ref{fig:things}c). The inter-subject consistency, defined as the consistency with which humans agree on repeated triplets, was $67.67\% \pm 1.08\%$, demonstrating that the model reached $89.66\%$ of this ceiling.
+
+Together, these results demonstrate that our model recovers behaviorally relevant dimensions on par with a neural network optimized on a task-specific triplet objective. This broadens the kinds of behavioral data from which such dimensions can be estimated to settings where researchers collect only pairwise or partially sampled similarity judgments.
+
+
+\section{Optimization and convergence of SRF}\label{sec:srf-optim}
+
+\label{supp:math_derivation}
+
+
+In the following, we provide the formal derivation of the Similarity-Based Representation Factorization (SRF) algorithm. Throughout the following discussion, we assume $S \in \mathbb{R}^{n \times n}_{\geq 0}$ is a non-negative, symmetric similarity matrix (for example an RBF-kernel Gram matrix). Denote $\mathcal{W} := \left\{ W \in \mathbb{R}^{n \times k} : W \geq 0 \right\}$. We consider representing $S$ with a symmetric, low-rank factorization of the form:
+
+\begin{equation}
+    S \approx WW^{\top}, \quad WW^{\top} \in [ \max(0, \min(S)), \max(S)].
+\end{equation}
+
+In particular, $W$ is constrained only by non-negativity and by the bound on the reconstruction. In addition, $S$ may be only partially observed, with some entries $S_{ij}$ missing. Here we assume that missingness completely at random. Missing entries are handled using a binary mask $\mathcal{M} \in \{ 0, 1\}^{n\times n}$, where ($\mathcal{M}_{ij} = 1$) indicates an observed entry and $\mathcal{M}_{ij} = 0$) indicates a missing entry. This gives the following least-squares problem
+
+\begin{equation}
+    \min_{W \in \mathcal{W}} \frac{1}{2} \left\Vert \mathcal{M} \odot \left(S - WW^{\top}  \right) \right\Vert^2_F, \quad \text{such that} \ \ 0 \leq \min(S) \leq [WW^{\top}]_{ab} \leq \max(S) \ \ \forall (a,b)
+\end{equation}
+
+The constrained factorization can be optimized via the Alternating Direction Method of Multipliers \citep[ADMM][]{Boyd2011} framework. The augmented Lagrangian is
+
+\begin{equation}
+    \mathcal{L}_{\rho}(W,Z,\alpha_Z) = \tfrac{1}{2}\|\mathcal{M}\odot( S - Z )\|_F^2
++ \mathcal{I}_{\mathcal{W}}(W)
++ \langle\alpha_Z,\,Z - W W^T\rangle
++ \tfrac{\rho}{2}\|Z - W W^T\|_F^2 + \mathcal{I}_{\mathcal{Z}}(Z).
+\end{equation}
+
+The auxiliary $Z$ inherits the box $\mathcal{Z} = \left\{ Z \in \mathbb{R}^{n \times n}_{\geq 0} : Z_{ab} \in [ \max(0, \min(S)), \max(S)] \right\}$ from the data range, and $\mathcal{I}_{\mathcal{S}}$ denotes the convex indicator of the set $\mathcal{S}$. The block updates are
+
+\begin{align}
+W^{(i+1)} &= \underset{W \in \mathcal{W}}{\arg\min}\
+\frac{\rho}{2}\bigl\| Z^{(i)} - W W^{\top|} + \tfrac{1}{\rho}\alpha_Z^{(i)}\bigr\|_F^2 \label{eqt:sym_sub_W} \\
+Z^{(i+1)} &= \underset{Z \in \mathcal{Z}}{\arg\min}\
+\tfrac{1}{2}\|\mathcal{M}\odot(S-Z)\|_F^2
++ \tfrac{\rho}{2}\bigl\| Z - W^{(i+1)}(W^{(i+1)})^{\top} + \tfrac{1}{\rho}\alpha_Z^{(i)}\bigr\|_F^2 \label{eqt:sym_sub_Z} \\
+\alpha_Z^{(i+1)} &\leftarrow \alpha_Z^{(i)} + \rho\bigl( Z^{(i+1)} - W^{(i+1)}(W^{(i+1)})^T\bigr). \nonumber
+\end{align}
+
+Throughout we use the shorthand
+\begin{equation}
+R^{(i)} := W^{(i)}(W^{(i)})^{\top},\qquad
+\widetilde Z^{(i)} := Z^{(i)} + \rho^{-1}\alpha_Z^{(i)},\qquad
+h_i(W) := \tfrac{\rho}{2}\bigl\|\widetilde Z^{(i)} - W W^{\top}\bigr\|_F^2.
+\end{equation}
+
+The $Z$-update has the entry-wise closed form
+\begin{equation}
+Z^{(i+1)}_{ab}
+= \mathrm{Proj}_{I_{\mathcal{Z}}}\!\Biggl(
+  \frac{\mathcal{M}_{ab}\,S_{ab} + \rho\,R^{(i+1)}_{ab} - \alpha_{Z,ab}^{(i)}}{\rho + \mathcal{M}_{ab}}
+\Biggr).
+\label{eqt:sym_Z_closedform}
+\end{equation}
+
+The $W$-subproblem is non-convex because the objective is quartic in the entries of $W$. We therefore solve it inexactly by the sBSUM scheme of \citep{Shi2017} (see Section \ref{sec:bsum})
+
+\subsection{Convergence and the lower bound on \texorpdfstring{$\rho$}{rho}}
+
+We now prove a non-increasing Lagrangian property for the ADMM scheme. The dual-variable difference can be controlled tightly through the Karush-Kuhn-Tucker (KKT) condition of the $Z$-update.
+
+% \paragraph{KKT identity for the dual variable}
+
+\begin{lemma}[KKT identity]
+\label{lem:sym_KKT_alpha}
+Suppose at iteration $i$ every entry $(a,b)$ of $Z^{(i+1)}$ is the
+\emph{interior} solution of \eqref{eqt:sym_sub_Z} (the projection in \eqref{eqt:sym_Z_closedform} is inactive). Then
+\begin{equation}
+\alpha_Z^{(i+1)} \;=\; \mathcal{M} \odot (S - Z^{(i+1)}).
+\label{eqt:sym_KKT_alpha}
+\end{equation}
+\end{lemma}
+
+\begin{proof}
+For each entry $(a,b)$, the unconstrained first-order condition for $Z_{ab}^{(i+1)}$ is $\mathcal{M}_{ab}(Z_{ab}^{(i+1)} - S_{ab}) + \rho(Z_{ab}^{(i+1)} - R_{ab}^{(i+1)}) + \alpha_{Z,ab}^{(i)} = 0$. Combining with the dual update $\alpha_{Z,ab}^{(i+1)} = \alpha_{Z,ab}^{(i)} + \rho(Z_{ab}^{(i+1)} - R_{ab}^{(i+1)})$ gives $\alpha_{Z,ab}^{(i+1)} = \mathcal{M}_{ab} \cdot (S_{ab} - Z_{ab}^{(i+1)})$.
+\end{proof}
+
+Applying \eqref{eqt:sym_KKT_alpha} at iterations $(i)$ and $(i+1)$ gives
+
+\begin{equation}
+\alpha_Z^{(i+1)} - \alpha_Z^{(i)}
+\;=\; \mathcal{M} \odot (Z^{(i)} - Z^{(i+1)})
+\;\;\Longrightarrow\;\;
+\|\alpha_Z^{(i+1)} - \alpha_Z^{(i)}\|_F^2 \;\leq\; \|\Delta Z^{(i)}\|_F^2,
+\label{eqt:sym_alpha_tight}
+\end{equation}
+
+Thus, if the projection is inactive at iterations $i$ and $i=1$ the bound is independent of $\Delta R^{(i)} = \Delta(W W^T)^{(i)}$. In this case, the change in the dual variable $\alpha$ is controlled entirely by the change in $\Delta Z^{(i)}$ on the observed entries. When the projection is active, the bound on $\|\alpha_Z^{(i+1)} - \alpha_Z^{(i)}\|_F^2$ includes an additional term depending on $\Vert W^{(i)}\Vert_{\text{op}}$, which is finite. We address this below.
+
+\begin{theorem}[Non-increasing Lagrangian]
+\label{thm:sym_decreasing_tight}
+Suppose that
+\begin{enumerate}
+\item[(i)] the $W$-inner solver of \eqref{eqt:sym_sub_W} satisfies the \emph{descent property}
+\begin{equation}
+h_i\bigl(W^{(i+1)}\bigr) \;\leq\; h_i\bigl(W^{(i)}\bigr);
+\label{eqt:descent_only}
+\end{equation}
+\item[(ii)] at every iteration, the projection onto $I_{\mathcal{Z}}$ in the $Z$-update \eqref{eqt:sym_Z_closedform} is inactive at every entry, so that Lemma~\ref{lem:sym_KKT_alpha} applies.
+\end{enumerate}
+Then for any $\rho \geq \sqrt{2}$ and every iteration $i$,
+\begin{equation}
+\mathcal{L}_{\rho}\!\bigl(W^{(i+1)},Z^{(i+1)},\alpha_Z^{(i+1)}\bigr)
+\;\le\; \mathcal{L}_{\rho}\!\bigl(W^{(i)},Z^{(i)},\alpha_Z^{(i)}\bigr).
+\label{eqt:sym_descent_thm}
+\end{equation}
+\end{theorem}
+\begin{proof}
+Let $\mathbb{V}^{(i)} := (W^{(i)}, Z^{(i)})$. Adding and subtracting intermediate terms, we decompose the change in $\mathcal{L}_\rho$ as
+\begin{align*}
+\Delta \mathcal{L}_\rho^{(i)}
+&\;=\; \underbrace{\frac{1}{\rho}\|\alpha_Z^{(i+1)}-\alpha_Z^{(i)}\|_F^2}_{(I)}
+\;+\; \underbrace{\bigl[\mathcal{L}_\rho(W^{(i+1)},Z^{(i+1)},\alpha_Z^{(i)}) - \mathcal{L}_\rho(W^{(i+1)},Z^{(i)},\alpha_Z^{(i)})\bigr]}_{(\mathcal{A})} \\
+&\;+\; \underbrace{\bigl[\mathcal{L}_\rho(W^{(i+1)},Z^{(i)},\alpha_Z^{(i)}) - \mathcal{L}_\rho(W^{(i)},Z^{(i)},\alpha_Z^{(i)})\bigr]}_{(\mathcal{B})}.
+\end{align*}
+The $Z$-block term $(\mathcal{A})$ is bounded by strong convexity of the $Z$-subproblem in $Z$:
+\begin{equation}
+(\mathcal{A}) \;\leq\; -\tfrac{\rho}{2}\,\|\Delta Z^{(i)}\|_F^2.
+\label{eqt:sym_A_bound}
+\end{equation}
+The $W$-block term $(\mathcal{B})$ is exactly the change in the $W$-subproblem objective: 
+\[
+(\mathcal{B}) = h_i(W^{(i+1)}) - h_i(W^{(i)}) \leq 0
+\]
+
+by hypothesis (i). Term $(I)$ is bounded by \eqref{eqt:sym_alpha_tight}. Combining,
+
+\begin{align}
+\Delta\mathcal{L}_\rho^{(i)}
+\;\leq\; \tfrac{1}{\rho}\|\Delta Z^{(i)}\|_F^2 - \tfrac{\rho}{2}\|\Delta Z^{(i)}\|_F^2 + 0
+\;=\; \Bigl(\tfrac{1}{\rho} - \tfrac{\rho}{2}\Bigr)\|\Delta Z^{(i)}\|_F^2
+\;\leq\; 0
+\quad\text{whenever}\quad \rho \geq \sqrt{2}.
+\end{align}
+\end{proof}
+
+The threshold $\rho \geq \sqrt 2$ is independent of $\|W\|_{\rm op}$, $n$, $k$, or any other dimension constant.
+
+\paragraph{Remark on hypothesis (i).}
+Hypothesis (i) is a only requires descent of the $W$-subproblem objective. Hence, any inner solver that does not increase $h_i$ is admissible. This includes the majorization-minimzation schemes such as sBSUM, and does not require the majorizer to be strongly convex. In the next appendix section, we discuss why this descent condition is sufficient for ADMM to tolerate inexact non-convex inner solves.
+
+\paragraph{Remark on hypothesis (ii).}
+The projection onto $I_{\mathcal{Z}}$ in the $Z$-update is active on entry $(a,b)$ if and only if the unprojected value 
+
+\[
+\widehat Z_{ab}^{(i+1)} := \bigl[\mathcal{M}_{ab} \cdot S_{ab} + \rho R_{ab}^{(i+1)} - \alpha_{Z,ab}^{(i)}\bigr] \big/ (\rho + \mathcal{M}_{ab})
+\]
+
+falls outside the reconstruction bound. We argue that, for normalized symmetric similarity matrices, this case is unlikely to occur. For this discussion, assume that $S$ is bounded and scaled to $[0, 1]^{n \times n}$:
+
+\begin{enumerate}
+    \item \textbf{Observed entries ($\mathcal{M}_{ab}=1$).} 
+    By induction, $\alpha_{Z,ab}^{(i)} = S_{ab} - Z_{ab}^{(i)} \in [-1, 1]$. The unprojected value $\widehat Z_{ab}^{(i+1)}$ is therefore $\rho$-weighted average of $S_{ab}$ and $R_{ab}^{(i+1)}$, up to the current dual correction. The projection can become active only if $(WW^{\top})_{ab}$ leaves the reconstruction bounds.
+    \item \textbf{Missing entries ($\mathcal{M}_{ab}=0$).} 
+    The unprojected value reduces to $R^{(i+1)}_{ab} - \rho^{-1}\alpha_{Z,ab}^{(i)}$. 
+    By induction $\alpha_{Z,ab}^{(i)} = 0$ on missing entries, so 
+    \[
+    \widehat Z_{ab}^{(i+1)} = (WW^{\top})_{ab}
+    \].
+    By Cauchy--Schwarz this is bounded by $\sqrt{(WW^{\top})_{aa}(WW^{\top})_{bb}} \approx 1$, since the diagonal is anchored to $S_{ii}=1$ on the (always-observed) diagonal of a scaled similarity matrix.
+\end{enumerate}
+
+Therefore, $\Vert W^{(i)} \Vert_{\text{op}}$ is finite at every iteration $i$. If the projection is active on a small set of entries $\mathcal{S}_i \subset \{1,\dots,n\}^2$, the bound in \eqref{eqt:sym_alpha_tight} on $\|\alpha^{(i+1)} - \alpha^{(i)}\|_F^2$ includes an additional term involving the constraint residual on $\mathcal{S}_i$. Let $\sigma_W^\star := \sup_i \|W^{(i)}\|_{\rm op}$, which is finite by the boundedness argument above. The resulting threshold is 
+
+\[\rho \geq \max(\sqrt{2},\ \sqrt{8|\mathcal{S}_i|(\sigma_W^\star)^2/n^2})
+\]. 
+When $|\mathcal{S}_i|/n^2 \ll 1$ the second condition is dominated by the first, and Theorem~\ref{thm:sym_decreasing_tight} still holds with $\rho \geq \sqrt 2$.
+
+
+This, the descent guarantee hold without requiring an excessively large penalty parameter $\rho$. This is useful in practice, since large values of $\rho$ can make the augmented penalty dominate the updates, reducing adaptivity and potentially leading to poorer stationary solutions. In all experiments, we set $\rho = 3$, which is above the sufficient threshold $\sqrt{2}$..
+
+
+\subsection{Update scheme for \texorpdfstring{$W$}{W}-subproblem}\label{sec:bsum}
+
+The $W$-subproblem 
+\[
+\min_{W \geq 0} h_i(W), \quad h_i(W) = \frac{\rho}{2} \Vert \widetilde{Z}^{(i)} - WW^T \Vert^2_F
+\]
+is non-convex and quartic in the entries of $W$. We adopt the scalar BSUM scheme as the inner solver and describe the algorithm below in our notation.
+When all entries of $W$ except $W_{ir}$ are fixed, the inner cost reduces to a univariate quartic on $W \in [0, \infty)$. Let $W$ denote the current intra-sweep iterate, set $\widetilde{Z} := \widetilde{Z}^{(i)}$, and write the candidate as $w \geq 0$ with displacement $\delta := w - W_{ir}$. By direct expansion, 
+\begin{equation}
+h_i(W + \delta E_{ir}) - h_i(W) = \frac{\rho}{2}g_{ir}(\delta), \quad g_{ir}(\delta) := \frac{a}{4} \delta^4 + \frac{b}{3} \delta^3 + \frac{c}{2} \delta^2 + d \delta
+\end{equation}
+with coefficients
+\begin{align}
+a &= 4 \\
+b &= 12 W_{ir} \\
+c &= 4 \left[ (WW^{\top})_{ii} - \widetilde{Z}_{ii} + (W^{\top} W)_{rr} + W^2_{ir} \right] \\
+d &= 4 \left[ (WW^{\top} - \widetilde{Z}) W\right]_{ir}
+\end{align}
+
+The polynomial $g_{ir}$ is globally convex whenever $c \geq b^2/(3a)$. When this condition fails,\citet{Shi2017} add the smallest quadratic correction that makes the scalar majorizer convex
+\begin{equation}
+\widetilde{c} := \max\left( \frac{b^2}{3a} - c, 0\right), \quad \widetilde{g}_{ir}(\delta) := g_{ir}(\delta) + \frac{1}{2} \widetilde{c}\delta^2
+\end{equation}
+This correction step satisfies 
+$\widetilde{g}_{ir}(0) = g_{ir}(0) = 0$, $\widetilde{g}_{ir}(\delta) \geq g_{ir}(\delta)$ for all $\delta \geq -W_{ir}$, i.e. for all $w \geq 0$. 
+Moreover, $\widetilde{g}''_{ir}(\delta) \geq 0$ with strict convexity when $c > \frac{b^2}{3a}$. This correction step is applied only when needed and is the smallest quadratic perturbation that ensures convexity. Following \citet{Shi2017}, the scalar sBSUM has the closed form
+\begin{equation}
+W_{ir}^{\text{new}} \;=\; \bigl[\,w_\star\,\bigr]_+, \quad w_\star \;=\;
+\begin{cases}
+\sqrt[3]{\,q/2 - \sqrt{\Delta}\,}\, +\, \sqrt[3]{\,q/2 + \sqrt{\Delta}\,},
+& \text{if } c > b^2/(3a),\\[6pt]
+\sqrt[3]{\,b^3/(27 a^3) - d/a\,},
+& \text{if } c \leq b^2/(3a).
+\end{cases}
+\end{equation}
+For each entry-update, $\widetilde{g}_{ir}$ is a tight upper bound of $g_{ir}$ at the current value. The closed-form sBSUM update returns its exact one-dimensional minimum on $[0, \infty)$. Consequently,
+\[
+h_i(W^{\text{new}}) \leq h_i(W)
+\]
+after every entry update. Cycling through all $nk$ entries gives the full-sweep descent
+\[
+h_i(W^{(i+1)}) \leq h_i(W^{(i)})
+\]
+which is exactly hypothesis (i) of Theorem~\ref{thm:sym_decreasing_tight}.
+
+
+\subsection{Algorithm summary}
+
+\begin{algorithm}[!ht]
+\caption{Similarity-based Representation Factorization (SRF)}
+\begin{algorithmic}[1]
+\Require
+    \State Similarity matrix $S \in \mathbb{R}^{n \times n}$
+    \State Observation mask $M \in \{0,1\}^{n \times n}$
+    \State Target rank $r$, Penalty $\rho > 0$
+\Ensure Non-negative embedding $W \in \mathbb{R}^{n \times r}_{\ge 0}$
+
+\State \textbf{Initialize:} $W \sim \mathcal{U}(0,1)$, $V \leftarrow W W^\top$, $\Lambda \leftarrow \mathbf{0}_{n \times n}$
+
+\While{not converged}
+    \Statex \hspace{-1.5em} \textbf{// 1. V-Update}
+    \For{all entries $(i,j)$}
+        \If{$M_{ij} = 1$}
+            \State $V_{ij} \leftarrow (S_{ij} + \rho (W W^\top)_{ij} - \Lambda_{ij}) / (1+\rho)$
+        \Else \Comment{Update unobserved entry}
+            \State $V_{ij} \leftarrow (W W^\top)_{ij} - \Lambda_{ij}/\rho$
+        \EndIf
+    \EndFor
+    \State $V \leftarrow \frac{1}{2}(V + V^\top)$ \Comment{Enforce symmetry}
+
+    \Statex \hspace{-1.5em} \textbf{// 2. W-Update}
+    \State $T \leftarrow V + \rho^{-1}\Lambda$ \Comment{Construct proxy target}
+    \State $W \leftarrow \arg\min_{W \ge 0} \|T - W W^\top\|_F^2$ \Comment{Solve via Symmetric NMF}
+
+    \Statex \hspace{-1.5em} \textbf{// 3. Dual Update}
+    \State $\Lambda \leftarrow \Lambda + \rho(V - W W^\top)$
+
+    \State \textbf{Check Convergence:} $\|V - WW^\top\|_F < \varepsilon$
+\EndWhile
+\State \Return $W$
+\end{algorithmic}
+\end{algorithm}
+
+
+
+\section{Cross validation procedure of SRF}\label{sec:cross-validation}
+
+% TODO Here we need a high level motivation first written in text also to motivate this so that it flows natrually from the text
+
+\subsection{Identifiability when \texorpdfstring{$k$}{k} is misspecified}
+\label{subsec:misspecify_k}
+We now establish a lower bound on the relative factor error 
+\[
+\frac{
+\mathbb{E}\bigl[\|\rmW^* - \rmW_2\|_F^2\bigr]
+}{
+\mathbb{E}\bigl[\|\rmW^*\|_F^2\bigr]
+}
+\]
+incurred when fitting symmetric NMF with an incorrect latent dimension. Let $\rmW_1, \rmW_2 \in \mathbb{R}^{n \times k_i}$ be bounded random factor matrices of latent dimensions $k_1, k_2$, that approximate the same data matrix $\rmS \in \mathbb{R}^{n \times n}$ in expectation. In particular, we assume
+\begin{align}
+\mathbb{E}\bigl[\|\rmS - \rmW_1\rmW_1^\top\|_F^2\bigr]
+&=
+\mathbb{E}\bigl[\|\rmS - \rmW_2\rmW_2^\top\|_F^2\bigr],
+\tag{A1}
+\label{ass:equal_error}
+\\
+\mathbb{E}[\rmW_1\rmW_1^\top]
+&=
+\mathbb{E}[\rmW_2\rmW_2^\top].
+\tag{A2}
+\label{ass:equal_reconstruction}
+\end{align}
+
+We also assume that all columns of $\rmW_i$ have the same expected squared norm,
+\begin{equation}
+\mathbb{E}\biggl[
+\sum_{j=1}^n (\rmW_i)_{j\kappa}^2
+\biggr]
+:= \sigma_{\rmW_i}^2
+\qquad
+\text{for every column index } \kappa .
+\tag{A3}
+\label{ass:column_norm}
+\end{equation}
+
+Last, the rows of $\rmW_i$ are also assumed independent. We first expand \ref{ass:equal_error} and reduce it to a relation involving only the expected squared column norms $\sigma_{\rmW_i}^2$ and dimensions $k_i$. For each $i \in \{1, 2\}$,
+
+\begin{equation}
+\mathbb{E}\bigl[\|\rmS - \rmW_i \rmW_i^\top\|_F^2\bigr]
+= \mathbb{E}\bigl[\|\rmS\|_F^2\bigr]
+\;-\; 2\,\mathbb{E}\bigl[\langle \rmS, \rmW_i \rmW_i^\top \rangle\bigr]
+\;+\; \mathbb{E}\bigl[\|\rmW_i \rmW_i^\top\|_F^2\bigr],
+\label{eqt:sym_loss_expansion}
+\end{equation}
+
+where $\langle A, B \rangle := \mathrm{Tr}(A^\top B)$ denotes the Frobenius inner product. The cross term in \eqref{eqt:sym_loss_expansion} can be written as
+
+\begin{equation}
+\mathbb{E}\bigl[\langle \rmS, \rmW_i \rmW_i^\top \rangle\bigr]
+\;=\; \bigl\langle \mathbb{E}[\rmS],\, \mathbb{E}[\rmW_i \rmW_i^\top] \bigr\rangle,
+\end{equation}
+
+provided that $\rmS$ is fixed, or more generally that $\rmS$ and $\rmW_i$ are independent under the modeling distribution. By \ref{ass:equal_reconstruction}, $\mathbb{E}[\rmW_1 \rmW_1^\top] = \mathbb{E}[\rmW_2 \rmW_2^\top]$, so the cross term takes the same value for $i = 1$ and $i = 2$ and cancels when we equate the two sides of \ref{ass:equal_error}. The term $\mathbb{E}[\|\rmS\|_F^2]$ also cancels, leaving
+\begin{equation}
+\mathbb{E}\bigl[\|\rmW_1 \rmW_1^\top\|_F^2\bigr]
+\;=\; \mathbb{E}\bigl[\|\rmW_2 \rmW_2^\top\|_F^2\bigr].
+\end{equation}
+Using the cyclic identity
+$\|\rmW \rmW^\top\|_F^2 = \mathrm{Tr}((\rmW \rmW^\top)^\top (\rmW \rmW^\top))
+= \mathrm{Tr}(\rmW \rmW^\top \rmW \rmW^\top) = \mathrm{Tr}((\rmW^\top \rmW)^2)$, we have
+\begin{equation}
+\mathbb{E}\bigl[\mathrm{Tr}\bigl((\rmW_1^\top \rmW_1)^2\bigr)\bigr]
+\;=\; \mathbb{E}\bigl[\mathrm{Tr}\bigl((\rmW_2^\top \rmW_2)^2\bigr)\bigr].
+\label{eqt:sym_var_eq}
+\end{equation}
+For a single $\rmW_i$ of dimension $n \times k_i$, by definition,
+\begin{align}
+\mathbb{E}\bigl[\mathrm{Tr}\bigl((\rmW_i^\top \rmW_i)^2\bigr)\bigr]
+&\;=\; \mathbb{E}\bigl[\|\rmW_i^\top \rmW_i\|_F^2\bigr]
+\;=\; \sum_{\kappa, \lambda = 1}^{k_i} \mathbb{E}\bigl[(\rmW_i^\top \rmW_i)_{\kappa \lambda}^2\bigr] \\
+&\;=\; k_i\, \sigma_{\rmW_i}^4 \;+\; \mathcal{O}(k_i^2\, n)
+\;=\; k_i\, \sigma_{\rmW_i}^4\,(1 + o(1)),
+\end{align}
+% We argue that the diagonal terms ($\kappa = \lambda$) dominate the
+% off-diagonal terms by an order of magnitude in $n$:
+% \begin{itemize}
+% \item \emph{Diagonal} $(\kappa = \lambda)$:
+% $(\rmW^\top \rmW)_{\kappa\kappa} = \sum_{j=1}^n W_{j\kappa}^2$ is a
+% sum of $n$ non-negative terms, each $\Theta(1)$ if entries are
+% order-one. Its expectation is $\sigma_{\rmW}^2 = \Theta(n)$ by
+% assumption (\textbf{c}). Its second moment is, by row independence,
+% $\mathbb{E}[(\rmW^\top \rmW)_{\kappa\kappa}^2] = \sigma_{\rmW}^4 +
+% \mathrm{Var}(\sum_j W_{j\kappa}^2) = \sigma_{\rmW}^4 + \mathcal{O}(n)$,
+% since the variance of a sum of $n$ independent bounded terms is
+% $\mathcal{O}(n)$. The leading term is $\sigma_{\rmW}^4 = \Theta(n^2)$.
+% \item \emph{Off-diagonal} $(\kappa \neq \lambda)$:
+% $(\rmW^\top \rmW)_{\kappa\lambda} = \sum_{j=1}^n W_{j\kappa} W_{j\lambda}$
+% is a sum of $n$ independent terms with the same mean $\mu_{\kappa\lambda}$
+% and bounded variance, so by the central limit theorem
+% $(\rmW^\top \rmW)_{\kappa\lambda} = n\mu_{\kappa\lambda} + \mathcal{O}(\sqrt n)$.
+% The diagonal-mean assumption sets $n\mu_{\kappa\lambda} = 0$ to leading
+% order, so $\mathbb{E}[(\rmW^\top \rmW)_{\kappa\lambda}^2] = \mathcal{O}(n)$.
+% \end{itemize}
+
+Since $\sigma_{\rmW_i}^4 = \Theta(n^2)$, the leading term $k_i\sigma_{\rmW_i}^4$ dominates the correction $\mathcal{O}(k_i^2 n)$ for fixed $k_i$, or more generally when $k_i=o(n)$.\footnote{where $f(n) = \Theta(g(n))$ means there exist constants $c_1$, $c_2 > 0$ such that $c_1 g(n) \leq f(n) \leq c_2 g(n)$ for any sufficiently large $n$.} dominates the $\mathcal{O}(n)$ correction. Substituting into \eqref{eqt:sym_var_eq} and dropping subleading terms,
+\begin{equation}
+k_1\,\sigma_{\rmW_1}^4 \;=\; k_2\,\sigma_{\rmW_2}^4
+\;\;\Longrightarrow\;\;
+\frac{\sigma_{\rmW_1}^2}{\sigma_{\rmW_2}^2} \;=\; \sqrt{\frac{k_2}{k_1}}.
+\label{eqt:sym_sigma_ratio}
+\end{equation}
+Moreover, since the Frobenius norm of $\rmW_i$ is the sum of squared entries, we can group $W$ by column and apply assumption \eqref{ass:column_norm} to get
+\begin{equation}
+\mathbb{E}\bigl[\|\rmW_i\|_F^2\bigr]
+\;=\; \sum_{\kappa = 1}^{k_i} \mathbb{E}\bigl[\textstyle\sum_{j=1}^n (\rmW_i)_{j\kappa}^2\bigr]
+\;=\; k_i\, \sigma_{\rmW_i}^2.
+\end{equation}
+Substituting \eqref{eqt:sym_sigma_ratio}:
+\begin{equation}
+\frac{\mathbb{E}\|\rmW_2\|_F^2}{\mathbb{E}\|\rmW_1\|_F^2}
+\;=\; \frac{k_2\, \sigma_{\rmW_2}^2}{k_1\, \sigma_{\rmW_1}^2}
+\;=\; \frac{k_2}{k_1} \cdot \sqrt{\frac{k_1}{k_2}}
+\;=\; \sqrt{\frac{k_2}{k_1}}.
+\label{eqt:sym_frob_ratio}
+\end{equation}
+
+We now bound $\mathbb{E}\|\rmW_1 - \rmW_2 \rmP\|_F^2$ from below for an optimal column-matching permutation $\rmP$. Without loss of generality suppose $k_1 \leq k_2$, and pad $\rmW_1$ with $k_2 - k_1$ zero columns so that both matrices have the same number of columns $k_{\max} = \max(k_1, k_2)$. Let $\rmP \in \mathbb{R}^{k_{\max} \times k_{\max}}$ be a permutation matrix that minimizes $\|\rmW_1 - \rmW_2 \rmP\|_F^2$ (equivalently, maximizes $\langle \rmW_1, \rmW_2 \rmP \rangle$). The padding does not change the squared Frobenius norm, so $\mathbb{E}\|\rmW_2 \rmP\|_F^2 = \mathbb{E}\|\rmW_2\|_F^2$. Using $\|A - B\|_F^2 = \|A\|_F^2 - 2\langle A, B \rangle + \|B\|_F^2$, we have
+
+\begin{equation}
+\mathbb{E}\|\rmW_1 - \rmW_2 \rmP\|_F^2
+\;=\; \mathbb{E}\|\rmW_1\|_F^2 \;+\; \mathbb{E}\|\rmW_2\|_F^2
+\;-\; 2\,\mathbb{E}\bigl[\langle \rmW_1, \rmW_2 \rmP \rangle\bigr].
+\label{eqt:sym_dist_expansion}
+\end{equation}
+
+By Cauchy-Schwarz inequality, we have
+
+\begin{align}
+\mathbb{E}\bigl[\langle \rmW_1, \rmW_2 \rmP \rangle\bigr]
+&\;\leq\; \mathbb{E}\bigl[\|\rmW_1\|_F\, \|\rmW_2 \rmP\|_F\bigr] \\
+&\;\leq\; \sqrt{\mathbb{E}\|\rmW_1\|_F^2 \cdot \mathbb{E}\|\rmW_2 \rmP\|_F^2} \\
+&\;=\; \sqrt{\mathbb{E}\|\rmW_1\|_F^2 \cdot \mathbb{E}\|\rmW_2\|_F^2}.
+\end{align}
+
+Substituting \eqref{eqt:sym_frob_ratio}:
+
+\begin{equation*}
+\sqrt{\mathbb{E}\|\rmW_1\|_F^2 \cdot \mathbb{E}\|\rmW_2\|_F^2}
+\;=\; \sqrt{\mathbb{E}\|\rmW_1\|_F^2 \cdot \sqrt{\tfrac{k_2}{k_1}}\,\mathbb{E}\|\rmW_1\|_F^2}
+\;=\; \Bigl(\tfrac{k_2}{k_1}\Bigr)^{\!1/4} \mathbb{E}\|\rmW_1\|_F^2.
+\end{equation*}
+
+Plugging into \eqref{eqt:sym_dist_expansion} and using $\mathbb{E}\|\rmW_2\|_F^2 = (k_2/k_1)^{1/2}\,\mathbb{E}\|\rmW_1\|_F^2$:
+
+\begin{align}
+\mathbb{E}\|\rmW_1 - \rmW_2 \rmP\|_F^2
+&\;\geq\; \mathbb{E}\|\rmW_1\|_F^2 + \Bigl(\tfrac{k_2}{k_1}\Bigr)^{\!1/2} \mathbb{E}\|\rmW_1\|_F^2 - 2\Bigl(\tfrac{k_2}{k_1}\Bigr)^{\!1/4}\mathbb{E}\|\rmW_1\|_F^2 \\
+&\;=\; \biggl(1 - 2\Bigl(\tfrac{k_2}{k_1}\Bigr)^{\!1/4} + \Bigl(\tfrac{k_2}{k_1}\Bigr)^{\!1/2}\biggr)\,\mathbb{E}\|\rmW_1\|_F^2 \\
+&\;=\; \biggl(1 - \Bigl(\tfrac{k_2}{k_1}\Bigr)^{\!1/4}\biggr)^{\!2}\,\mathbb{E}\|\rmW_1\|_F^2.
+\end{align}
+
+By setting $k_1 = k^*$, $\rmW_1 = \rmW^*$, we then have
+
+\begin{equation}
+\mathbb{E}\bigl[\|\rmW^* - \rmW_2 \rmP\|_F^2\bigr]
+\;\geq\; \Biggl(1 - \biggl(\frac{k_2}{k^*}\biggr)^{\!1/4}\Biggr)^{\!2}
+\,\mathbb{E}\bigl[\|\rmW^*\|_F^2\bigr].
+\label{eqt:sym_relerr}
+\end{equation}
+
+The lower bound \eqref{eqt:sym_relerr} is strictly positive whenever $k_2 \neq k^*$, so misspecifying $k$ guarantees a finite relative error in the recovered factor. Thus, symmetric NMF is relatively tolerant of $k$-misspecification, because the latent factor is shared between rows and columns of $\rmS$, allowing $\sigma_{\rmW}^2$ to absorb a $\sqrt{k_2/k^*}$ rescaling. The tolerance is bounded, however, and the cost of misspecification grows monotonically in $|k_2 - k^*|$.
+
+% \subsection{Information leakage}
+\subsection{Information leakage given a structured observation pattern}
+\label{subsec:info_leakage}
+The misspecified-$k$ bound shows that choosing the latent dimension $k$ correctly matters, even though Symmetric NMF is relatively tolerant of $k$-misspecification. In practice, however, $k$ is unknown and must be estimated from data. A standard approach is cross-validation (CV), where a subset of off-diagonal entries of $S$ is held out. The model is then fit to the remaining entries, and $k$ is chosen to minimize held-out prediction error. This section explains why this CV procedure can be unreliable for symmetric low-rank matrices.
+
+Note that a rank-$r$ symmetric $n \times n$ matrix has far fewer effective degrees of freedom than its $\binom{n}{2}$ off-diagonal entries. Under a sufficiently informative number of observations, the held-out entries are determined by the \emph{Nystr\"om completion formula}. In the noise free noise free setting, the held-out CV error can therefore be driven to zero even though the held-out entries were not used for fitting, making entrywise CV unreliable for rank selection.
+
+\begin{theorem}
+\label{thm:sym_nystrom}
+Let $S = W W^\top$ where $W \in \mathbb{R}^{n \times r}$ has rank $r$.
+Fix an index set $I \subseteq [n]$ with $|I| = r$, and define
+
+\begin{equation}
+S_I \;:=\; S[I,\,I] \;\in\; \mathbb{R}^{r \times r}
+\qquad\text{(principal submatrix on }I\text{),}
+\end{equation}
+
+\begin{equation}
+S_{p,\,I} \;:=\; (S_{pj})_{j \in I} \;\in\; \mathbb{R}^{r}
+\qquad\text{(row of $S$ at index $p$, restricted to columns $I$).}
+\end{equation}
+
+\begin{equation}
+S_{I,\,q} \;:=\; (S_{jq})_{j \in I} \;\in\; \mathbb{R}^{r}
+\qquad\text{(column of $S$ at index $q$, restricted to rows $I$).}
+\end{equation}
+
+If $S_I$ is invertible, then for every $p, q \in [n]$,
+\begin{equation}
+S_{pq} \;=\; S_{p,\,I}^\top \, S_I^{-1} \, S_{I,\,q}.
+\label{eqt:sym_nystrom}
+\end{equation}
+\end{theorem}
+
+\begin{proof}
+Let $W_I := W[I, :] \in \mathbb{R}^{r \times r}$ be the submatrix of $W$ formed by the rows indexed by $I$, and let $w_p \in \mathbb{R}^r$ denote the $p$-th row of $W$ (as a column vector). Then $S_{p,I} = W_I w_p$ and $S_I = W_I W_I^\top$, so $S_I$ is invertible if and only if $W_I$ is invertible. By direct computation,
+
+\begin{align}
+M_{p,\,I}^\top \, M_I^{-1} \, M_{I,\,q}
+&\;=\; (W_I w_p)^\top \, (W_I W_I^\top)^{-1} \, (W_I w_q) \\
+& \;=\; w_p^\top \, W_I^\top (W_I^\top)^{-1} W_I^{-1} W_I \, w_q \\
+& \;=\; w_p^\top w_q \\
+& \;=\; M_{pq}. \qedhere
+\end{align}
+\end{proof}
+
+This identity implies that any observation set containing an invertible principal block and the corresponding cross-block entries determines the matrix entirely. This yields the following corollary.
+
+\begin{corollary}[Information leakage]
+\label{cor:sym_leakage}
+Suppose that the observation set $\Omega \subseteq \binom{[n]}{2}$ contains, for some index set $I \subseteq [n]$ with $|I| = r$,
+\begin{itemize}
+\item all off-diagonal entries within $I$:
+$\{(i,j) : i, j \in I,\ i < j\} \subseteq \Omega$;
+\item all cross-block entries:
+$\{(i,j) : i \in I,\ j \in [n] \setminus I\} \subseteq \Omega$.
+\end{itemize}
+If $S_I$ is invertible, then every unobserved off-diagonal entry $S_{pq}$ with $(p, q) \notin \Omega$ is determined by the observed entries via \eqref{eqt:sym_nystrom}.
+\end{corollary}
+
+The total number of off-diagonal observations required by this observation pattern is
+
+\begin{equation}
+\binom{r}{2} + r(n - r) \;=\; nr - \frac{r(r+1)}{2}.
+\end{equation}
+
+It remains to justify that the condition ``$S_I$ is invertible'' holds except on a measure-zero set of factor matrices $W$. We use the following standard lemma.
+
+\begin{lemma}[Polynomial zero sets]
+\label{lem:sym_polyzeros}
+Let $p \in \mathbb{R}[x_1, \dots, x_N]$ be a nonzero polynomial in $N$ real variables. Then its zero set $\{x \in \mathbb{R}^N : p(x) = 0\}$ has Lebesgue measure zero.
+\end{lemma}
+
+% \begin{proof}
+% By induction on $N$. \emph{Base case} ($N = 1$): a nonzero polynomial has at most $\deg p$ real roots, so its zero set is finite, hence measure zero. \emph{Inductive step} ($N \geq 2$): write $p(x_1, \dots, x_N) = \sum_{j=0}^d a_j(x_2, \dots, x_N)\, x_1^j$ with $d = \deg_{x_1} p$. Since $p$ is nonzero, some $a_j$ is a nonzero polynomial in $(N-1)$ variables. By the inductive hypothesis, the set $A := \{(x_2, \dots, x_N) : a_j(x_2, \dots, x_N) = 0\}$ has measure zero in $\mathbb{R}^{N-1}$. For any $(x_2, \dots, x_N) \notin A$, $p(\,\cdot\,, x_2, \dots, x_N)$ is a nonzero polynomial in $x_1$, hence has finitely many roots. By Fubini's theorem,
+
+% \begin{equation}
+% \mathrm{mes}\bigl(\{x : p(x) = 0\}\bigr)
+% \;=\; \int_{\mathbb{R}^{N-1}} \mathrm{mes}\bigl(\{x_1 : p(x_1, x_2, \dots, x_N) = 0\}\bigr)\, d(x_2, \dots, x_N)
+% \;=\; 0,
+% \end{equation}
+
+% since the integrand is zero off the measure-zero set $A$.
+% \end{proof}
+
+\begin{lemma}[Almost-sure invertibility]
+\label{lem:sym_invertible}
+Suppose the rows of $W$ are drawn i.i.d.\ from a distribution on $\mathbb{R}^r_{\geq 0}$ that has a density with respect to Lebesgue measure. Then, for every fixed index set $I \subseteq [n]$ with $|I| = r$, the submatrix $S_I = W_I W_I^\top$ is invertible with probability one.
+\end{lemma}
+
+\begin{proof}
+The matrix $S_I$ is invertible if and only if $\det W_I \neq 0$. Therefore, it is sufficient to bound the probability that $\det W_I = 0$. If we treat the $r^2$ entries of $W_I$ as formal variables, by the Leibniz formula the map $W_I \mapsto \det W_I$ is a polynomial of total degree $r$ in the $r^2$ variables. The polynomial is not identically zero. Hence, by Lemma~\ref{lem:sym_polyzeros}, its zero set has Lebesgue measure zero. The joint density of the $r$ rows of $W_I$ is the product of $r$ row densities and therefore admits a density on $\mathbb{R}^{r \times r} = \mathbb{R}^{r^2}$. Hence, $\mathbb{P}(\det W_I = 0) = 0$ and $S_I$ is invertible with probability one.
+\end{proof}
+
+Corollary \ref{cor:sym_leakage} makes this information leakage explicit. Whenever $\Omega$ contains the structured pattern $\{ (p, q): p \in I \ \text{or} \ q \in I\}$ for some size-$r$ index set $I$ with $S_I$ invertible, every unobserved entry of $S$ can be recovered explicitly by a closed-form rational expression in the observed entries. We next show that this phenomenon persists for sufficiently large random observation sets.
+
+
+\subsection{Information leakage for arbitrary observation patterns}
+
+\begin{theorem}[Identifiability of $S$]
+\label{thm:sym_sharp_ident}
+Suppose that
+\begin{enumerate}[label=(H\arabic*), ref=H\arabic*]
+    \item \label{ass:r_less_n} $r < n$;
+    \item \label{ass:enough_observations} $|\Omega| \geq nr - \binom{r}{2}$;
+    \item \label{ass:full_jacobian} there exists some $W_0 \in \mathbb{R}^{n \times r}$ at which $\mathrm{rank}\bigl(J_\Omega(W_0)\bigr) = nr - \binom{r}{2}$.
+\end{enumerate}
+
+Then there exists a Lebesgue-null set $\mathcal{N} \subseteq \mathbb{R}^{n \times r}$ such that, for every $W \notin \mathcal{N}$ and every $(p, q) \notin \Omega$, the value of $S_{pq} = (WW^\top)_{pq}$ is locally determined by the observations $\{S_{ij}\}_{(i,j) \in \Omega}$ in a neighborhood of $W$. More precisely, it is given by an analytic function of those observations.
+\end{theorem}
+
+Before we move on to the proof of Theorem \ref{thm:sym_sharp_ident}, we introduce two auxiliary observations that will be used in the proof.
+
+\paragraph{Rank of the Jacobian of $\phi$}
+Let $\phi : \mathbb{R}^{n \times r} \to \text{Sym}^{n\times n}$ be defined by $\phi(W) = WW^{\top}$. The polynomial map $\phi$ has the following property: For any $Q \in O(r) := \left\{ Q \in \mathbb{R}^{n\times r} : Q^{\top} Q = I_r \right\}$, we have
+
+\[
+\phi(W Q) = (WQ) (WQ)^{\top} = WQQ^{\top} W^{\top} = WW^{\top} = \phi(W)
+\]
+
+Thus, $\phi$ is constant on each orbit $\mathcal{O}_W := \left\{ WQ: Q \in O(r)\right\}$. The dimension of this orbit is determined by the dimension of $O(r)$. Differentiating $Q^{\top}Q = I_r$ at $Q = I_r$, with $Q(t) = I_r + tA + O(t^2)$ for some matrix $A$, gives
+
+\[
+I_r = Q(t)^{\top} Q(t) = I_r + t(A + A^{\top}) + O(t^2)
+\]
+
+forcing $A + A^{\top} = 0$. This implies that the tangent space to $O(r)$ at $I_r$ is the space of $r \times r$ skew-symmetric matrices, which has dimension $\binom{r}{2}$ . For $W$ of rank $r$, the map $Q \mapsto WQ$ from $O(r)$ to $\mathcal{O}_W$ is injective, so $\mathcal{O}_W$ has dimension $\binom{r}{2}$. The differential of $\phi$ at $W$ is
+
+\[
+d \phi_W(V) = \frac{d}{d\epsilon} \Biggr\vert_{\epsilon=0} \phi(W + \epsilon V) = \frac{d}{d\epsilon}\Biggr\vert_{\epsilon=0} \left[ WW^{\top} + \epsilon (VW^{\top} + WV^{\top}) + O(\epsilon^2) \right] = VW^{\top} + WV^{\top}
+\]
+
+for each direction $V \in \mathbb{R}^{n\times r}$. 
+
+We now show that, for any $W \in \mathbb{R}^{n \times r}$ of rank $r$
+
+\[
+\operatorname{rank}(d \phi_W) = nr - \binom{r}{2}
+\]
+
+
+We first consider the canonical case $W_0 := \begin{pmatrix} I_r \\ 0 \end{pmatrix} \in \mathbb{R}^{n\times r}$. For any $V = \begin{pmatrix} V_1 \\ V_2 \end{pmatrix}$ where $V_1 \in \mathbb{R}^{r\times r}$ and $V_2 \in \mathbb{R}^{(n-r) \times r}$, we have
+
+\[
+d \phi_{W_0}(V) = V W_0^{\top} + W_0 V^{\top} = \begin{pmatrix} V_1 + V_1^{\top} & V_2^{\top} \\ V_2 & 0 \end{pmatrix}
+\]
+
+In the canonical case, the image of the differential consists of all symmetric $n \times n$ matrices of this form. Its dimension is therefore
+
+\[
+\binom{r+1}{2} + r(n-r) = \frac{r(r+1)}{2} +nr - r^2 = nr - \frac{r(r-1)}{2} = nr - \binom{r}{2}
+\]
+
+where the first term $\binom{r+1}{2}$ is the dimension of the top-left symmetric block $V_1 + V_1^{\top}$, and the second term $r(n-r)$ is the dimension of $V_2$. 
+
+For a general $W$ of rank $r$, we can choose an orthogonal $U \in \mathbb{R}^{n \times n}$ such that $U^{\top} W = \binom{W_1}{0}$ with $W_1 \in \mathbb{R}^{r \times r}$ invertible. Then
+
+\[
+U^{\top} d\phi_W(V) U = (U^{\top}V)(U^{\top}W)^{\top} + (U^{\top} W)(U^{\top}V)^{\top} = d\phi_{U^{\top}W}(U^{\top}V) \ .
+\]
+
+Since $U$ is orthogonal, this implies that $\text{rank}(d\phi_{W}) = \text{rank}(d\phi_{U^{\top}W})$.
+
+Substituting $V \mapsto VW_{1}^{-\top}$ in $d \phi_{U^{\top}W}$ we have
+
+\[
+d\phi_{U^{\top}W}(VW_1^{-\top})= (VW_1^{-\top})(U^{\top}W)^{\top} + (U^{\top}W)(VW_1^{-\top})^{\top} = V \begin{pmatrix} I_r & 0 \end{pmatrix} + \begin{pmatrix} I_r \\ 0 \end{pmatrix} V^{\top} = d\phi_{W_0}(V)
+\]
+
+Thus, for any $W \in \mathbb{R}^{n\times r}$ of rank $r$
+\[
+\operatorname{rank}(d \phi_W) = nr - \binom{r}{2} \ .
+\] 
+
+By rank-nullity, the kernel of $d \phi_W$ has dimension $\binom{r}{2}$. We have also shown that the tangent space $\{ WA : A^{\top} = - A\}$ is a $\binom{r}{2}$ dimensional subspace of this kernel, since $\phi$ is constant on $\mathcal{O}_W$. Combining these, we can conclude that the inclusion is an equality, i.e. the kernel of $d \phi_W$ is exactly the tangent space to the orbit $\mathcal{O}_W$ at $W$. 
+
+
+\paragraph{The Implicit Function Theorem.}
+
+We use the following form of the implicit function theorem. Let $F : \mathbb{R}^N \to \mathbb{R}^M$ be $C^1$, and let $x_0 \in \mathbb{R}^N$ be a point at which $dF_{x_0}$ has rank $M$ (so $F$ is a submersion at $x_0$, and $N \geq M$). Then there exists an open neighborhood $U$ of $x_0$ in $\mathbb{R}^N$ such that the level set $F^{-1}(F(x_0)) \cap U$ is the image of a $C^1$ embedding from an open subset of $\mathbb{R}^{N-M}$ — i.e., an $(N-M)$-dimensional smooth submanifold of $\mathbb{R}^N$.
+
+\begin{proof}
+
+% The high level of the strategy of the proof works backwards through three steps:
+% \begin{itemize}
+%     \item Step 1: The IFT needs a full-rank Jacobian; for almost every $W$, the Jacobian has the right rank.
+%     \item Step 2: Apply IFT $\Rightarrow$ observation-consistent set is a smooth $\binom{r}{2}$-dim manifold $\mathcal{S}$ near $W$.
+%     \item Step 3: he orbit $\{ WQ\}$ is also a smooth $\binom{r}{2}$-dim manifold inside $\mathcal{S}$. Same dimension + containment $\Rightarrow$ they coincide locally $\Rightarrow$ every observation-consistent $W'$ is of the form $WQ$.
+%     \item Step 4: Therefore $\phi(W') = \phi(W)$, i.e., unobserved entries are determined.
+% \end{itemize}
+
+% --
+
+% The strategy of the proof is as follows. We show that, for almost every $W$, observation agreement on $\widetilde{\Omega}$ forces full agreement on $\phi(W) = WW^{\top}$. 
+
+% 1. For all $W$ outside a measure-zero set $\mathcal{N}$, the Jacobian $J_{\Omega}(W)$ has full rank $nr - \binom{r}{2}$
+% 2. By the IFT, the solution set (matrices $W'$ near $W$ that match $W$ on $\widetilde{\Omega}$) is a smooth $\binom{r}{2}$-dimensional manifold $\mathcal{S}$
+% 3. The set (orbit) $\mathcal{O}_W = \{ WQ : Q \in O(r) \}$ is a smooth $\binom{r}{2}$-dim manifold contained in $\mathcal{S}$ with the same tangent space at $W$. By the inverse function theorem, $\mathcal{O}_W$ and $\mathcal{S}$ coincide near $W$
+% 4. Hence every observation-matching $W'$ near $W$ satisfies $W' = WQ$ for some $Q \in O(r)$, so $W'(W')^{\top} = WW^{\top}$ and the unobserved entries are determined
+
+We first construct $\mathcal{N}$ as the union of two measure-zero sets, $\mathcal{N}_1$ and $\mathcal{N}_2$, each excluding a distinct exceptional case. The first exceptional case is that the Jacobian has rank deficiency. By \ref{ass:full_jacobian}, there exists a square submatrix 
+$\mathcal{J}(W) \in \mathbb{R}^{\widetilde{n} \times \widetilde{n}}$
+of $J_{\Omega}(W)$ such that $\det \widetilde{J}(W) \neq 0$, where $\widetilde{n} := nr - \binom{r}{2}$. Since each entry of $J_{\Omega}(W)$ is linear in $W$ by definition, the map $W \mapsto \det \widetilde{J}(W)$ is a polynomial in the entries of $W$. As this polynomial is not identically zero, Lemma~\ref{lem:sym_polyzeros} implies that
+
+\[
+\mathcal{N}_1 := \{ W \in \mathbb{R}^{n \times r} : \det \widetilde{J}(W) = 0 \}
+\]
+
+has measure zero. 
+
+A second exceptional case is rank deficiency of the factor. Specifically, if $\operatorname{rank}(W) < r$, then previous rank result for the differential does not apply. We have
+
+\[
+\text{rank}(W) = r \iff \text{some} \ r \ \text{rows of } W \ \text{are independent} \iff \exists I \subseteq [n], \vert I \vert = r, \det W[I, :] \neq 0
+\]
+
+Here, $W[I,:]$ denotes the $r \times r$ submatrix formed by the rows indexed by $I$. Negating the statement gives
+\[
+\text{rank}(W) < r \iff \forall I \subseteq [n], \vert I \vert = r, \det W[I, :] = 0
+\]
+
+To combine the $\binom{n}{r}$ possible index sets into a single polynomial, we use the standard sum of square trick:
+\[
+(\forall I, \det W[I, :] = 0) \iff \sum_{\vert I \vert = r} \left( \det W[I,:] \right)^2 = 0
+\]
+
+Since a sum of non-negative real numbers vanishes if and only if every term vanishes, we have
+
+\[
+\left\{ W : \text{rank}(W) < r \right\} = \left\{ W : \sum_{\vert I \vert = r} \left( \det W[I, :] \right)^2 = 0\right\}
+\]
+
+Now define 
+\[ 
+P(W) = \sum_{\vert I \vert = r} \left( \det W[I, :] \right)^2 
+\]
+
+Then $P$ is a polynomial in the entries of $W$ and each determinant $\det W[I,:]$ is a polynomial of degree $r$. Therefore, $P$ has degree $2r$. To see that $P$ is not identically zero, evaluate it at the canonical matrix $\binom{I_r}{0}$. For $I = \{ 1, 2, \ldots, r\}$, we have $W[ I, :] = I_r \Rightarrow \det W [I, :] = 1$. For any other $I$, at least one row of $W[I, :]$ comes from the zero block, so $\det W[I,:] = 0$. Hence, $P\left(\binom{I_r}{0}\right) = 1^2 + 0 + \cdots + 0 = 1 \neq 0 \Rightarrow P \not\equiv 0$. Then by Lemma~\ref{lem:sym_polyzeros}, $\mathcal{N}_2 = \{W: P(W) = 0 \}$ has measure zero.
+
+Now fix $W \not\in \mathcal{N} := \mathcal{N}_1 \cup \mathcal{N}_2$ , and let $\widetilde{\Omega} \subseteq \Omega$ be the index set witnessing $\operatorname{rank}(J_{\Omega}(W)) = nr - \binom{r}{2}$. Define the restriction map
+\[ 
+\phi_{\widetilde{\Omega}} : \mathbb{R}^{n \times r} \to \mathbb{R}^{nr - \binom{r}{2}}, \quad W \mapsto \{(WW^{\top})_{ij}\}_{(i,j) \in \widetilde{\Omega}} 
+\]
+
+Its differential at $W$ has matrix $\widetilde{J}(W)$, which has full row rank $nr - \binom{r}{2}$. Hence, $\phi_{\widetilde{\Omega}}$ is a submersion at $W$. By the implicit function theorem, there is an open neighborhood $U \subseteq \mathbb{R}^{n \times r}$ of $W$ such that the solution set
+
+\[\mathcal{S} := \left\{ W' \in U : \phi_{\widetilde{\Omega}}(W') = \phi_{\widetilde{\Omega}}(W)\right\}\]
+
+is a smooth submanifold of $U$ of dimension
+
+\[ \text{dim} \mathcal{S} = nr - \left( nr - \binom{r}{2} \right) = \binom{r}{2} \]
+
+The tangent space at $W$ is $T_{W} \mathcal{S} = \text{ker} \widetilde{J}(W)$. Recall the orbit of $W$,
+\[
+\mathcal{O}_W := \{ WQ : Q \in O(r) \}
+\]
+
+For every $Q \in O(r)$, we have
+
+\[
+\phi_{\widetilde{\Omega}}(WQ) = \{ (WQQ^{\top} W^{\top})_{ij} \}_{(i,j) \in \widetilde{\Omega}} = \{ (WW^{\top})_{ij} \}_{(i,j) \in \widetilde{\Omega}} = \phi_{\widetilde{\Omega}}(W)
+\]
+
+Therefore $WQ \in \mathcal{S}$ whenever $WQ \in U$. Thus $\mathcal{O}_{W} \cap U \subseteq \mathcal{S}$. Moreover, the map $Q \mapsto WQ$ from $O(r)$ to $\mathcal{O}_W$ is smooth, since it is linear in $Q$.  It is injective when $\operatorname{rank}(W) = r$, which holds because $W \not\in \mathcal{N}_2$. Since $\dim \ O(r) = \binom{r}{2}$, the image $\mathcal{O}_W$ is a smooth submanifold of $\mathbb{R}^{n\times r}$ of dimension $\binom{r}{2}$ near $W$. Differentiating the orbit map at $Q = I_r$ along a path $Q(t) \in O(r)$ with $Q(0) = I_r$ and $\frac{d Q(t)}{dt} \bigr\vert_{t=0} = A$ gives
+
+\[
+\frac{d }{dt} \bigr\vert_{t=0} WQ(t) = WA 
+\]
+
+Therefore $T_{W} \mathcal{O}_W = \{ WA : A^{\top} = -A \}$. Since $\ker \widetilde{J}(W) = \{ WA : A^{\top} = -A\}$, we have $T_W \mathcal{O}_W = T_W \mathcal{S}$. Both $\mathcal{O}_W \cap U$ and $\mathcal{S}$ are smooth $\binom{r}{2}$-dim manifolds passing through $W$, with $\mathcal{O}_W \cap U \subseteq \mathcal{S}$ and identical tangent spaces at $W$. Therefore, the inclusion $\mathcal{O}_W \mapsto \mathcal{S}$ is a local diffeomorphism near $W$. After possibly shrinking $U$, we have 
+\[
+\mathcal{S} = \mathcal{O}_W \cap U
+\]
+
+Therefore, every $W'$ near $W$ satisfying
+\[
+\phi_{\widetilde{\Omega}}(W') = \phi_{\widetilde{\Omega}}(W) 
+\]
+
+must have the form $W' = WQ$ for some $Q \in O(r)$. Hence,
+
+\[
+W' (W')^{\top} = (WQ)(WQ)^{\top} = WQQ^{\top} W^{\top} = WW^{\top} 
+\]
+
+This equality holds entry-wise, and in particular for every $(p, q) \not\in \Omega$, 
+\[ 
+S_{pq} = (WW^{\top})_{pq} = (W' (W')^{\top})_{pq} 
+\]
+
+Finally, since $\phi_{\widetilde{\Omega}}$ is polynomial and has full-rank differential at $W$, the implicit function theorem also gives local real-analytic dependence on the observed coordinates. Therefore, the recovered missing entries are locally smooth functions of the observed entries. This smoothness implies such identifiability persists under perturbation of the observations.
+\end{proof}
+
+\paragraph{Remark}: For random sampling of $\Omega$, the relevant phenomenon is matrix completion \citep{CandesRecht2009,Gross2011}. Standard results imply that, under incoherence and sufficiently many uniformly sampled entries, a rank-$r$ matrix is uniquely determined by $O(nr \log^c n)$x   observed entries with high probability. Thus, even randomly held-out entries may not be genuinely independent validation targets. Once the training set crosses the matrix-completion threshold, the held-out entries are already determined by the training entries.
+
+% \paragraph{Remark}: For a symmetric PSD matrix $S = WW^{\top}$ , blockwise CV should be performed by partitioning the index set $[n]$ into blocks and withholding symmetric submatrices. However, principal-block holdout alone does not eliminate information leakage. If the cross-block entries $S[B, B]$ remain available, then the latent positions of the held-out indices may be inferred from their interactions with the training indices. In particular, whenever a full-rank reference set $I \subseteq B^c$ of size $r$ is observed, the Nyström identity gives exact recovery. Thus the held-out principal block can be determined exactly from training entries. More generally, matrix-completion results imply that sufficiently many random training entries $\Omega$ can uniquely determine the whole low-rank matrix. Therefore, one possible solution is to apply BCV only after imposing an a-priori observation mask $A$, so that each fold’s training set remains non-completing. The validation error then measures prediction within the masked observation design rather than reconstruction of entries already determined by low-rank structure.
+
+
+\subsection{Cross-validation protocol}
+\label{subsec:cv_protocol}
+To select the representation dimension $r$, we use a cross-validation protocol calibrated to symmetric similarity matrices. The protocol addresses two issues that affect entrywise CV on low-rank matrices: held-out entries can be implicitly recovered from the training entries through matrix-completion structure, and the effective training fraction depends on the number of folds. We summarize the operational procedure here; full mathematical development, identifiability analysis, and robustness results will appear in forthcoming work.
+
+\paragraph{Calibration.} From the observed similarity matrix $S$, the protocol determines two quantities without reference to any specific factorization model:
+\begin{itemize}
+\item a spectral cutoff $k_{\mathrm{cut}}$, the number of leading eigendirections of $S$ that remain stable under random off-diagonal subsampling, and
+\item an operating sampling probability $p^*$, the smallest sampling probability at which the top-$k_{\mathrm{cut}}$ spectral structure of the subsampled matrix recovers at least a fraction $1-\delta$ of the reference spectral mass.
+\end{itemize}
+We use $\delta = 0.10$ throughout, so $p^*$ is the smallest probability at which $\geq 90\%$ of the top-$k_{\mathrm{cut}}$ spectral mass is preserved. Both $k_{\mathrm{cut}}$ and $p^*$ are model-independent calibration quantities determined entirely by $S$.
+
+\paragraph{Fold-invariant cross-validation.} Given $p^*$ and a chosen number of folds $k_{\mathrm{cv}}$, we sample an outer observation mask retaining each off-diagonal entry independently with probability
+\begin{equation}
+p_{\mathrm{cv}} = p^*\,\frac{k_{\mathrm{cv}}}{k_{\mathrm{cv}} - 1}.
+\label{eq:fold_invariant_p}
+\end{equation}
+Ordinary $k_{\mathrm{cv}}$-fold cross-validation is then performed within this observed pool. Under this construction, each fold's expected training fraction equals $p^*$ regardless of $k_{\mathrm{cv}}$, so the recovered rank $\hat r$ does not depend on an arbitrary fold-count choice.
+
+\paragraph{Implementation in this work.} We used $k_{\mathrm{cv}} = 5$ folds and $\delta = 0.10$ for all analyses. For each dataset, the calibrated $p^*$ used to construct the outer mask are reported in Table~\ref{tab:cv_params}. With these values and Eq.~\eqref{eq:fold_invariant_p}, the masking construction is fully specified.
+
+
+
+\clearpage
+
+\section{Dimension stability and reconstruction quality}
+
+\begin{figure}[!htb]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figures/dimension_stability.pdf}
+    \caption{\textbf{SRF dimensions are stable across runs and accurately reconstruct similarity structure.}
+    \textbf{a},~Cross-validated split-half reliability per dimension for each dataset. For every split, objects are randomly divided into two halves; dimensions are matched between independent runs using one half and evaluated on the held-out half (Spearman--Brown corrected). Each curve shows reliability sorted from the most to the least reliable dimension.
+    \textbf{b},~Reconstruction quality. For datasets with dense similarity matrices (gray bars), quality is measured as $R^2$ between the observed similarity matrix and the low-rank reconstruction $WW^\top$. For SWOW (teal bar), the similarity matrix is derived from positive pointwise mutual information (PPMI) of word associations, where only 1.27\% of word pairs show positive association above chance. Because the non-negative reconstruction $WW^\top$ is necessarily dense, $R^2$ over all entries conflates the inability to reproduce exact zeros with genuine reconstruction error. We therefore evaluate SWOW as a link prediction task: the AUC-ROC measures how well $WW^\top$ discriminates all 476{,}383 upper-triangular word pairs with positive association (PPMI\,$>$\,0) from an equal-size random sample of zero-PPMI pairs (PPMI\,$=$\,0). An AUC of 0.91 indicates that the factorization correctly ranks associated pairs above zero-PPMI pairs in 91\% of cases.
+    \textbf{c},~Mean cross-validated split-half reliability per dataset. All datasets achieve mean reliability above 0.83.}
+    \label{fig:dimension_stability}
+\end{figure}
+
+\clearpage
+\section{Statistical power by dimension variance}
+
+\begin{figure}[!htb]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figures/variance_quartile.pdf}
+    \caption{\textbf{SRF advantage is most pronounced for low-variance dimensions.}
+    \textbf{a},~Statistical power of RSA and SRF as a function of dimension variance in the SPoSE embedding at SNR\,=\,1.0, with 95\% confidence intervals. RSA power drops sharply for dimensions with low variance, which contribute little to overall similarity and are therefore difficult to detect when tested against the full matrix. SRF maintains high detection rates across the full variance range by isolating each dimension before testing.
+    \textbf{b},~Example SPoSE dimensions sorted by variance. High-variance dimensions (top) capture broad semantic categories such as \textit{food-related} or \textit{animal-related}, while low-variance dimensions (bottom) capture fine-grained properties such as \textit{fluffy/soft} or \textit{orange}. The dashed line separates the five highest from the five lowest-variance dimensions.}
+    \label{fig:variance_quartile}
+\end{figure}
+
+
+\section{Semantic similarity benchmarks}
+
+\begin{figure}[!htb]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figures/similarity_benchmarks.pdf}
+    \caption{\textbf{SRF embeddings from word associations predict human similarity and relatedness judgments.}
+    Cosine similarity between SRF embedding vectors (derived from the Small World of Words dataset) plotted against human ratings from two independent benchmarks.
+    \textbf{a},~SimLex-999 \citep{Hill2015} measures genuine semantic similarity, where word pairs are rated by how similar their meanings are (e.g., \textit{smart}--\textit{intelligent}).
+    \textbf{b},~WordSim-353 \citep{Finkelstein2002} measures broader semantic relatedness, including associative relationships (e.g., \textit{car}--\textit{road}).
+    Spearman correlations ($\rho$) and number of word pairs with available embeddings ($n$) are shown. Dashed lines show linear fits.}
+    \label{fig:similarity_benchmarks}
+\end{figure}
+
+\clearpage
+\section{Dataset specifics}
+
+% TODO Add p*
+\begin{table}[htb]
+  \centering
+  \caption{Overview of datasets used for SRF evaluation. $n$ denotes the number of items and $k^*$ the cross-validated rank. Coverage denotes the percentage of off-diagonal item pairs represented in the similarity matrix used for factorization. $R^2$ measures reconstruction quality. For SWOW, reconstruction quality is reported as link-prediction AUC because the similarity matrix is a sparse association graph. CV rel. denotes mean cross-validated split-half dimension reliability across 50 random seeds. A dash indicates that the metric is not applicable.}
+  \label{tab:datasets}
+  \begin{tabular}{llcccccr}
+  \toprule
+  Dataset & Modality & $n$ & Coverage (\%) & $k^*$ & $R^2$ & AUC & CV rel. \\
+  \midrule
+  Mur-92            & Similarity judgments & 92       & 100 &  2 & 0.67 & -  & >0.99 \\
+  Peterson (Animals)& Similarity judgments & 120      & 100 &  9 & 0.89 & -  & >0.99 \\
+  Peterson (Various)& Similarity judgments & 120      & 100 &  7 & 0.87 & -  & >0.99 \\
+  VGG-16            & DNN activations      & 1{,}854  & 100 & 46 & 0.88 & -  & 0.95 \\
+  THINGS (Monkey)   & Neural recordings    & 22{,}248 & 100 & 40 & 0.99 & -  & 0.91 \\
+  THINGS (Behavior) & Triplet judgments & 1{,}854 & 99.9 & 26 & 0.60 & - & 0.94 \\
+  SWOW              & Word associations    & 8{,}647  & 1.27        & 61 & -  & 0.91 & 0.98 \\
+  NSD (subj01)      & Neural recordings    & 9{,}841  & 100 &  7 & 0.99 & -  & 0.86 \\
+  \bottomrule
+  \end{tabular}
+\end{table}
+
+
+
+\end{document}

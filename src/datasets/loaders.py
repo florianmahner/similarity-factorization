@@ -12,6 +12,7 @@ from sklearn.datasets import fetch_20newsgroups
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 from tools.rsa import compute_similarity
+from utils.helpers import compute_similarity_matrix_from_triplets
 
 from .base import DatasetResult
 from .nsd_utils import (
@@ -162,6 +163,7 @@ def load_nsd(
     zscore_betas: bool = True,
     roi_name: str = "streams",
     space: str = "func1pt8mm",
+    return_images: bool = True,
 ) -> DatasetResult:
     """
     Load Natural Scenes Dataset (NSD) fMRI data.
@@ -190,14 +192,20 @@ def load_nsd(
     if subject_id not in subjects:
         raise ValueError(f"Subject {subject_id} not found. Available: {subjects}")
 
-    betas, images = load_nsd_data(
-        subject_id, roi_name, space, zscore_betas, return_images=True, nsd_dir=root
+    data = load_nsd_data(
+        subject_id, roi_name, space, zscore_betas, return_images=return_images, nsd_dir=root
     )
+    if return_images:
+        betas, images = data
+        metadata = {"images": images}
+    else:
+        betas = data
+        metadata = {}
 
     return DatasetResult(
         name="nsd",
         data=betas,
-        metadata={"images": images},
+        metadata=metadata,
     )
 
 
@@ -218,56 +226,31 @@ def load_things_monkey(
     root: str | None = None,
     monkey_type: str = "F",
     roi: str = "it",
-    min_reliab: float = 0.6,
+    min_reliab: float = 0.3,
+    average_exemplars: bool = False,
 ) -> DatasetResult:
+    """Load THINGS monkey neural data (22k images, category-averaged).
+
+    Delegates to datasets.monkey.load_macaque which handles the processed .npy
+    files at /SSD/datasets/things/macaque/.
     """
-    Load THINGS monkey neural data (22k images).
+    from datasets.monkey import load_macaque
 
-    Parameters
-    ----------
-    root : str, optional
-        Path to monkey data directory (default: /SSD/fmahner/macaque_florian/22k)
-    monkey_type : str, default='F'
-        Monkey identifier ('F' or 'N')
-    roi : str, default='it'
-        ROI name ('v1', 'v4', 'it')
-    min_reliab : float, default=0.6
-        Minimum reliability threshold for channels
-
-    Returns
-    -------
-    DatasetResult
-        Dataset with neural data, filenames
-    """
-    import h5py
-
-    if root is None:
-        root = Path("/SSD/fmahner/macaque_florian/22k")
-    else:
-        root = Path(root)
-
-    data_dir = root / monkey_type.lower()
-    mat_path = data_dir / "THINGS_normMUA_raw.mat"
-
-    with h5py.File(mat_path, "r") as f:
-        data_key = f"data_{roi}"
-        reliab_key = f"reliab_{roi}"
-
-        data = f[data_key][:].astype("float32")
-        reliab = f[reliab_key][:].mean(axis=0)
-
-    if min_reliab is not None:
-        reliab_mask = reliab >= min_reliab
-        data = data[:, reliab_mask]
-
-    filenames = np.loadtxt(data_dir / "index_to_image.txt", dtype=str)
+    data, stimuli, reliab = load_macaque(
+        "22k",
+        monkey_type,
+        root=root,
+        roi=roi,
+        min_reliab=min_reliab,
+        average_exemplars=average_exemplars,
+    )
 
     return DatasetResult(
         name="things-monkey-22k",
         data=data,
         rsm=None,
         metadata={
-            "filenames": filenames,
+            "stimuli": stimuli,
             "monkey_type": monkey_type,
             "roi": roi,
             "n_channels": data.shape[1],
@@ -325,6 +308,61 @@ def load_things_monkey_2k(
             "recording": recording,
             "roi": roi,
             "n_channels": neural_data.shape[1],
+        },
+    )
+
+
+def _things_behavior_triplet_dir(root: Path, triplet_number: str) -> Path:
+    if triplet_number == "4.7mio":
+        return root / "triplets_47"
+    if triplet_number == "14.7mio":
+        return root / "triplets_147"
+    raise ValueError(f"Unknown THINGS behavior triplet set: {triplet_number}")
+
+
+def load_things_behavior(
+    root: str | None = None,
+    triplet_number: str = "4.7mio",
+    n_objects: int = 1854,
+    split: str = "train",
+    alpha: float = 1.0,
+    build_rsm: bool = True,
+) -> DatasetResult:
+    root = Path(root)
+    triplet_dir = _things_behavior_triplet_dir(root, triplet_number)
+    train_triplets = np.loadtxt(triplet_dir / "trainset.txt", dtype=np.int32)
+    validation_triplets = np.loadtxt(triplet_dir / "validationset.txt", dtype=np.int32)
+
+    split_to_triplets = {
+        "train": train_triplets,
+        "validation": validation_triplets,
+        "train+validation": np.vstack([train_triplets, validation_triplets]),
+    }
+    if split not in split_to_triplets:
+        raise ValueError(
+            f"Unknown THINGS behavior split: {split}. "
+            f"Available: {list(split_to_triplets)}"
+        )
+
+    rsm = None
+    if build_rsm:
+        rsm = compute_similarity_matrix_from_triplets(
+            n_objects,
+            split_to_triplets[split],
+            alpha=alpha,
+        )
+
+    return DatasetResult(
+        name="things_behavior",
+        rsm=rsm,
+        metadata={
+            "triplet_dir": triplet_dir,
+            "triplet_number": triplet_number,
+            "split": split,
+            "alpha": alpha,
+            "n_objects": n_objects,
+            "train_triplets": train_triplets,
+            "validation_triplets": validation_triplets,
         },
     )
 
@@ -622,6 +660,56 @@ def load_dnn_features(
 load_vit = load_dnn_features
 
 
+def load_clip_vit_l14(root: str | None = None) -> DatasetResult:
+    """Load CLIP ViT-L/14 features + THINGS+ image metadata from npz.
+
+    Rewrites the stored /SSD/... paths to the labshare SSD mount on this host
+    so the image files actually resolve.
+    """
+    base = Path(root) if root else Path("/data/labshare/_stachelschwein/LOCAL/fmahner/similarity-factorization/data/features/clip_vit_l14")
+    npz = np.load(base / "things_plus_clip_vit_l14.npz", allow_pickle=True)
+    ssd_root = Path("/data/labshare/_stachelschwein/SSD")
+    images = [
+        str(ssd_root / str(p).removeprefix("/SSD/")) if str(p).startswith("/SSD/") else str(p)
+        for p in npz["plus_image_paths"]
+    ]
+    return DatasetResult(
+        name="clip_vit_l14",
+        data=npz["features"],
+        metadata={
+            "images": images,
+            "labels": [str(c) for c in npz["categories"]],
+            "categories": [str(c) for c in npz["categories"]],
+        },
+    )
+
+
+def load_dinov3(root: str | None = None) -> DatasetResult:
+    """Load DINOv3 features + THINGS+ image metadata for 1854 objects.
+
+    Reads features.npy + metadata.csv from data/features/dinov3/. Rewrites
+    /SSD/... paths in metadata to the labshare SSD mount so images resolve.
+    """
+    base = Path(root) if root else Path("/data/labshare/_stachelschwein/LOCAL/fmahner/similarity-factorization/data/features/dinov3")
+    features = np.load(base / "dinov3_features.npy")
+    meta = pd.read_csv(base / "metadata.csv")
+    ssd_root = Path("/data/labshare/_stachelschwein/SSD")
+    images = [
+        str(ssd_root / str(p).removeprefix("/SSD/")) if str(p).startswith("/SSD/") else str(p)
+        for p in meta["path"].tolist()
+    ]
+    categories = meta["category"].astype(str).tolist()
+    return DatasetResult(
+        name="dinov3",
+        data=features,
+        metadata={
+            "images": images,
+            "labels": categories,
+            "categories": categories,
+        },
+    )
+
+
 DATASETS = {
     "mur92": load_mur92,
     "cichy118": load_cichy118,
@@ -631,8 +719,11 @@ DATASETS = {
     "peterson-various": lambda **kwargs: load_peterson(variant="various", **kwargs),
     "nsd": load_nsd,
     "swow": load_swow,
+    "things_behavior": load_things_behavior,
     "things-monkey-2k": load_things_monkey_2k,
     "things-monkey-22k": load_things_monkey,
+    "clip_vit_l14": load_clip_vit_l14,
+    "dinov3": load_dinov3,
     "iris": load_iris,
     "diabetes": load_diabetes,
     "digits": load_digits,

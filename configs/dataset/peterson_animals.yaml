@@ -3,7 +3,7 @@
 
 name: peterson-animals
 type: neural_rsm
-path: /SSD/datasets/similarity_datasets/peterson
+path: ${paths.ssd}/datasets/similarity_datasets/peterson
 
 bounds_task: peterson-animals
 rank_range: [1, 20, 1]

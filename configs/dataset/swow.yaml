@@ -5,6 +5,10 @@
 # - ppmi: Positive Pointwise Mutual Information (local, sparse, fast)
 # - rw: Random Walk / Katz similarity (global, dense, slow but better for sparse data)
 #
+# When similarity_method is 'ppmi' and zeros_as_missing is true, off-diagonal
+# zero entries are replaced with NaN so SRF treats them as unobserved (consistent
+# with the PMI definition: undefined for zero-count pairs).
+#
 # Reference: De Deyne et al. (2019) "The Small World of Words"
 
 name: swow
@@ -12,7 +16,10 @@ type: word_association
 path: ${paths.data_dir}/small-world-of-words
 
 # Similarity method: 'ppmi' (local) or 'rw' (global random walk)
-similarity_method: rw
+similarity_method: ppmi
+
+# Treat zero entries as missing (NaN) for PPMI; ignored for rw.
+zeros_as_missing: true
 
 # Loading parameters
 use_all_responses: true

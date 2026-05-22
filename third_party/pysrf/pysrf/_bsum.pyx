@@ -122,7 +122,7 @@ cpdef np.ndarray[DTYPE_t, ndim=2] update_w_blas(double[:, ::1] m,
                                                  double[:, ::1] w0,
                                                  int max_iter=100,
                                                  double tol=1e-6):
-    cdef int n = w0.shape[0]
+    cdef Py_ssize_t n = w0.shape[0]
     cdef int r = w0.shape[1]
 
     cdef np.ndarray[DTYPE_t, ndim=2] w = np.array(w0, copy=True)
@@ -146,7 +146,7 @@ cpdef np.ndarray[DTYPE_t, ndim=2] update_w_blas(double[:, ::1] m,
     cdef double beta_0 = 0.0
 
     cdef int it, i, j, k
-    cdef int ir, jr, in_off
+    cdef Py_ssize_t ir, jr, in_off
     cdef double max_delta, old_val, b_coef, c_coef, d_coef
     cdef double new_val, delta_val, dot_val
 
@@ -210,7 +210,7 @@ cpdef np.ndarray[DTYPE_t, ndim=2] update_w_blas_blocked(double[:, ::1] m,
                                                          int max_iter=100,
                                                          double tol=1e-6,
                                                          int block_size=0):
-    cdef int n = w0.shape[0]
+    cdef Py_ssize_t n = w0.shape[0]
     cdef int r = w0.shape[1]
 
     if block_size <= 0:
@@ -251,9 +251,9 @@ cpdef np.ndarray[DTYPE_t, ndim=2] update_w_blas_blocked(double[:, ::1] m,
     cdef int blas_n = n
     cdef int blas_r = r
 
-    cdef int it, i, j, k, bi, prev
-    cdef int ir, jr, in_off
-    cdef int block_start, block_end, block_len
+    cdef Py_ssize_t it, i, j, k, bi, prev
+    cdef Py_ssize_t ir, jr, in_off
+    cdef Py_ssize_t block_start, block_end, block_len
     cdef int remaining, blas_remaining, blas_block_len
     cdef double max_delta, old_val, b_coef, c_coef, d_coef
     cdef double new_val, delta_val, dot_val

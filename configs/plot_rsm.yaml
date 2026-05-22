@@ -1,0 +1,18 @@
+# Plot RSM Comparison
+#
+# Compare observed vs predicted RSM from consensus embedding.
+#
+# Usage:
+#   ./scripts/submit experiments/plot_rsm.py dataset=things_behavior
+#   ./scripts/submit experiments/plot_rsm.py dataset=nsd subject_id=1
+
+defaults:
+  - /base
+  - /dataset: ???
+  - _self_
+
+experiment_name: plot_rsm
+task: ${dataset.name}
+
+# Subject (for multi-subject datasets)
+subject_id: null

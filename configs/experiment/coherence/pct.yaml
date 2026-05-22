@@ -1,0 +1,67 @@
+# Permutation Coherence Test (PCT) rank estimation across datasets
+#
+# Usage:
+#   ./scripts/submit experiments/coherence/pct.py --bg
+
+defaults:
+  - /base
+  - _self_
+
+experiment_name: coherence
+task: pct
+
+pct:
+  B: 15
+  J: 50
+  n_p: 10
+  p_min: 0.30
+  p_max: 0.95
+  alpha: 0.05
+  random_state: 42
+
+datasets:
+  - name: mur92
+    config: mur92
+    k_max: 80
+  - name: peterson_animals
+    config: peterson_animals
+    k_max: 100
+  - name: peterson_various
+    config: peterson_various
+    k_max: 100
+
+  # THINGS behavioral triplets
+  - name: things_5pct
+    config: things_behavior
+    triplet_pct: 5
+    triplet_partition: 0
+    k_max: 60
+  - name: things_10pct
+    config: things_behavior
+    triplet_pct: 10
+    triplet_partition: 0
+    k_max: 60
+  - name: things_20pct
+    config: things_behavior
+    triplet_pct: 20
+    triplet_partition: 0
+    k_max: 60
+  - name: things_50pct
+    config: things_behavior
+    triplet_pct: 50
+    triplet_partition: 0
+    k_max: 60
+  - name: things_100pct
+    config: things_behavior
+    triplet_pct: 100
+    k_max: 60
+
+  # DNN features
+  - name: vgg16
+    config: vgg16
+    k_max: 100
+
+  # SWOW PPMI
+  - name: swow
+    config: swow
+    k_max: 200

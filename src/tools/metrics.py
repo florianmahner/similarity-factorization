@@ -130,20 +130,23 @@ def manhattan_distance(x: Array, y: Array) -> float | Array:
 
 
 def gaussian_kernel_similarity(
-    x: Array, y: Array, sigma: float | None = None
+    x: Array, y: Array, sigma: float | None = None, sigma_scale: float = 1.0
 ) -> float | Array:
     """Gaussian kernel similarity between two matrices aka RBF kernel.
 
     Params:
-        x: Array, First input array.
-        y: Array, Second input array.
-        sigma: float, Controls the width of the kernel. Higher values lead to more
-            smooth similarity functions. If not provided, it is estimated from the data.
+        x: First input array.
+        y: Second input array.
+        sigma: Kernel width. If None, set to ``sigma_scale * median(pairwise_distances(x))``.
+            Smaller sigma -> tighter kernel -> more "structurally sparse" similarity
+            matrix (most off-diagonal entries near 0). Helps SRF consensus stability.
+        sigma_scale: Multiplier on the median heuristic when sigma is None (default 1.0).
+            Ignored if sigma is given explicitly.
     """
     if sigma is None:
         dist = pairwise_distances(x, metric="euclidean")
-        median_dist = np.median(dist)
-        sigma = median_dist
+        median_dist = float(np.median(dist))
+        sigma = sigma_scale * median_dist
 
     gamma = 1 / (2 * sigma**2)
     similarity = pairwise_kernels(x, y, metric="rbf", gamma=gamma)

@@ -1,0 +1,9 @@
+Animacy               r = -0.395 (p = 0.0002)
+Body part | Animacy   r = 0.195 (p = 0.0002)
+Animacy | Body part   r = -0.405 (p = 0.0002)
+Animacy vs Body part  r = 0.028 (p = 0.4643)
+
+Bootstrap 95% CI:
+  Animacy             [-0.454, -0.328]
+  Body part | Animacy [0.108, 0.273]
+  Animacy | Body part [-0.463, -0.341]

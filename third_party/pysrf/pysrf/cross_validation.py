@@ -1,505 +1,214 @@
-"""
-Cross-validation utilities for matrix completion with symmetric matrices.
-
-This module provides specialized cross-validation tools for symmetric non-negative
-matrix factorization, including entry-wise masking strategies and grid search.
-"""
-
 from __future__ import annotations
 
-import logging
+import warnings
+from collections.abc import Sequence
 
 import numpy as np
-
-logger = logging.getLogger(__name__)
 import pandas as pd
-from sklearn.base import BaseEstimator, clone
-from sklearn.model_selection import BaseCrossValidator, ParameterGrid
-from sklearn.utils import check_random_state
 from joblib import Parallel, delayed
-from typing import Generator, Tuple
+from sklearn.utils import check_random_state
+from threadpoolctl import threadpool_limits
+
+from ._common import RandomStateLike, as_seed_sequence, observation_mask, spawn_ints
+from .coherence._sampling_fraction import _adaptive_cap
 from .model import SRF
 
-
-def create_train_val_split(
-    x: np.ndarray,
-    sampling_fraction: float,
-    rng: np.random.RandomState,
-    missing_values: float | None = np.nan,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Create train/validation split for symmetric matrix cross-validation.
-
-    Splits entries into three categories:
-    1. Training: used to fit the model
-    2. Validation: held out to evaluate the model
-    3. Excluded: not used at all (e.g., constant diagonals)
-
-    Parameters
-    ----------
-    x : ndarray
-        Input symmetric matrix
-    sampling_fraction : float
-        Fraction of eligible entries kept for training; must be in (0, 1).
-        The remaining (1 - sampling_fraction) becomes validation.
-    rng : RandomState
-        Random number generator
-    missing_values : float or None
-        Value that marks missing entries in the original data
-
-    Returns
-    -------
-    train_mask : ndarray of bool
-        True indicates training entry (used to fit model)
-    validation_mask : ndarray of bool
-        True indicates validation entry (held out for evaluation)
-
-    Notes
-    -----
-    Entries where both masks are False are excluded from CV entirely.
-    This happens for constant diagonal entries (e.g., all 1s in RBF kernels).
-    """
-    # Find entries that are observed in the original data
-    originally_observed = (
-        ~np.isnan(x) if missing_values is np.nan else x != missing_values
-    )
-
-    # Initialize both masks as False (excluded by default)
-    train_mask = np.zeros_like(x, dtype=bool)
-    validation_mask = np.zeros_like(x, dtype=bool)
-
-    # Work with upper triangle (excluding diagonal for now)
-    triu_i, triu_j = np.triu_indices_from(x, k=1)
-    triu_observed = originally_observed[triu_i, triu_j]
-    eligible_positions = np.where(triu_observed)[0]
-
-    if len(eligible_positions) == 0:
-        return train_mask, validation_mask
-
-    # Determine how many to keep for training
-    n_train = int(sampling_fraction * len(eligible_positions))
-    n_train = max(1, n_train)  # At least one training sample
-
-    # Randomly select which positions go to training vs validation
-    train_positions = rng.choice(eligible_positions, size=n_train, replace=False)
-    val_positions = np.setdiff1d(eligible_positions, train_positions)
-
-    # Set training positions
-    train_i = triu_i[train_positions]
-    train_j = triu_j[train_positions]
-    train_mask[train_i, train_j] = True
-    train_mask[train_j, train_i] = True
-
-    val_i = triu_i[val_positions]
-    val_j = triu_j[val_positions]
-    validation_mask[val_i, val_j] = True
-    validation_mask[val_j, val_i] = True
-
-    # Handle diagonal entries based on whether they're constant or variable
-    diagonal_values = x.diagonal()
-
-    if np.allclose(diagonal_values, diagonal_values[0]):
-        # Constant diagonal (e.g., all 1s in RBF kernel)
-        # EXCLUDE from CV entirely: neither train nor validation
-        # Both masks remain False for diagonal
-        pass
-    else:
-        # Variable diagonal (e.g., in linear kernel)
-        # Include in CV sampling just like off-diagonal entries
-        n_samples = x.shape[0]
-        diag_indices = np.arange(n_samples)
-
-        # Sample diagonal entries proportionally
-        n_diag_train = int(sampling_fraction * n_samples)
-        n_diag_train = max(1, n_diag_train)  # At least one training sample
-
-        train_diag_indices = rng.choice(diag_indices, size=n_diag_train, replace=False)
-        val_diag_indices = np.setdiff1d(diag_indices, train_diag_indices)
-
-        # Set diagonal training entries
-        train_mask[train_diag_indices, train_diag_indices] = True
-
-        # Set diagonal validation entries
-        validation_mask[val_diag_indices, val_diag_indices] = True
-
-    return train_mask, validation_mask
-
-
-def fit_and_score(
-    estimator: BaseEstimator,
-    x: np.ndarray,
-    train_mask: np.ndarray,
-    validation_mask: np.ndarray,
-    fit_params: dict,
-    split_idx: int | None = None,
-) -> dict:
-    """
-    Fit estimator with parameters and return validation score.
-
-    Parameters
-    ----------
-    estimator : BaseEstimator
-        Model instance to fit (works with SRF or any estimator with .reconstruct())
-    x : ndarray
-        Full data matrix
-    train_mask : ndarray of bool
-        Boolean mask where True = training entry
-    validation_mask : ndarray of bool
-        Boolean mask where True = validation entry
-    fit_params : dict
-        Parameters to set on the estimator
-    split_idx : int or None
-        Index of the CV split
-
-    Returns
-    -------
-    result : dict
-        Dictionary with score, parameters, and fitted estimator
-    """
-    est = clone(estimator).set_params(**fit_params)
-
-    # Set SRF-specific params if estimator supports them
-    if hasattr(est, "missing_values"):
-        est.set_params(missing_values=np.nan)
-
-    if hasattr(est, "bounds"):
-        if "bounds" not in fit_params or fit_params["bounds"] is None:
-            original_bounds = (np.nanmin(x), np.nanmax(x))
-            est.set_params(bounds=original_bounds)
-
-    # Track which entries were already NaN in the original data
-    originally_nan = np.isnan(x)
-
-    # Create training data: keep only training entries, mask everything else
-    x_train = np.full_like(x, np.nan)
-    x_train[train_mask] = x[train_mask]
-
-    # Fit model on training data only
-    est.fit(x_train)
-
-    # Get reconstruction
-    if hasattr(est, "reconstruct"):
-        reconstruction = est.reconstruct()
-    else:
-        raise ValueError(
-            f"Estimator {type(est).__name__} must have a .reconstruct() method "
-            "for matrix completion cross-validation"
-        )
-
-    # Evaluate only on validation entries that were originally observed
-    valid_eval_mask = validation_mask & ~originally_nan
-
-    if not valid_eval_mask.any():
-        raise ValueError("No valid validation entries to evaluate")
-
-    mse = np.mean((x[valid_eval_mask] - reconstruction[valid_eval_mask]) ** 2)
-
-    result = {
-        "score": mse,
-        "split": split_idx if split_idx is not None else 0,
-        "estimator": est,
-        "params": fit_params,
-    }
-
-    # Include history if available (optional)
-    if hasattr(est, "history_"):
-        result["history"] = est.history_
-
-    return result
-
-
-class EntryMaskSplit(BaseCrossValidator):
-    """
-    Cross-validator for symmetric matrices using entry-wise splits.
-
-    Generates multiple random train/validation splits by masking entries
-    in a symmetric matrix while preserving symmetry.
-
-    Parameters
-    ----------
-    n_repeats : int, default=5
-        Number of random splits to generate
-    sampling_fraction : float, default=0.8
-        Fraction of eligible entries kept for training; must be in (0, 1).
-        Remaining (1 - sampling_fraction) becomes validation.
-        Note: Constant diagonal entries are excluded from both.
-    random_state : int or None, default=None
-        Random seed for reproducibility
-    missing_values : float or None, default=np.nan
-        Value that marks missing entries in original data
-    """
-
-    def __init__(
-        self,
-        n_repeats: int = 5,
-        sampling_fraction: float = 0.8,
-        random_state: int | None = None,
-        missing_values: float | None = np.nan,
-    ):
-        self.n_repeats = n_repeats
-        self.sampling_fraction = sampling_fraction
-        self.random_state = random_state
-        self.missing_values = missing_values
-        if not (0.0 < float(self.sampling_fraction) < 1.0):
-            raise ValueError("sampling_fraction must be in (0, 1)")
-
-    def get_n_splits(
-        self, x: np.ndarray = None, y: np.ndarray = None, groups: np.ndarray = None
-    ) -> int:
-        return self.n_repeats
-
-    def split(
-        self, x: np.ndarray, y: np.ndarray = None, groups: np.ndarray = None
-    ) -> Generator[Tuple[np.ndarray, np.ndarray], None, None]:
-        """
-        Generate train/validation splits.
-
-        Yields
-        ------
-        train_mask : ndarray of bool
-            Training entries (True = use for training)
-        validation_mask : ndarray of bool
-            Validation entries (True = use for evaluation)
-        """
-        rng = check_random_state(self.random_state)
-        for _ in range(self.n_repeats):
-            yield create_train_val_split(
-                x, self.sampling_fraction, rng, self.missing_values
-            )
-
-
-class GridSearchCV:
-    """
-    Grid search cross-validation for matrix completion.
-
-    Performs exhaustive grid search over specified parameter values with
-    entry-wise cross-validation for symmetric matrices.
-
-    Parameters
-    ----------
-    estimator : BaseEstimator
-        Model instance to optimize
-    param_grid : dict
-        Dictionary with parameter names as keys and lists of values to try
-    cv : EntryMaskSplit
-        Cross-validation splitter
-    n_jobs : int, default=-1
-        Number of parallel jobs (-1 uses all processors)
-    verbose : int, default=0
-        Verbosity level
-    fit_final_estimator : bool, default=False
-        Whether to fit the model on full data with best parameters
-
-    Attributes
-    ----------
-    best_params_ : dict
-        Parameters that gave the best score
-    best_score_ : float
-        Best validation score achieved
-    cv_results_ : DataFrame
-        Detailed results for all parameter combinations
-    best_estimator_ : estimator
-        Fitted estimator with best parameters (if fit_final_estimator=True)
-    """
-
-    def __init__(
-        self,
-        estimator: BaseEstimator,
-        param_grid: dict[str, list],
-        cv: EntryMaskSplit,
-        n_jobs: int = -1,
-        verbose: int = 0,
-        fit_final_estimator: bool = False,
-    ):
-        self.estimator = estimator
-        self.param_grid = param_grid
-        self.cv = cv
-        self.n_jobs = n_jobs
-        self.verbose = verbose
-        self.fit_final_estimator = fit_final_estimator
-
-    def fit(self, x: np.ndarray) -> "GridSearchCV":
-        param_grid = ParameterGrid(self.param_grid)
-        cv_splits = list(self.cv.split(x))
-
-        all_jobs = [
-            (params, train_mask, validation_mask, split_idx)
-            for split_idx, (train_mask, validation_mask) in enumerate(cv_splits)
-            for params in param_grid
-        ]
-
-        logger.info(
-            "Running %d jobs (%d params x %d CV splits)",
-            len(all_jobs),
-            len(param_grid),
-            len(cv_splits),
-        )
-
-        all_results = Parallel(n_jobs=self.n_jobs, verbose=self.verbose)(
-            delayed(fit_and_score)(
-                self.estimator, x, train_mask, validation_mask, params, split_idx
-            )
-            for params, train_mask, validation_mask, split_idx in all_jobs
-        )
-
-        df = pd.DataFrame([{**r["params"], "score": r["score"]} for r in all_results])
-        param_cols = [col for col in df.columns if col != "score"]
-        mean_scores = df.groupby(param_cols)["score"].mean()
-
-        best_params_idx = mean_scores.idxmin()
-        self.best_params_ = dict(
-            zip(
-                param_cols,
-                best_params_idx if len(param_cols) > 1 else [best_params_idx],
-            )
-        )
-        self.best_score_ = mean_scores.min()
-
-        self.cv_results_ = pd.DataFrame(
-            [
-                {
-                    **{"score": result["score"], "split": result["split"]},
-                    **result["params"],
-                }
-                for result in all_results
-            ]
-        )
-
-        if self.fit_final_estimator:
-            self.best_estimator_ = clone(self.estimator).set_params(**self.best_params_)
-            self.best_estimator_.fit(x)
-
-        return self
-
-
-def _validate_sampling_fraction(sampling_fraction: float) -> float:
-    if sampling_fraction is None:
-        raise ValueError(
-            "sampling_fraction must be provided when estimate_sampling_fraction is False"
-        )
-    try:
-        sampling_fraction = float(sampling_fraction)
-    except (TypeError, ValueError):
-        raise TypeError("sampling_fraction must be a float in (0, 1)")
-    if not (0.0 < sampling_fraction < 1.0):
-        raise ValueError("sampling_fraction must be in (0, 1)")
+_RESERVED_SRF_KWARGS = frozenset({"rank", "bounds", "missing_values", "random_state"})
 
 
 def cross_val_score(
     similarity_matrix: np.ndarray,
-    estimator: BaseEstimator | None = None,
-    param_grid: dict[str, list] | None = None,
-    n_repeats: int = 5,
-    sampling_fraction: float = 0.8,
-    estimate_sampling_fraction: bool | dict = False,
-    sampling_selection: str = "mean",
-    random_state: int = 0,
-    verbose: int = 1,
+    ranks: Sequence[int],
+    sampling_fraction: float,
+    n_folds: int = 5,
+    n_repeats: int = 1,
+    random_state: RandomStateLike = 0,
     n_jobs: int = -1,
     missing_values: float | None = np.nan,
-    fit_final_estimator: bool = False,
-) -> GridSearchCV:
-    """
-    Cross-validate any estimator for matrix completion.
+    srf_kwargs: dict | None = None,
+) -> pd.DataFrame:
+    """K-fold confirmation curve for SRF rank estimates."""
+    ranks, srf_kwargs = _validate_args(ranks, sampling_fraction, n_folds, n_repeats, srf_kwargs)
+    s = np.asarray(similarity_matrix, dtype=np.float64)
+    observed_mask = observation_mask(s, missing_values)
+    bounds = _observed_bounds(s, observed_mask)
 
-    Generic cross-validation function that works with SRF or any sklearn-compatible
-    estimator with a .reconstruct() method.
+    pool_fraction = _cv_pool_fraction(sampling_fraction, n_folds, s.shape[0])
+    split_seeds, fit_seeds = _split_fit_seeds(
+        random_state, n_repeats, n_folds, len(ranks),
+    )
+    splits = _entry_splits(observed_mask, pool_fraction, n_folds, split_seeds)
+    jobs = list(_fit_jobs(splits, ranks, fit_seeds))
 
-    Parameters
-    ----------
-    similarity_matrix : ndarray
-        Symmetric similarity matrix to cross-validate
-    estimator : BaseEstimator or None, default=None
-        Estimator to cross-validate. If None, uses SRF(random_state=random_state).
-        Can be a single estimator or a Pipeline. Must have a .reconstruct() method.
-    param_grid : dict or None, default=None
-        Dictionary with parameter names (str) as keys and lists of values to try
-        as values. If None, uses default {'rank': [5, 10, 15, 20]} for SRF.
-    n_repeats : int, default=5
-        Number of times to repeat the cross-validation
-    sampling_fraction : float, default=0.8
-        Fraction of eligible entries to use for training in each split; must be in (0, 1).
-        The remaining (1 - sampling_fraction) becomes validation.
-        Note: Constant diagonal entries are excluded from both train and validation.
-        Ignored when estimate_sampling_fraction is True or a dict; if both are provided,
-        estimate_sampling_fraction takes precedence.
-    estimate_sampling_fraction : bool or dict, default=False
-        If True, automatically estimate optimal sampling fraction using sampling
-        bound estimation from Random Matrix Theory. If dict, passed as kwargs to
-        estimate_sampling_bounds_fast(). When enabled, overrides sampling_fraction.
-    sampling_selection : str, default="mean"
-        Selection method for the estimated sampling fraction; one of {"mean", "min", "max"}.
-    random_state : int, default=0
-        Random seed for reproducibility
-    verbose : int, default=1
-        Verbosity level
-    n_jobs : int, default=-1
-        Number of jobs to run in parallel (-1 uses all processors)
-    missing_values : float or None, default=np.nan
-        Value to consider as missing in original data
-    fit_final_estimator : bool, default=False
-        Whether to fit the final estimator on the best parameters
+    scores = Parallel(n_jobs=n_jobs)(
+        delayed(_fit_score)(s, train_mask, validation_mask, rank, bounds, seed, srf_kwargs)
+        for _, _, rank, train_mask, validation_mask, seed in jobs
+    )
+    return pd.DataFrame(
+        {"rep": rep, "fold": fold, "rank": rank, "val_mse": score}
+        for (rep, fold, rank, *_), score in zip(jobs, scores)
+    )
 
-    Returns
-    -------
-    grid : GridSearchCV
-        Fitted GridSearchCV object with best parameters and scores
 
-    Examples
-    --------
-    >>> from pysrf.cross_validation import cross_val_score
-    >>> result = cross_val_score(similarity_matrix, param_grid={'rank': [5, 10, 15]})
-    """
-    if estimator is None:
-        estimator = SRF(random_state=random_state)
+def _validate_args(
+    ranks: Sequence[int],
+    sampling_fraction: float,
+    n_folds: int,
+    n_repeats: int,
+    srf_kwargs: dict | None,
+) -> tuple[list[int], dict]:
+    ranks = [int(rank) for rank in ranks]
+    if not ranks:
+        raise ValueError("ranks must contain at least one value")
+    if any(rank < 1 for rank in ranks):
+        raise ValueError("ranks must be positive")
+    if not (0.0 < sampling_fraction < 1.0):
+        raise ValueError("sampling_fraction must be in (0, 1)")
+    if n_folds < 2:
+        raise ValueError(f"n_folds must be at least 2, got {n_folds}")
+    if n_repeats < 1:
+        raise ValueError(f"n_repeats must be at least 1, got {n_repeats}")
 
-    if param_grid is None:
-        param_grid = {"rank": [5, 10, 15, 20]}
-
-    valid_selections = {"mean", "min", "max"}
-    if sampling_selection not in valid_selections:
+    srf_kwargs = dict(srf_kwargs) if srf_kwargs else {}
+    reserved = _RESERVED_SRF_KWARGS & srf_kwargs.keys()
+    if reserved:
         raise ValueError(
-            f"sampling_selection must be one of {sorted(valid_selections)}"
+            f"srf_kwargs must not contain {sorted(reserved)}; these are set per fit"
+        )
+    return ranks, srf_kwargs
+
+
+def _observed_bounds(s: np.ndarray, observed_mask: np.ndarray) -> tuple[float, float]:
+    values = s[observed_mask & np.isfinite(s)]
+    if values.size == 0:
+        raise ValueError("similarity_matrix has no finite observed entries")
+    return float(values.min()), float(values.max())
+
+
+def _split_fit_seeds(
+    random_state: RandomStateLike,
+    n_repeats: int,
+    n_folds: int,
+    n_ranks: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    seed_sequence = as_seed_sequence(random_state)
+    split_seeds = spawn_ints(seed_sequence, n_repeats)
+    fit_seeds = spawn_ints(seed_sequence, n_repeats * n_folds * n_ranks)
+    return split_seeds, fit_seeds.reshape(n_repeats, n_folds, n_ranks)
+
+
+def _entry_splits(
+    observed_mask: np.ndarray,
+    pool_fraction: float,
+    n_folds: int,
+    split_seeds: np.ndarray,
+) -> list[tuple[int, int, np.ndarray, np.ndarray]]:
+    splits: list[tuple[int, int, np.ndarray, np.ndarray]] = []
+    for rep, seed in enumerate(split_seeds):
+        rng = check_random_state(int(seed))
+        cv_pool_mask = _sample_cv_pool(observed_mask, pool_fraction, rng)
+        for fold, validation_mask in enumerate(_validation_masks(cv_pool_mask, n_folds, rng)):
+            train_mask = cv_pool_mask & ~validation_mask
+            diag = np.diag_indices_from(train_mask)
+            train_mask[diag] = observed_mask[diag]
+            splits.append((rep, fold, train_mask, validation_mask))
+    return splits
+
+
+def _sample_cv_pool(
+    observed_mask: np.ndarray,
+    pool_fraction: float,
+    rng: np.random.RandomState,
+) -> np.ndarray:
+    n = observed_mask.shape[0]
+    triu_i, triu_j = np.triu_indices(n, k=1)
+    observed_pairs = np.flatnonzero(observed_mask[triu_i, triu_j])
+    if observed_pairs.size == 0:
+        raise ValueError("cross-validation needs observed off-diagonal entries")
+
+    n_keep = max(1, int(pool_fraction * observed_pairs.size))
+    kept_pairs = rng.choice(observed_pairs, size=n_keep, replace=False)
+    pool_mask = np.zeros_like(observed_mask, dtype=bool)
+    pool_mask[triu_i[kept_pairs], triu_j[kept_pairs]] = True
+    pool_mask[triu_j[kept_pairs], triu_i[kept_pairs]] = True
+    return pool_mask
+
+
+def _validation_masks(
+    cv_pool_mask: np.ndarray,
+    n_folds: int,
+    rng: np.random.RandomState,
+) -> list[np.ndarray]:
+    n = cv_pool_mask.shape[0]
+    triu_i, triu_j = np.triu_indices(n, k=1)
+    pool_pairs = np.flatnonzero(cv_pool_mask[triu_i, triu_j])
+    if pool_pairs.size < n_folds:
+        raise ValueError(
+            f"cross-validation needs at least {n_folds} observed off-diagonal entries"
         )
 
-    if estimate_sampling_fraction:
-        from .bounds import estimate_sampling_bounds_fast
+    masks = []
+    for fold_pairs in np.array_split(rng.permutation(pool_pairs), n_folds):
+        mask = np.zeros((n, n), dtype=bool)
+        mask[triu_i[fold_pairs], triu_j[fold_pairs]] = True
+        mask[triu_j[fold_pairs], triu_i[fold_pairs]] = True
+        masks.append(mask)
+    return masks
 
-        kwargs = (
-            estimate_sampling_fraction
-            if isinstance(estimate_sampling_fraction, dict)
-            else {}
+
+def _fit_jobs(
+    splits: list[tuple[int, int, np.ndarray, np.ndarray]],
+    ranks: list[int],
+    fit_seeds: np.ndarray,
+):
+    for rep, fold, train_mask, validation_mask in splits:
+        for rank_idx, rank in enumerate(ranks):
+            yield (
+                rep, fold, int(rank),
+                train_mask, validation_mask,
+                int(fit_seeds[rep, fold, rank_idx]),
+            )
+
+
+def _cv_pool_fraction(sampling_fraction: float, n_folds: int, n: int) -> float:
+    cap = _adaptive_cap(n)
+    requested = sampling_fraction * n_folds / (n_folds - 1)
+    if requested > cap:
+        effective = cap * (n_folds - 1) / n_folds
+        warnings.warn(
+            f"Requested CV pool fraction {requested:.3f} exceeds the cap {cap:.3f}. "
+            f"Each fold will train at {effective:.3f} instead of "
+            f"{sampling_fraction:.3f}.",
+            RuntimeWarning,
+            stacklevel=3,
         )
-        if "random_state" not in kwargs:
-            kwargs["random_state"] = random_state
-        if "n_jobs" not in kwargs:
-            kwargs["n_jobs"] = n_jobs
-        kwargs.pop("verbose", None)
+    return min(requested, cap)
 
-        pmin, pmax, s_noise = estimate_sampling_bounds_fast(similarity_matrix, **kwargs)
-        sampling_fraction = {
-            "mean": np.mean([pmin, pmax]),
-            "min": pmin,
-            "max": pmax,
-        }[sampling_selection]
 
-    else:
-        _validate_sampling_fraction(sampling_fraction)
+def _fit_score(
+    s: np.ndarray,
+    train_mask: np.ndarray,
+    validation_mask: np.ndarray,
+    rank: int,
+    bounds: tuple[float, float],
+    seed: int,
+    srf_kwargs: dict,
+) -> float:
+    with threadpool_limits(limits=1):
+        train_matrix = np.full(s.shape, np.nan, dtype=np.float64)
+        train_matrix[train_mask] = s[train_mask]
+        est = SRF(
+            rank=rank, bounds=bounds, missing_values=np.nan,
+            random_state=seed, **srf_kwargs,
+        )
+        est.fit(train_matrix)
+        s_hat = est.reconstruct()
 
-    cv = EntryMaskSplit(
-        n_repeats=n_repeats,
-        sampling_fraction=sampling_fraction,
-        random_state=random_state,
-        missing_values=missing_values,
-    )
-    grid = GridSearchCV(
-        estimator=estimator,
-        param_grid=param_grid,
-        cv=cv,
-        n_jobs=n_jobs,
-        verbose=verbose,
-        fit_final_estimator=fit_final_estimator,
-    )
-    grid.fit(similarity_matrix)
-
-    return grid
+        triu = np.triu_indices(s.shape[0], k=1)
+        validation_entries = (
+            validation_mask[triu] & np.isfinite(s[triu]) & np.isfinite(s_hat[triu])
+        )
+        if not validation_entries.any():
+            return float("nan")
+        residual = s[triu][validation_entries] - s_hat[triu][validation_entries]
+        return float(np.mean(residual * residual))

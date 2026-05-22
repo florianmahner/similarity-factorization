@@ -3,10 +3,12 @@
 
 name: things-monkey-22k
 type: neural_features
-path: /SSD/fmahner/macaque_florian/22k
+path: ${paths.ssd}/datasets/things/macaque
 
 # Similarity computation
 similarity_fn: gaussian_kernel
+similarity_kwargs:
+  sigma_scale: 0.4  # following Mahner et al. 2026 (deep-similarity) — selected via H(stability, R²) sweep
 
 # Loading parameters
 loader_kwargs:

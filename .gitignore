@@ -86,3 +86,5 @@ dist/
 CLAUDE.md
 GEMINI.md
 .tickets/
+.superpowers/
+experiments/paper/Flo-SRF/

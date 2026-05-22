@@ -1,0 +1,241 @@
+# Dimensionality estimation + CV validation across requested datasets.
+#
+# Stages:
+#   mode=estimate -> pysrf.estimate_rank, writes outputs/<name>/coherence_estimate.json
+#   mode=validate -> pysrf.cross_val_score at p*, writes outputs/<name>/cross_validation.json
+#   mode=all      -> estimate all datasets first, then validate
+#
+# Re-run safe: existing estimates/validations are skipped only when their
+# relevant parameters and rank grids match the current config.
+
+defaults:
+  - /base
+  - _self_
+
+experiment_name: datasets
+task: dimensionality
+
+mode: estimate
+force: false
+only: null
+n_jobs: 32
+
+cache_similarity: false
+force_cache: false
+make_overview: false
+
+estimate:
+  n_jobs: 32
+  n_bootstrap: 20
+  n_p: 20
+  p_min: 0.05
+  p_max: 0.95
+  recovery_tolerance: 0.10
+  high_band_quantile: 0.85
+  random_state: 0
+
+validate:
+  n_jobs: 32
+  n_repeats: 3
+  random_state: 0
+  strategy: fixed
+  variants:
+    - {name: 5fold, n_folds: 5}
+    - {name: 10fold, n_folds: 10}
+  srf_kwargs:
+    rho: 3.0
+    max_inner: 30
+    tol: 0.0
+    max_outer: 50
+    check_input: false
+  include_k_cut: true
+  adaptive:
+    # Rank-narrowing strategy:
+    #   coarse pass: explicit cv_seed_ranks per dataset, evaluated outer-in
+    #     (extremes first, then converge inward).
+    #   no expansion past the user-specified bounds.
+    #   refinement: step-1 dense sweep between the two coarse ranks
+    #     bracketing the coarse argmin (rank-1 precision around the bottom).
+    #     Round 2 re-brackets if the argmin shifted to the round-1 edge.
+    max_rank: 200
+    initial_multipliers: []          # no k_cut-based seeding
+    include_upper_probe: false       # never probe max_rank automatically
+    expansion_factor: 1.6
+    expansion_rounds: 0              # never expand past cv_seed_ranks bounds
+    expansion_min_rel_drop: 0.005
+    refine_rounds: 2
+    refine_step: 1                   # rank-1 precision in the refined bracket
+    refine_radius: 20
+    max_refine_points: 12            # 10-wide bracket -> 11 step-1 points
+    plateau_rel_tol: 0.01
+
+datasets:
+  - name: mur92
+    config: mur92
+    max_rank: 30
+    estimate_n_jobs: 16
+    validate_n_jobs: 32
+    cv_rank_range: [2, 30, 1]
+    validate:
+      n_repeats: 50
+
+  - name: peterson_animals
+    config: peterson_animals
+    max_rank: 30
+    estimate_n_jobs: 16
+    validate_n_jobs: 32
+    cv_rank_range: [2, 30, 1]
+    validate:
+      n_repeats: 50
+
+  - name: peterson_various
+    config: peterson_various
+    max_rank: 30
+    estimate_n_jobs: 16
+    validate_n_jobs: 32
+    cv_rank_range: [2, 30, 1]
+    validate:
+      n_repeats: 50
+
+  - name: vgg16
+    config: vgg16
+    max_rank: 200
+    estimate_n_jobs: 64
+    validate_n_jobs: 64
+    # Extended grid: step-10 up to 200, step-25 from 225 to 400, to bracket the
+    # U-shape minimum (suspected between 200 and 300 for the linear kernel).
+    cv_seed_ranks: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200,
+                    225, 250, 275, 300, 325, 350, 375, 400]
+    validate:
+      strategy: adaptive
+      n_repeats: 1
+      adaptive:
+        max_rank: 500
+
+  - name: clip_vit_l14
+    config: clip_vit_l14
+    max_rank: 100
+    estimate_n_jobs: 32
+    validate_n_jobs: 32
+    cv_rank_range: [5, 100, 5]
+    validate:
+      n_repeats: 1
+
+  - name: clip_vit_l14_sigma0.5
+    config: clip_vit_l14_sigma0.5
+    max_rank: 100
+    estimate_n_jobs: 32
+    validate_n_jobs: 32
+    cv_rank_range: [5, 100, 5]
+    validate:
+      n_repeats: 10
+
+  - name: dinov3
+    config: dinov3
+    max_rank: 100
+    estimate_n_jobs: 32
+    validate_n_jobs: 32
+    cv_rank_range: [5, 100, 5]
+    validate:
+      n_repeats: 1
+
+  - name: things_behavior
+    config: things_behavior
+    max_rank: 200
+    estimate_n_jobs: 64
+    validate_n_jobs: 64
+    cv_seed_ranks: [10, 20, 30, 40, 50, 60, 70]
+    validate:
+      strategy: adaptive
+      n_repeats: 1
+      adaptive:
+        max_rank: 70
+
+  - name: swow
+    config: swow
+    max_rank: 200
+    estimate_n_jobs: 16
+    validate_n_jobs: 64
+    cv_seed_ranks: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200]
+    validate:
+      strategy: adaptive
+      n_repeats: 1
+      adaptive:
+        max_rank: 200
+
+  - name: nsd_subj01
+    config: nsd
+    subject_id: 1
+    max_rank: 200
+    estimate_n_jobs: 8
+    validate_n_jobs: 64
+    loader_kwargs:
+      return_images: false
+    cv_seed_ranks: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200]
+    validate:
+      strategy: adaptive
+      n_repeats: 1
+      adaptive:
+        max_rank: 200
+
+  - name: nsd_subj01_sigma0.5
+    config: nsd_sigma0.5
+    subject_id: 1
+    max_rank: 200
+    estimate_n_jobs: 144
+    validate_n_jobs: 144
+    loader_kwargs:
+      return_images: false
+    cv_seed_ranks: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200]
+    validate:
+      strategy: adaptive
+      n_repeats: 1
+      adaptive:
+        max_rank: 200
+
+  - name: nsd_subj02
+    config: nsd
+    subject_id: 2
+    max_rank: 200
+    estimate_n_jobs: 8
+    validate_n_jobs: 64
+    loader_kwargs:
+      return_images: false
+    cv_seed_ranks: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200]
+    validate:
+      strategy: adaptive
+      n_repeats: 1
+      adaptive:
+        max_rank: 200
+
+  - name: things_macaque22k_tight
+    config: things_monkey_22k_tight
+    max_rank: 200
+    estimate_n_jobs: 80
+    validate_n_jobs: 32
+    cv_seed_ranks: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200]
+    loader_kwargs:
+      average_exemplars: false
+    estimate:
+      n_p: 20
+    validate:
+      strategy: adaptive
+      n_repeats: 1
+      adaptive:
+        max_rank: 200
+
+  - name: things_macaque22k
+    config: things_monkey_22k
+    max_rank: 200
+    estimate_n_jobs: 24
+    validate_n_jobs: 32
+    loader_kwargs:
+      average_exemplars: false
+    cv_seed_ranks: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200]
+    estimate:
+      n_p: 12
+    validate:
+      strategy: adaptive
+      n_repeats: 1
+      adaptive:
+        max_rank: 200

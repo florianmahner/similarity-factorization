@@ -3,7 +3,7 @@
 
 name: things-monkey-22k
 type: neural_features
-path: /SSD/fmahner/macaque_florian/22k
+path: ${paths.ssd}/fmahner/macaque_florian/22k
 
 # Similarity computation
 similarity_fn: gaussian_kernel

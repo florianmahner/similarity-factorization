@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>General Figure v2: Redesigned Method Overview</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 1100px; margin: 30px auto; padding: 0 20px; color: #333; background: #fafafa; font-size: 13px; }
+  h1 { font-size: 20px; border-bottom: 2px solid #44AA99; padding-bottom: 6px; }
+  h2 { font-size: 15px; color: #44AA99; margin-top: 28px; }
+  .figure-frame { border: 1px solid #ccc; border-radius: 8px; background: white; padding: 20px; margin: 16px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+  .row-label { font-size: 10px; font-weight: bold; color: #333; margin-bottom: 4px; }
+  .row-subtitle { font-size: 9px; color: #888; margin-bottom: 12px; }
+
+  /* The actual figure mockup at approximate proportions */
+  .fig-row { display: flex; gap: 8px; align-items: center; margin: 8px 0; min-height: 120px; }
+  .fig-panel { background: #f8f8f8; border: 1px solid #e0e0e0; border-radius: 4px; padding: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .fig-arrow { font-size: 16px; color: #bbb; flex-shrink: 0; }
+  .panel-title { font-size: 8px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+
+  /* RSM mockup */
+  .rsm { display: grid; gap: 1px; }
+  .rsm-cell { aspect-ratio: 1; border-radius: 1px; }
+
+  /* Arc diagram */
+  .arc-container { position: relative; height: 30px; width: 100%; margin-bottom: 2px; }
+
+  /* W bars mockup */
+  .w-row { display: flex; align-items: center; gap: 3px; margin: 1.5px 0; }
+  .w-label { font-size: 7px; color: #888; width: 28px; text-align: right; }
+  .w-bar { height: 6px; border-radius: 2px; }
+  .w-dot { width: 5px; height: 5px; border-radius: 50%; }
+
+  /* Masked RSM */
+  .mask-mark { position: absolute; font-size: 6px; font-weight: bold; }
+
+  .comparison { display: flex; gap: 24px; margin-top: 16px; }
+  .comp-col { flex: 1; }
+  .comp-col h3 { font-size: 13px; margin: 0 0 8px; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; margin: 2px; }
+  .tag-pro { background: #e8f4f1; color: #44AA99; }
+  .tag-con { background: #fce8ec; color: #CC6677; }
+  .tag-new { background: #f0edf5; color: #332288; }
+
+  .design-note { font-size: 11px; color: #777; padding: 12px; background: #fffde8; border-radius: 6px; border-left: 3px solid #DDCC77; margin: 12px 0; }
+</style>
+</head>
+<body>
+
+<h1>General Figure: Redesigned Concept</h1>
+
+<h2>My recommendation: 3-panel Row A + 3-panel Row B</h2>
+<p>Drop the graph from Row A (it's redundant with W bars). Drop the "graph+SRF" from Row B. This gives each panel ~55mm width instead of ~42mm -- a huge difference at print size.</p>
+
+<div class="figure-frame">
+  <div class="row-label">A &nbsp; Interpretable dimensions from representational similarities</div>
+
+  <div class="fig-row">
+    <!-- Panel 1: RSM with arc diagram -->
+    <div class="fig-panel" style="flex: 1.2;">
+      <div class="panel-title">Similarity matrix</div>
+      <!-- Arc diagram sketch -->
+      <svg width="140" height="30" style="margin-bottom:2px;">
+        <path d="M10,28 Q40,2 70,28" fill="none" stroke="#44AA99" stroke-width="0.8" opacity="0.4"/>
+        <path d="M15,28 Q45,8 75,28" fill="none" stroke="#CC6677" stroke-width="0.8" opacity="0.4"/>
+        <path d="M70,28 Q90,10 110,28" fill="none" stroke="#332288" stroke-width="0.8" opacity="0.4"/>
+        <path d="M20,28 Q50,5 80,28" fill="none" stroke="#44AA99" stroke-width="0.6" opacity="0.3"/>
+        <path d="M75,28 Q95,12 115,28" fill="none" stroke="#332288" stroke-width="0.6" opacity="0.3"/>
+        <path d="M5,28 Q35,8 65,28" fill="none" stroke="#CC6677" stroke-width="0.6" opacity="0.3"/>
+        <!-- Item dots -->
+        <circle cx="10" cy="28" r="3" fill="#CC6677"/>
+        <circle cx="25" cy="28" r="3" fill="#CC6677"/>
+        <circle cx="40" cy="28" r="3" fill="#CC6677"/>
+        <circle cx="55" cy="28" r="3" fill="#44AA99"/>
+        <circle cx="70" cy="28" r="3" fill="#44AA99"/>
+        <circle cx="85" cy="28" r="3" fill="#332288"/>
+        <circle cx="100" cy="28" r="3" fill="#332288"/>
+        <circle cx="115" cy="28" r="3" fill="#DDCC77"/>
+        <circle cx="130" cy="28" r="3" fill="#DDCC77"/>
+      </svg>
+      <!-- RSM heatmap sketch -->
+      <div class="rsm" style="grid-template-columns: repeat(9, 12px);">
+        <!-- Row 1 (D1 items: high similarity with each other) -->
+        <div class="rsm-cell" style="background: #0a4a6e;"></div>
+        <div class="rsm-cell" style="background: #1a6a8e;"></div>
+        <div class="rsm-cell" style="background: #2a7a9e;"></div>
+        <div class="rsm-cell" style="background: #8ab8ce;"></div>
+        <div class="rsm-cell" style="background: #a0c8de;"></div>
+        <div class="rsm-cell" style="background: #d0e4ee;"></div>
+        <div class="rsm-cell" style="background: #ddeef5;"></div>
+        <div class="rsm-cell" style="background: #e8f0f5;"></div>
+        <div class="rsm-cell" style="background: #eef4f8;"></div>
+        <!-- Row 2 -->
+        <div class="rsm-cell" style="background: #1a6a8e;"></div>
+        <div class="rsm-cell" style="background: #0a4a6e;"></div>
+        <div class="rsm-cell" style="background: #1a6a8e;"></div>
+        <div class="rsm-cell" style="background: #90b8ce;"></div>
+        <div class="rsm-cell" style="background: #b0c8de;"></div>
+        <div class="rsm-cell" style="background: #d8e8f0;"></div>
+        <div class="rsm-cell" style="background: #ddeef5;"></div>
+        <div class="rsm-cell" style="background: #e0eef5;"></div>
+        <div class="rsm-cell" style="background: #eef4f8;"></div>
+        <!-- Row 3 -->
+        <div class="rsm-cell" style="background: #2a7a9e;"></div>
+        <div class="rsm-cell" style="background: #1a6a8e;"></div>
+        <div class="rsm-cell" style="background: #0a4a6e;"></div>
+        <div class="rsm-cell" style="background: #80b0c8;"></div>
+        <div class="rsm-cell" style="background: #a8c8de;"></div>
+        <div class="rsm-cell" style="background: #d0e4ee;"></div>
+        <div class="rsm-cell" style="background: #e0eef5;"></div>
+        <div class="rsm-cell" style="background: #e5f0f5;"></div>
+        <div class="rsm-cell" style="background: #eef4f8;"></div>
+        <!-- Row 4 (D2 starts) -->
+        <div class="rsm-cell" style="background: #8ab8ce;"></div>
+        <div class="rsm-cell" style="background: #90b8ce;"></div>
+        <div class="rsm-cell" style="background: #80b0c8;"></div>
+        <div class="rsm-cell" style="background: #0a4a6e;"></div>
+        <div class="rsm-cell" style="background: #1a6a8e;"></div>
+        <div class="rsm-cell" style="background: #c0d8e8;"></div>
+        <div class="rsm-cell" style="background: #d0e4ee;"></div>
+        <div class="rsm-cell" style="background: #ddeef5;"></div>
+        <div class="rsm-cell" style="background: #e8f0f5;"></div>
+        <!-- Row 5 -->
+        <div class="rsm-cell" style="background: #a0c8de;"></div>
+        <div class="rsm-cell" style="background: #b0c8de;"></div>
+        <div class="rsm-cell" style="background: #a8c8de;"></div>
+        <div class="rsm-cell" style="background: #1a6a8e;"></div>
+        <div class="rsm-cell" style="background: #0a4a6e;"></div>
+        <div class="rsm-cell" style="background: #b8d0e0;"></div>
+        <div class="rsm-cell" style="background: #c8dce8;"></div>
+        <div class="rsm-cell" style="background: #d8e8f0;"></div>
+        <div class="rsm-cell" style="background: #e5f0f5;"></div>
+        <!-- Row 6 (D3 starts) -->
+        <div class="rsm-cell" style="background: #d0e4ee;"></div>
+        <div class="rsm-cell" style="background: #d8e8f0;"></div>
+        <div class="rsm-cell" style="background: #d0e4ee;"></div>
+        <div class="rsm-cell" style="background: #c0d8e8;"></div>
+        <div class="rsm-cell" style="background: #b8d0e0;"></div>
+        <div class="rsm-cell" style="background: #0a4a6e;"></div>
+        <div class="rsm-cell" style="background: #2a7a9e;"></div>
+        <div class="rsm-cell" style="background: #c0d8e8;"></div>
+        <div class="rsm-cell" style="background: #c8dce8;"></div>
+        <!-- Row 7 -->
+        <div class="rsm-cell" style="background: #ddeef5;"></div>
+        <div class="rsm-cell" style="background: #ddeef5;"></div>
+        <div class="rsm-cell" style="background: #e0eef5;"></div>
+        <div class="rsm-cell" style="background: #d0e4ee;"></div>
+        <div class="rsm-cell" style="background: #c8dce8;"></div>
+        <div class="rsm-cell" style="background: #2a7a9e;"></div>
+        <div class="rsm-cell" style="background: #0a4a6e;"></div>
+        <div class="rsm-cell" style="background: #b8d0e0;"></div>
+        <div class="rsm-cell" style="background: #c0d8e8;"></div>
+        <!-- Row 8 (D4) -->
+        <div class="rsm-cell" style="background: #e8f0f5;"></div>
+        <div class="rsm-cell" style="background: #e0eef5;"></div>
+        <div class="rsm-cell" style="background: #e5f0f5;"></div>
+        <div class="rsm-cell" style="background: #ddeef5;"></div>
+        <div class="rsm-cell" style="background: #d8e8f0;"></div>
+        <div class="rsm-cell" style="background: #c0d8e8;"></div>
+        <div class="rsm-cell" style="background: #b8d0e0;"></div>
+        <div class="rsm-cell" style="background: #0a4a6e;"></div>
+        <div class="rsm-cell" style="background: #1a6a8e;"></div>
+        <!-- Row 9 -->
+        <div class="rsm-cell" style="background: #eef4f8;"></div>
+        <div class="rsm-cell" style="background: #eef4f8;"></div>
+        <div class="rsm-cell" style="background: #eef4f8;"></div>
+        <div class="rsm-cell" style="background: #e8f0f5;"></div>
+        <div class="rsm-cell" style="background: #e5f0f5;"></div>
+        <div class="rsm-cell" style="background: #c8dce8;"></div>
+        <div class="rsm-cell" style="background: #c0d8e8;"></div>
+        <div class="rsm-cell" style="background: #1a6a8e;"></div>
+        <div class="rsm-cell" style="background: #0a4a6e;"></div>
+      </div>
+      <div style="font-size:7px; color:#aaa; margin-top:4px;">Similarity matrix S (n x n)</div>
+    </div>
+
+    <div class="fig-arrow">
+      <div style="font-size:8px; color:#999; text-align:center;">S ≈ WW<sup style="font-size:6px;">T</sup></div>
+      →
+    </div>
+
+    <!-- Panel 2: Sparse W matrix as bars -->
+    <div class="fig-panel" style="flex: 1.5;">
+      <div class="panel-title">Embedding W (sparse, non-negative)</div>
+      <div style="width:100%;">
+        <div class="w-row"><span class="w-label">ball</span><span class="w-dot" style="background:#332288;"></span><div class="w-bar" style="width:5px; background:#CC6677;"></div><div class="w-bar" style="width:40px; background:#332288;"></div></div>
+        <div class="w-row"><span class="w-label">bat</span><span class="w-dot" style="background:#CC6677;"></span><div class="w-bar" style="width:50px; background:#CC6677;"></div></div>
+        <div class="w-row"><span class="w-label">berry</span><span class="w-dot" style="background:#CC6677;"></span><div class="w-bar" style="width:35px; background:#CC6677;"></div><div class="w-bar" style="width:8px; background:#44AA99;"></div></div>
+        <div class="w-row"><span class="w-label">bird</span><span class="w-dot" style="background:#CC6677;"></span><div class="w-bar" style="width:45px; background:#CC6677;"></div></div>
+        <div class="w-row"><span class="w-label">clam</span><span class="w-dot" style="background:#44AA99;"></span><div class="w-bar" style="width:2px; background:#CC6677;"></div><div class="w-bar" style="width:35px; background:#44AA99;"></div></div>
+        <div class="w-row"><span class="w-label">clay</span><span class="w-dot" style="background:#44AA99;"></span><div class="w-bar" style="width:40px; background:#44AA99;"></div></div>
+        <div class="w-row"><span class="w-label">coin</span><span class="w-dot" style="background:#332288;"></span><div class="w-bar" style="width:48px; background:#332288;"></div></div>
+        <div class="w-row"><span class="w-label">fern</span><span class="w-dot" style="background:#44AA99;"></span><div class="w-bar" style="width:42px; background:#44AA99;"></div></div>
+        <div class="w-row"><span class="w-label">fish</span><span class="w-dot" style="background:#CC6677;"></span><div class="w-bar" style="width:38px; background:#CC6677;"></div></div>
+        <div class="w-row"><span class="w-label">globe</span><span class="w-dot" style="background:#332288;"></span><div class="w-bar" style="width:50px; background:#332288;"></div></div>
+        <div class="w-row"><span class="w-label">hoop</span><span class="w-dot" style="background:#332288;"></span><div class="w-bar" style="width:45px; background:#332288;"></div></div>
+        <div class="w-row"><span class="w-label">leaf</span><span class="w-dot" style="background:#44AA99;"></span><div class="w-bar" style="width:3px; background:#CC6677;"></div><div class="w-bar" style="width:38px; background:#44AA99;"></div></div>
+        <div class="w-row"><span class="w-label">lion</span><span class="w-dot" style="background:#CC6677;"></span><div class="w-bar" style="width:48px; background:#CC6677;"></div></div>
+        <div class="w-row"><span class="w-label">moss</span><span class="w-dot" style="background:#44AA99;"></span><div class="w-bar" style="width:35px; background:#44AA99;"></div></div>
+        <div class="w-row"><span class="w-label">owl</span><span class="w-dot" style="background:#CC6677;"></span><div class="w-bar" style="width:30px; background:#CC6677;"></div><div class="w-bar" style="width:5px; background:#44AA99;"></div></div>
+      </div>
+      <div style="display:flex; gap:8px; margin-top:4px; font-size:7px;">
+        <span style="color:#CC6677;">■ D1 (animals)</span>
+        <span style="color:#44AA99;">■ D2 (natural)</span>
+        <span style="color:#332288;">■ D3 (objects)</span>
+      </div>
+    </div>
+
+    <div class="fig-arrow">→</div>
+
+    <!-- Panel 3: S vs WW^T comparison -->
+    <div class="fig-panel" style="flex: 1;">
+      <div class="panel-title">Reconstruction: S vs WW<sup style="font-size:7px;">T</sup></div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <div>
+          <div class="rsm" style="grid-template-columns: repeat(9, 8px);">
+            <div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #1a6a8e;"></div><div class="rsm-cell" style="background: #2a7a9e;"></div><div class="rsm-cell" style="background: #8ab8ce;"></div><div class="rsm-cell" style="background: #a0c8de;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #ddeef5;"></div><div class="rsm-cell" style="background: #e8f0f5;"></div><div class="rsm-cell" style="background: #eef4f8;"></div>
+            <div class="rsm-cell" style="background: #1a6a8e;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #1a6a8e;"></div><div class="rsm-cell" style="background: #90b8ce;"></div><div class="rsm-cell" style="background: #b0c8de;"></div><div class="rsm-cell" style="background: #d8e8f0;"></div><div class="rsm-cell" style="background: #ddeef5;"></div><div class="rsm-cell" style="background: #e0eef5;"></div><div class="rsm-cell" style="background: #eef4f8;"></div>
+            <div class="rsm-cell" style="background: #2a7a9e;"></div><div class="rsm-cell" style="background: #1a6a8e;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #80b0c8;"></div><div class="rsm-cell" style="background: #a8c8de;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #e0eef5;"></div><div class="rsm-cell" style="background: #e5f0f5;"></div><div class="rsm-cell" style="background: #eef4f8;"></div>
+            <div class="rsm-cell" style="background: #8ab8ce;"></div><div class="rsm-cell" style="background: #90b8ce;"></div><div class="rsm-cell" style="background: #80b0c8;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #1a6a8e;"></div><div class="rsm-cell" style="background: #c0d8e8;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #ddeef5;"></div><div class="rsm-cell" style="background: #e8f0f5;"></div>
+            <div class="rsm-cell" style="background: #a0c8de;"></div><div class="rsm-cell" style="background: #b0c8de;"></div><div class="rsm-cell" style="background: #a8c8de;"></div><div class="rsm-cell" style="background: #1a6a8e;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #b8d0e0;"></div><div class="rsm-cell" style="background: #c8dce8;"></div><div class="rsm-cell" style="background: #d8e8f0;"></div><div class="rsm-cell" style="background: #e5f0f5;"></div>
+            <div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #d8e8f0;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #c0d8e8;"></div><div class="rsm-cell" style="background: #b8d0e0;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #2a7a9e;"></div><div class="rsm-cell" style="background: #c0d8e8;"></div><div class="rsm-cell" style="background: #c8dce8;"></div>
+            <div class="rsm-cell" style="background: #ddeef5;"></div><div class="rsm-cell" style="background: #ddeef5;"></div><div class="rsm-cell" style="background: #e0eef5;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #c8dce8;"></div><div class="rsm-cell" style="background: #2a7a9e;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #b8d0e0;"></div><div class="rsm-cell" style="background: #c0d8e8;"></div>
+            <div class="rsm-cell" style="background: #e8f0f5;"></div><div class="rsm-cell" style="background: #e0eef5;"></div><div class="rsm-cell" style="background: #e5f0f5;"></div><div class="rsm-cell" style="background: #ddeef5;"></div><div class="rsm-cell" style="background: #d8e8f0;"></div><div class="rsm-cell" style="background: #c0d8e8;"></div><div class="rsm-cell" style="background: #b8d0e0;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #1a6a8e;"></div>
+            <div class="rsm-cell" style="background: #eef4f8;"></div><div class="rsm-cell" style="background: #eef4f8;"></div><div class="rsm-cell" style="background: #eef4f8;"></div><div class="rsm-cell" style="background: #e8f0f5;"></div><div class="rsm-cell" style="background: #e5f0f5;"></div><div class="rsm-cell" style="background: #c8dce8;"></div><div class="rsm-cell" style="background: #c0d8e8;"></div><div class="rsm-cell" style="background: #1a6a8e;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div>
+          </div>
+          <div style="font-size:6px; color:#aaa; text-align:center;">Original S</div>
+        </div>
+        <span style="font-size:12px; color:#ccc;">≈</span>
+        <div>
+          <div class="rsm" style="grid-template-columns: repeat(9, 8px);">
+            <!-- Block-diagonal structure from WW^T -->
+            <div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #1a6a8e;"></div><div class="rsm-cell" style="background: #2a7a9e;"></div><div class="rsm-cell" style="background: #c0d8e8;"></div><div class="rsm-cell" style="background: #c0d8e8;"></div><div class="rsm-cell" style="background: #e0eef5;"></div><div class="rsm-cell" style="background: #e0eef5;"></div><div class="rsm-cell" style="background: #eef4f8;"></div><div class="rsm-cell" style="background: #eef4f8;"></div>
+            <div class="rsm-cell" style="background: #1a6a8e;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #1a6a8e;"></div><div class="rsm-cell" style="background: #c0d8e8;"></div><div class="rsm-cell" style="background: #c0d8e8;"></div><div class="rsm-cell" style="background: #e0eef5;"></div><div class="rsm-cell" style="background: #e0eef5;"></div><div class="rsm-cell" style="background: #eef4f8;"></div><div class="rsm-cell" style="background: #eef4f8;"></div>
+            <div class="rsm-cell" style="background: #2a7a9e;"></div><div class="rsm-cell" style="background: #1a6a8e;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #c0d8e8;"></div><div class="rsm-cell" style="background: #c0d8e8;"></div><div class="rsm-cell" style="background: #e0eef5;"></div><div class="rsm-cell" style="background: #e0eef5;"></div><div class="rsm-cell" style="background: #eef4f8;"></div><div class="rsm-cell" style="background: #eef4f8;"></div>
+            <div class="rsm-cell" style="background: #c0d8e8;"></div><div class="rsm-cell" style="background: #c0d8e8;"></div><div class="rsm-cell" style="background: #c0d8e8;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #1a6a8e;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #e8f0f5;"></div><div class="rsm-cell" style="background: #e8f0f5;"></div>
+            <div class="rsm-cell" style="background: #c0d8e8;"></div><div class="rsm-cell" style="background: #c0d8e8;"></div><div class="rsm-cell" style="background: #c0d8e8;"></div><div class="rsm-cell" style="background: #1a6a8e;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #e8f0f5;"></div><div class="rsm-cell" style="background: #e8f0f5;"></div>
+            <div class="rsm-cell" style="background: #e0eef5;"></div><div class="rsm-cell" style="background: #e0eef5;"></div><div class="rsm-cell" style="background: #e0eef5;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #2a7a9e;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div>
+            <div class="rsm-cell" style="background: #e0eef5;"></div><div class="rsm-cell" style="background: #e0eef5;"></div><div class="rsm-cell" style="background: #e0eef5;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #2a7a9e;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div>
+            <div class="rsm-cell" style="background: #eef4f8;"></div><div class="rsm-cell" style="background: #eef4f8;"></div><div class="rsm-cell" style="background: #eef4f8;"></div><div class="rsm-cell" style="background: #e8f0f5;"></div><div class="rsm-cell" style="background: #e8f0f5;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #1a6a8e;"></div>
+            <div class="rsm-cell" style="background: #eef4f8;"></div><div class="rsm-cell" style="background: #eef4f8;"></div><div class="rsm-cell" style="background: #eef4f8;"></div><div class="rsm-cell" style="background: #e8f0f5;"></div><div class="rsm-cell" style="background: #e8f0f5;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #1a6a8e;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div>
+          </div>
+          <div style="font-size:6px; color:#aaa; text-align:center;">WW<sup>T</sup></div>
+        </div>
+      </div>
+      <div style="font-size:7px; color:#44AA99; margin-top:6px; font-weight:600;">r = 0.97</div>
+    </div>
+  </div>
+
+  <div style="height:16px;"></div>
+
+  <div class="row-label">B &nbsp; Imputation and dimensionality estimation</div>
+
+  <div class="fig-row">
+    <!-- Panel 1: Masked RSM -->
+    <div class="fig-panel" style="flex: 1;">
+      <div class="panel-title">Observed similarities (incomplete)</div>
+      <div style="position:relative;">
+        <div class="rsm" style="grid-template-columns: repeat(9, 12px);">
+          <div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #1a6a8e;"></div><div class="rsm-cell" style="background: #ddd;"></div><div class="rsm-cell" style="background: #8ab8ce;"></div><div class="rsm-cell" style="background: #ddd;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #ddd;"></div><div class="rsm-cell" style="background: #e8f0f5;"></div><div class="rsm-cell" style="background: #eef4f8;"></div>
+          <div class="rsm-cell" style="background: #1a6a8e;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #1a6a8e;"></div><div class="rsm-cell" style="background: #ddd;"></div><div class="rsm-cell" style="background: #b0c8de;"></div><div class="rsm-cell" style="background: #ddd;"></div><div class="rsm-cell" style="background: #ddeef5;"></div><div class="rsm-cell" style="background: #ddd;"></div><div class="rsm-cell" style="background: #eef4f8;"></div>
+          <div class="rsm-cell" style="background: #ddd;"></div><div class="rsm-cell" style="background: #1a6a8e;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #80b0c8;"></div><div class="rsm-cell" style="background: #ddd;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #e0eef5;"></div><div class="rsm-cell" style="background: #e5f0f5;"></div><div class="rsm-cell" style="background: #ddd;"></div>
+          <div class="rsm-cell" style="background: #8ab8ce;"></div><div class="rsm-cell" style="background: #ddd;"></div><div class="rsm-cell" style="background: #80b0c8;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #1a6a8e;"></div><div class="rsm-cell" style="background: #ddd;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #ddeef5;"></div><div class="rsm-cell" style="background: #ddd;"></div>
+          <div class="rsm-cell" style="background: #ddd;"></div><div class="rsm-cell" style="background: #b0c8de;"></div><div class="rsm-cell" style="background: #ddd;"></div><div class="rsm-cell" style="background: #1a6a8e;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #b8d0e0;"></div><div class="rsm-cell" style="background: #ddd;"></div><div class="rsm-cell" style="background: #d8e8f0;"></div><div class="rsm-cell" style="background: #e5f0f5;"></div>
+          <div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #ddd;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #ddd;"></div><div class="rsm-cell" style="background: #b8d0e0;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #2a7a9e;"></div><div class="rsm-cell" style="background: #ddd;"></div><div class="rsm-cell" style="background: #c8dce8;"></div>
+          <div class="rsm-cell" style="background: #ddd;"></div><div class="rsm-cell" style="background: #ddeef5;"></div><div class="rsm-cell" style="background: #e0eef5;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #ddd;"></div><div class="rsm-cell" style="background: #2a7a9e;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #b8d0e0;"></div><div class="rsm-cell" style="background: #ddd;"></div>
+          <div class="rsm-cell" style="background: #e8f0f5;"></div><div class="rsm-cell" style="background: #ddd;"></div><div class="rsm-cell" style="background: #e5f0f5;"></div><div class="rsm-cell" style="background: #ddeef5;"></div><div class="rsm-cell" style="background: #d8e8f0;"></div><div class="rsm-cell" style="background: #ddd;"></div><div class="rsm-cell" style="background: #b8d0e0;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #1a6a8e;"></div>
+          <div class="rsm-cell" style="background: #eef4f8;"></div><div class="rsm-cell" style="background: #eef4f8;"></div><div class="rsm-cell" style="background: #ddd;"></div><div class="rsm-cell" style="background: #ddd;"></div><div class="rsm-cell" style="background: #e5f0f5;"></div><div class="rsm-cell" style="background: #c8dce8;"></div><div class="rsm-cell" style="background: #ddd;"></div><div class="rsm-cell" style="background: #1a6a8e;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div>
+        </div>
+      </div>
+      <div style="font-size:7px; color:#aaa; margin-top:4px;">
+        <span style="color:#ddd;">■</span> missing &nbsp;
+        <span style="color:#CC6677;">□</span> held out
+      </div>
+    </div>
+
+    <div class="fig-arrow">
+      <div style="font-size:7px; color:#999; text-align:center;">SRF at<br>rank k</div>
+      →
+    </div>
+
+    <!-- Panel 2: Completed RSM -->
+    <div class="fig-panel" style="flex: 1;">
+      <div class="panel-title">Predicted (complete) RSM</div>
+      <div class="rsm" style="grid-template-columns: repeat(9, 12px);">
+        <div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #1a6a8e;"></div><div class="rsm-cell" style="background: #2a7a9e;"></div><div class="rsm-cell" style="background: #8ab8ce;"></div><div class="rsm-cell" style="background: #a0c8de;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #ddeef5;"></div><div class="rsm-cell" style="background: #e8f0f5;"></div><div class="rsm-cell" style="background: #eef4f8;"></div>
+        <div class="rsm-cell" style="background: #1a6a8e;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #1a6a8e;"></div><div class="rsm-cell" style="background: #90b8ce;"></div><div class="rsm-cell" style="background: #b0c8de;"></div><div class="rsm-cell" style="background: #d8e8f0;"></div><div class="rsm-cell" style="background: #ddeef5;"></div><div class="rsm-cell" style="background: #e0eef5;"></div><div class="rsm-cell" style="background: #eef4f8;"></div>
+        <div class="rsm-cell" style="background: #2a7a9e;"></div><div class="rsm-cell" style="background: #1a6a8e;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #80b0c8;"></div><div class="rsm-cell" style="background: #a8c8de;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #e0eef5;"></div><div class="rsm-cell" style="background: #e5f0f5;"></div><div class="rsm-cell" style="background: #eef4f8;"></div>
+        <div class="rsm-cell" style="background: #8ab8ce;"></div><div class="rsm-cell" style="background: #90b8ce;"></div><div class="rsm-cell" style="background: #80b0c8;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #1a6a8e;"></div><div class="rsm-cell" style="background: #c0d8e8;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #ddeef5;"></div><div class="rsm-cell" style="background: #e8f0f5;"></div>
+        <div class="rsm-cell" style="background: #a0c8de;"></div><div class="rsm-cell" style="background: #b0c8de;"></div><div class="rsm-cell" style="background: #a8c8de;"></div><div class="rsm-cell" style="background: #1a6a8e;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #b8d0e0;"></div><div class="rsm-cell" style="background: #c8dce8;"></div><div class="rsm-cell" style="background: #d8e8f0;"></div><div class="rsm-cell" style="background: #e5f0f5;"></div>
+        <div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #d8e8f0;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #c0d8e8;"></div><div class="rsm-cell" style="background: #b8d0e0;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #2a7a9e;"></div><div class="rsm-cell" style="background: #c0d8e8;"></div><div class="rsm-cell" style="background: #c8dce8;"></div>
+        <div class="rsm-cell" style="background: #ddeef5;"></div><div class="rsm-cell" style="background: #ddeef5;"></div><div class="rsm-cell" style="background: #e0eef5;"></div><div class="rsm-cell" style="background: #d0e4ee;"></div><div class="rsm-cell" style="background: #c8dce8;"></div><div class="rsm-cell" style="background: #2a7a9e;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #b8d0e0;"></div><div class="rsm-cell" style="background: #c0d8e8;"></div>
+        <div class="rsm-cell" style="background: #e8f0f5;"></div><div class="rsm-cell" style="background: #e0eef5;"></div><div class="rsm-cell" style="background: #e5f0f5;"></div><div class="rsm-cell" style="background: #ddeef5;"></div><div class="rsm-cell" style="background: #d8e8f0;"></div><div class="rsm-cell" style="background: #c0d8e8;"></div><div class="rsm-cell" style="background: #b8d0e0;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div><div class="rsm-cell" style="background: #1a6a8e;"></div>
+        <div class="rsm-cell" style="background: #eef4f8;"></div><div class="rsm-cell" style="background: #eef4f8;"></div><div class="rsm-cell" style="background: #eef4f8;"></div><div class="rsm-cell" style="background: #e8f0f5;"></div><div class="rsm-cell" style="background: #e5f0f5;"></div><div class="rsm-cell" style="background: #c8dce8;"></div><div class="rsm-cell" style="background: #c0d8e8;"></div><div class="rsm-cell" style="background: #1a6a8e;"></div><div class="rsm-cell" style="background: #0a4a6e;"></div>
+      </div>
+      <div style="font-size:7px; color:#aaa; margin-top:4px;">All entries predicted</div>
+    </div>
+
+    <div class="fig-arrow">→</div>
+
+    <!-- Panel 3: Train/val curve -->
+    <div class="fig-panel" style="flex: 1.2;">
+      <div class="panel-title">Find optimal rank</div>
+      <svg width="160" height="100" style="margin:4px;">
+        <!-- Axes -->
+        <line x1="25" y1="85" x2="150" y2="85" stroke="#ddd" stroke-width="0.5"/>
+        <line x1="25" y1="10" x2="25" y2="85" stroke="#ddd" stroke-width="0.5"/>
+        <!-- Train curve (monotone decreasing) -->
+        <path d="M30,20 Q50,35 70,50 Q90,60 110,65 Q130,68 145,70" fill="none" stroke="#333" stroke-width="1.5"/>
+        <!-- Validation curve (U-shaped) -->
+        <path d="M30,25 Q50,38 70,42 Q80,43 90,44 Q100,46 120,55 Q135,65 145,75" fill="none" stroke="#44AA99" stroke-width="1.5"/>
+        <!-- k* marker -->
+        <line x1="85" y1="44" x2="85" y2="85" stroke="#CC6677" stroke-width="0.8" stroke-dasharray="3,2"/>
+        <circle cx="85" cy="44" r="3.5" fill="#CC6677"/>
+        <text x="88" y="42" font-size="8" fill="#CC6677" font-weight="bold">k*</text>
+        <!-- Labels -->
+        <text x="87" y="95" text-anchor="middle" font-size="7" fill="#888">Rank</text>
+        <text x="12" y="50" text-anchor="middle" font-size="7" fill="#888" transform="rotate(-90, 12, 50)">Error</text>
+        <!-- Legend -->
+        <line x1="100" y1="15" x2="115" y2="15" stroke="#333" stroke-width="1.5"/>
+        <text x="118" y="18" font-size="7" fill="#555">Train</text>
+        <line x1="100" y1="25" x2="115" y2="25" stroke="#44AA99" stroke-width="1.5"/>
+        <text x="118" y="28" font-size="7" fill="#44AA99">Validation</text>
+      </svg>
+    </div>
+  </div>
+</div>
+
+<div class="design-note">
+  <strong>Key changes from current figure:</strong>
+  <ul style="margin: 4px 0 0; padding-left: 20px;">
+    <li>Row A: 3 panels instead of 4 (dropped the graph -- W bars already show communities)</li>
+    <li>Row B: 3 panels instead of 4 (dropped the "graph+SRF box" -- redundant)</li>
+    <li>Each panel is ~55mm instead of ~42mm -- much more readable at print</li>
+    <li>The S ≈ WW^T equation sits between panels A1 and A2 as the "method label"</li>
+    <li>Row B shows: incomplete data → completed prediction → rank selection</li>
+    <li>Will use real Mur92 data, our color palette, 5pt Arial</li>
+  </ul>
+</div>
+
+<p style="color:#888; font-size:11px;">Look at this in your browser/Cursor preview and tell me if this 3+3 panel layout works, or if you want to explore a different structure.</p>
+
+</body>
+</html>

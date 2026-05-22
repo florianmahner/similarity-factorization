@@ -1,0 +1,12 @@
+# CLIP ViT-L/14 visual features for THINGS+ images (1854 objects).
+# σ=0.5 sweep variant — bandwidth multiplier slightly above the
+# H(stability, R²)-optimal α=0.4 used in clip_vit_l14.yaml.
+name: clip_vit_l14
+type: feature_file
+path: ${paths.data_dir}/features/clip_vit_l14
+features_file: clip_vit_l14_features.npy
+similarity_fn: gaussian_kernel
+similarity_kwargs:
+  sigma_scale: 0.5
+bounds_task: clip_vit_l14
+rank_range: [5, 100, 5]

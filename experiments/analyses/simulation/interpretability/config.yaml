@@ -1,0 +1,22 @@
+# Simulation: Interpretability
+
+defaults:
+  - /base
+  - _self_
+
+experiment_name: analyses
+task: simulation/interpretability
+
+# === Sweep ===
+seed: 42
+
+# === Simulation ===
+n: 200
+k: 8
+snrs: [1.0, 0.8, 0.6, 0.4, 0.2]
+ccc_runs: 5
+alpha_grid: [0.1, 0.3, 0.5, 1.0, 2.0, 5.0, 10.0]
+kernel: linear
+
+# === Compute ===
+n_jobs: 16

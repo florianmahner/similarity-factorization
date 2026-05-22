@@ -1,14 +1,11 @@
-.PHONY: install dev test test-cov lint format clean compile docs docs-serve
+.PHONY: install dev test test-cov lint format clean docs docs-serve
 
 install:
-	poetry install --only main
+	pip install .
 
 dev:
-	poetry install
-	$(MAKE) compile
-
-compile:
-	poetry run python setup.py build_ext --inplace
+	poetry install --no-root --all-extras
+	poetry run pip install -e . --no-build-isolation
 
 test:
 	poetry run pytest tests/ -v
@@ -23,11 +20,8 @@ format:
 	poetry run ruff format pysrf/ tests/
 
 clean:
-	rm -rf build/ dist/ *.egg-info .pytest_cache .coverage htmlcov/
+	rm -rf build/ builddir/ dist/ *.egg-info .pytest_cache .coverage htmlcov/
 	find . -name "__pycache__" -type d -exec rm -rf {} +
-	find . -name "*.so" -delete
-	find pysrf/ -name "*.c" -not -name "*.cfg" -delete
-	find pysrf/ -name "*.cpp" -delete
 
 docs:
 	poetry run zensical build

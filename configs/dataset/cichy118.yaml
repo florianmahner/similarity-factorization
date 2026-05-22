@@ -3,7 +3,7 @@
 
 name: cichy118
 type: neural_rsm
-path: /SSD/datasets/similarity_datasets/cichy118
+path: ${paths.ssd}/datasets/similarity_datasets/cichy118
 
 bounds_task: cichy118
 rank_range: [5, 50, 5]

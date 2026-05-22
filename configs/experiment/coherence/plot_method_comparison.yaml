@@ -1,0 +1,11 @@
+# Compare coherence, kappa, and PCT rank estimation across datasets
+#
+# Usage:
+#   ./scripts/submit experiments/coherence/plot_method_comparison.py
+
+defaults:
+  - /base
+  - _self_
+
+experiment_name: coherence
+task: plot_method_comparison

@@ -56,7 +56,7 @@ plugins:
             show_signature_annotations: true
             separate_signature: true
             merge_init_into_class: true
-            filters: ["!^_"]
+            filters: ["!^__"]
 
 markdown_extensions:
   - admonition
@@ -85,8 +85,8 @@ nav:
     - Installation: installation.md
     - Quick start: quickstart.md
     - Examples: examples.md
-  - API reference:
-    - Model (SRF): api/model.md
-    - Cross-validation: api/cross_validation.md
-    - Sampling bounds: api/bounds.md
-  - Development: development.md
+	  - API reference:
+	    - Model (SRF): api/model.md
+	    - Rank estimation: api/rank_estimation.md
+	    - Cross-validation: api/cross_validation.md
+	  - Development: development.md

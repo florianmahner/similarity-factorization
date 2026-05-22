@@ -5,106 +5,45 @@
     falls back to a pure Python implementation. Make sure you have a C compiler
     installed before proceeding.
 
-## Automated setup (recommended)
-
-Clone the repository and run the setup script:
+## Quick install
 
 ```bash
-git clone https://github.com/fmahner/pysrf.git
+git clone https://github.com/florianmahner/pysrf.git
 cd pysrf
-./setup.sh
+pip install .
 ```
 
-The script performs the following steps:
+This builds the Cython extension automatically using meson-python.
 
-1. Installs `pyenv` if it is not already present.
-2. Installs `poetry` if it is not already present.
-3. Installs Python 3.12.4 through `pyenv`.
-4. Sets the local Python version.
-5. Installs all dependencies through `poetry`.
-6. Compiles the Cython extension.
-7. Runs the test suite.
+## Developer setup
 
-After the script finishes, activate the environment:
+For development with an editable install:
 
 ```bash
-poetry shell
+git clone https://github.com/florianmahner/pysrf.git
+cd pysrf
+make dev
 ```
 
-## Manual installation
+This installs all dependencies (including build tools) via Poetry and
+compiles the Cython extension into `build/`, keeping the source tree clean.
 
-### Install prerequisites
+### Makefile targets
 
-Install pyenv and poetry if you do not have them:
-
-```bash
-curl https://pyenv.run | bash
-curl -sSL https://install.python-poetry.org | python3 -
-```
-
-### Set up python
-
-Install Python 3.12.4 (or any version >=3.10) and pin it for this project:
-
-```bash
-pyenv install 3.12.4
-pyenv local 3.12.4
-```
-
-### Install dependencies
-
-```bash
-poetry install
-```
-
-### Compile the Cython extension
-
-Use the Makefile target or run the build command directly:
-
-```bash
-make compile
-
-# or
-poetry run python setup.py build_ext --inplace
-```
-
-The Makefile provides additional targets:
-
-- `make dev`: install dev dependencies and compile Cython.
+- `make dev`: install dependencies and compile Cython (editable install).
+- `make install`: install the package (non-editable).
 - `make test`: run the test suite.
 - `make format`: format code with ruff.
 - `make clean`: remove build artifacts.
 - `make docs`: build documentation.
 
-## Alternative methods
+### Manual steps
 
-### From PyPI (planned)
-
-```bash
-pip install pysrf
-
-# development version
-pip install --pre pysrf
-```
-
-### As a git subtree
-
-Add pysrf as a subtree inside another project:
+If you prefer not to use Make:
 
 ```bash
-git subtree add --prefix=pysrf https://github.com/fmahner/pysrf.git master --squash
-```
-
-Update the subtree:
-
-```bash
-git subtree pull --prefix=pysrf https://github.com/fmahner/pysrf.git master --squash
-```
-
-Then install and compile:
-
-```bash
-cd pysrf && poetry install && make compile
+poetry install --no-root --all-extras
+poetry run pip install -e . --no-build-isolation
 ```
 
 ## Verify the installation
@@ -114,7 +53,30 @@ import pysrf
 print(pysrf.__version__)
 
 # Check whether the Cython extension is active
-from pysrf.model import _get_update_w_function
-update_w = _get_update_w_function()
-print(f"Using: {update_w.__module__}")  # _bsum if compiled
+from pysrf.model import _w_solver_backend
+print(f"Backend: {_w_solver_backend}")  # 'cython' if compiled
 ```
+
+## Performance
+
+### Multi-threaded BLAS
+
+SRF uses BLAS routines (via scipy) that benefit from multi-threading.
+Set `OMP_NUM_THREADS` **before** importing pysrf to enable parallel
+linear algebra:
+
+```bash
+export OMP_NUM_THREADS=4
+python my_script.py
+```
+
+Or at the top of a script, before any imports:
+
+```python
+import os
+os.environ["OMP_NUM_THREADS"] = "4"
+
+from pysrf import SRF
+```
+
+When `verbose=1` is set, SRF logs the current thread count at fit time.

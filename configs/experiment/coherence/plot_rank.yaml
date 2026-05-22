@@ -1,0 +1,11 @@
+# Plot coherence rank estimation results
+#
+# Usage:
+#   ./scripts/submit experiments/coherence/plot_rank.py
+
+defaults:
+  - /base
+  - _self_
+
+experiment_name: coherence
+task: plot_rank

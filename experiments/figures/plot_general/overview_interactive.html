@@ -1,0 +1,1012 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SRF: Untangling Similarity</title>
+<style>
+  /* =========================================================================
+     GLOBAL
+     ========================================================================= */
+  :root {
+    --rose:    #CC6677;
+    --teal:    #44AA99;
+    --indigo:  #332288;
+    --sand:    #DDCC77;
+    --purple:  #AA4499;
+    --gray:    #999999;
+    --gray-lt: #CCCCCC;
+    --gray-dk: #555555;
+    --gray-pl: #E8E8E8;
+    --bg:      #FAFAFA;
+
+    /* soft versions */
+    --rose-soft:   #E6B3BB;
+    --teal-soft:   #A3D4CC;
+    --indigo-soft: #9990C4;
+    --sand-soft:   #EDE5B3;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: #333;
+    overflow-x: hidden;
+  }
+
+  /* =========================================================================
+     LAYOUT SHELL
+     ========================================================================= */
+  .page {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 40px 32px 80px;
+  }
+
+  .header {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+  .header h1 {
+    font-size: 28px;
+    font-weight: 300;
+    color: #222;
+    letter-spacing: -0.5px;
+    margin-bottom: 8px;
+  }
+  .header h1 strong { font-weight: 600; }
+  .header .subtitle {
+    font-size: 14px;
+    color: var(--gray);
+    max-width: 600px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+
+  /* =========================================================================
+     THE THREE-ACT STAGE
+     ========================================================================= */
+  .stage {
+    position: relative;
+    width: 100%;
+    height: 540px;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 2px 20px rgba(0,0,0,0.04);
+    overflow: hidden;
+    margin-bottom: 32px;
+  }
+
+  .stage svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  /* =========================================================================
+     CONTROLS
+     ========================================================================= */
+  .controls {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    margin-bottom: 24px;
+  }
+
+  .btn {
+    padding: 10px 24px;
+    border: 1.5px solid var(--gray-lt);
+    border-radius: 24px;
+    background: white;
+    font-family: inherit;
+    font-size: 13px;
+    color: var(--gray-dk);
+    cursor: pointer;
+    transition: all 0.25s ease;
+    letter-spacing: 0.3px;
+  }
+  .btn:hover { border-color: var(--teal); color: var(--teal); }
+  .btn.active {
+    background: var(--teal);
+    border-color: var(--teal);
+    color: white;
+  }
+
+  .step-label {
+    text-align: center;
+    font-size: 13px;
+    color: var(--gray);
+    margin-bottom: 16px;
+    min-height: 40px;
+    transition: opacity 0.4s ease;
+    line-height: 1.5;
+  }
+  .step-label strong { color: #333; font-weight: 600; }
+
+  /* =========================================================================
+     EQUATION STRIP
+     ========================================================================= */
+  .equation-strip {
+    text-align: center;
+    padding: 24px 0 32px;
+    font-size: 20px;
+    color: var(--gray-dk);
+    letter-spacing: 1px;
+  }
+  .equation-strip .eq-s { color: var(--teal); font-weight: 600; }
+  .equation-strip .eq-w { color: var(--rose); font-weight: 600; }
+  .equation-strip .eq-wt { color: var(--rose); font-weight: 600; }
+  .equation-strip .eq-approx { color: var(--gray); font-size: 24px; }
+
+  /* =========================================================================
+     DIMENSION CARDS (below the stage)
+     ========================================================================= */
+  .dim-cards {
+    display: flex;
+    gap: 16px;
+    margin-top: 8px;
+  }
+  .dim-card {
+    flex: 1;
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 1px 12px rgba(0,0,0,0.04);
+    border-top: 3px solid var(--gray-lt);
+    transition: all 0.4s ease;
+    opacity: 0.4;
+  }
+  .dim-card.active { opacity: 1; }
+  .dim-card.d1 { border-top-color: var(--rose); }
+  .dim-card.d2 { border-top-color: var(--teal); }
+  .dim-card.d3 { border-top-color: var(--indigo); }
+
+  .dim-card .dim-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 12px;
+  }
+  .dim-card.d1 .dim-label { color: var(--rose); }
+  .dim-card.d2 .dim-label { color: var(--teal); }
+  .dim-card.d3 .dim-label { color: var(--indigo); }
+
+  .dim-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 5px 0;
+  }
+  .dim-item .bar-track {
+    flex: 1;
+    height: 6px;
+    background: var(--gray-pl);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .dim-item .bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    width: 0%;
+  }
+  .dim-card.d1 .bar-fill { background: var(--rose); }
+  .dim-card.d2 .bar-fill { background: var(--teal); }
+  .dim-card.d3 .bar-fill { background: var(--indigo); }
+  .dim-item .item-name {
+    font-size: 11px;
+    color: var(--gray-dk);
+    width: 48px;
+    text-align: right;
+  }
+  .dim-item .item-val {
+    font-size: 10px;
+    color: var(--gray);
+    width: 28px;
+  }
+
+  /* =========================================================================
+     BOTTOM SECTION: Missing data story
+     ========================================================================= */
+  .missing-section {
+    margin-top: 48px;
+    display: flex;
+    gap: 32px;
+    align-items: flex-start;
+  }
+  .missing-text {
+    flex: 1;
+    padding-top: 8px;
+  }
+  .missing-text h2 {
+    font-size: 20px;
+    font-weight: 300;
+    color: #222;
+    margin-bottom: 8px;
+  }
+  .missing-text h2 strong { font-weight: 600; }
+  .missing-text p {
+    font-size: 13px;
+    color: var(--gray);
+    line-height: 1.7;
+    margin-bottom: 12px;
+  }
+  .missing-visual {
+    flex: 1.2;
+    display: flex;
+    gap: 16px;
+    align-items: center;
+  }
+  .mini-matrix {
+    background: white;
+    border-radius: 8px;
+    padding: 12px;
+    box-shadow: 0 1px 12px rgba(0,0,0,0.04);
+  }
+  .mini-matrix .label {
+    font-size: 9px;
+    color: var(--gray);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+    text-align: center;
+  }
+
+  .flow-arrow-big {
+    font-size: 20px;
+    color: var(--gray-lt);
+  }
+
+  /* =========================================================================
+     HOVER TOOLTIP
+     ========================================================================= */
+  .tooltip {
+    position: fixed;
+    pointer-events: none;
+    background: white;
+    border: 1px solid var(--gray-lt);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    z-index: 100;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+  .tooltip.visible { opacity: 1; }
+  .tooltip .tt-name { font-weight: 600; color: #222; margin-bottom: 4px; }
+  .tooltip .tt-bars { display: flex; gap: 3px; align-items: flex-end; height: 20px; }
+  .tooltip .tt-bar { width: 14px; border-radius: 2px 2px 0 0; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="header">
+    <h1>Interpretable dimensions from <strong>similarity</strong></h1>
+    <p class="subtitle">
+      Objects, words, and neural patterns can be compared pairwise to form similarity matrices.
+      SRF decomposes these into sparse, non-negative dimensions that reveal the hidden structure.
+    </p>
+  </div>
+
+  <!-- CONTROLS -->
+  <div class="controls">
+    <button class="btn active" data-step="0">Similarities</button>
+    <button class="btn" data-step="1">Decompose</button>
+    <button class="btn" data-step="2">Dimensions</button>
+  </div>
+
+  <div class="step-label" id="stepLabel">
+    <strong>15 items</strong> connected by pairwise similarity. Structure is hidden in the tangle.
+  </div>
+
+  <!-- THE MAIN STAGE -->
+  <div class="stage">
+    <svg id="mainSvg" viewBox="0 0 1100 540"></svg>
+  </div>
+
+  <!-- EQUATION -->
+  <div class="equation-strip">
+    <span class="eq-s">S</span>
+    <span class="eq-approx"> &asymp; </span>
+    <span class="eq-w">W</span><span class="eq-wt">W</span><sup style="color: var(--rose); font-size: 14px;">T</sup>
+    &nbsp;&nbsp;
+    <span style="font-size: 13px; color: var(--gray); font-weight: 400;">
+      where W &ge; 0, sparse
+    </span>
+  </div>
+
+  <!-- DIMENSION CARDS -->
+  <div class="dim-cards" id="dimCards">
+    <div class="dim-card d1" data-dim="0">
+      <div class="dim-label">Dimension 1 &mdash; Animals</div>
+      <div class="dim-items"></div>
+    </div>
+    <div class="dim-card d2" data-dim="1">
+      <div class="dim-label">Dimension 2 &mdash; Nature</div>
+      <div class="dim-items"></div>
+    </div>
+    <div class="dim-card d3" data-dim="2">
+      <div class="dim-label">Dimension 3 &mdash; Objects</div>
+      <div class="dim-items"></div>
+    </div>
+  </div>
+
+  <!-- MISSING DATA SECTION -->
+  <div class="missing-section">
+    <div class="missing-text">
+      <h2>Works with <strong>incomplete</strong> data</h2>
+      <p>
+        Real-world similarity data is often sparse: not every pair is measured.
+        SRF optimizes directly on observed entries, predicting missing similarities
+        from the learned dimensions.
+      </p>
+      <p>
+        Cross-validation on held-out entries selects the optimal number of dimensions k*,
+        preventing both underfitting and overfitting.
+      </p>
+    </div>
+    <div class="missing-visual">
+      <div class="mini-matrix">
+        <div class="label">Observed (sparse)</div>
+        <svg id="matObs" width="160" height="160" viewBox="0 0 160 160"></svg>
+      </div>
+      <div class="flow-arrow-big">&rarr;</div>
+      <div class="mini-matrix">
+        <div class="label">Predicted (complete)</div>
+        <svg id="matPred" width="160" height="160" viewBox="0 0 160 160"></svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TOOLTIP -->
+<div class="tooltip" id="tooltip">
+  <div class="tt-name"></div>
+  <div class="tt-bars"></div>
+</div>
+
+<script>
+// ===========================================================================
+// DATA
+// ===========================================================================
+const ROSE   = '#CC6677';
+const TEAL   = '#44AA99';
+const INDIGO = '#332288';
+const SAND   = '#DDCC77';
+const GRAY   = '#999999';
+const GRAY_LT = '#CCCCCC';
+const GRAY_PL = '#E8E8E8';
+
+const DIM_COLORS = [ROSE, TEAL, INDIGO];
+const DIM_SOFT = ['#E6B3BB', '#A3D4CC', '#9990C4'];
+
+// Items with their true dimension loadings (W matrix)
+// w = [d1_loading, d2_loading, d3_loading]
+const ITEMS = [
+  { name: 'lion',   w: [0.95, 0.00, 0.00], dim: 0 },
+  { name: 'bird',   w: [0.88, 0.05, 0.00], dim: 0 },
+  { name: 'fish',   w: [0.82, 0.10, 0.00], dim: 0 },
+  { name: 'owl',    w: [0.78, 0.08, 0.00], dim: 0 },
+  { name: 'bat',    w: [0.70, 0.00, 0.05], dim: 0 },
+  { name: 'leaf',   w: [0.05, 0.92, 0.00], dim: 1 },
+  { name: 'fern',   w: [0.00, 0.88, 0.00], dim: 1 },
+  { name: 'moss',   w: [0.00, 0.80, 0.00], dim: 1 },
+  { name: 'berry',  w: [0.12, 0.75, 0.00], dim: 1 },
+  { name: 'clam',   w: [0.00, 0.60, 0.10], dim: 1 },
+  { name: 'globe',  w: [0.00, 0.00, 0.92], dim: 2 },
+  { name: 'coin',   w: [0.00, 0.00, 0.85], dim: 2 },
+  { name: 'hoop',   w: [0.00, 0.00, 0.80], dim: 2 },
+  { name: 'ball',   w: [0.04, 0.00, 0.72], dim: 2 },
+  { name: 'clay',   w: [0.00, 0.15, 0.55], dim: 2 },
+];
+
+const N = ITEMS.length;
+const CX = 550, CY = 270;  // center of stage
+
+// Compute similarity matrix S = W * W^T
+function computeSimilarity(i, j) {
+  let s = 0;
+  for (let d = 0; d < 3; d++) s += ITEMS[i].w[d] * ITEMS[j].w[d];
+  return s;
+}
+
+// ===========================================================================
+// POSITIONS FOR EACH STATE
+// ===========================================================================
+
+// State 0: Circle layout (chord-diagram style)
+function circlePositions() {
+  const R = 200;
+  return ITEMS.map((item, i) => {
+    const angle = (i / N) * 2 * Math.PI - Math.PI / 2;
+    return { x: CX + R * Math.cos(angle), y: CY + R * Math.sin(angle) };
+  });
+}
+
+// State 1: Partially separated -- items drift toward their dimension cluster
+function clusterPositions() {
+  const centers = [
+    { x: CX - 260, y: CY },    // D1 (animals) left
+    { x: CX,       y: CY + 40 },  // D2 (nature) center-bottom
+    { x: CX + 260, y: CY },    // D3 (objects) right
+  ];
+  const R = 100;
+  const counts = [0, 0, 0];
+  const dimItems = [[], [], []];
+  ITEMS.forEach((item, i) => { dimItems[item.dim].push(i); });
+
+  return ITEMS.map((item, i) => {
+    const d = item.dim;
+    const idx = dimItems[d].indexOf(i);
+    const n = dimItems[d].length;
+    const angle = (idx / n) * 2 * Math.PI - Math.PI / 2;
+    const r = R * 0.55;
+    return {
+      x: centers[d].x + r * Math.cos(angle),
+      y: centers[d].y + r * Math.sin(angle),
+    };
+  });
+}
+
+// State 2: Clean dimension columns
+function columnPositions() {
+  const colX = [CX - 320, CX, CX + 320];
+  const dimItems = [[], [], []];
+  ITEMS.forEach((item, i) => { dimItems[item.dim].push(i); });
+
+  return ITEMS.map((item, i) => {
+    const d = item.dim;
+    const idx = dimItems[d].indexOf(i);
+    const n = dimItems[d].length;
+    const spacing = 60;
+    const startY = CY - ((n - 1) * spacing) / 2;
+    return {
+      x: colX[d],
+      y: startY + idx * spacing,
+    };
+  });
+}
+
+const POSITIONS = [circlePositions(), clusterPositions(), columnPositions()];
+
+// ===========================================================================
+// SVG HELPERS
+// ===========================================================================
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+function svgEl(tag, attrs) {
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  return el;
+}
+
+// ===========================================================================
+// BUILD THE MAIN SVG
+// ===========================================================================
+const svg = document.getElementById('mainSvg');
+let currentStep = 0;
+
+// -- Edges (similarity connections)
+const edges = [];
+for (let i = 0; i < N; i++) {
+  for (let j = i + 1; j < N; j++) {
+    const s = computeSimilarity(i, j);
+    if (s > 0.02) {
+      edges.push({ i, j, s });
+    }
+  }
+}
+
+const edgeGroup = svgEl('g', { class: 'edges' });
+svg.appendChild(edgeGroup);
+
+const edgeEls = edges.map(e => {
+  const sameDim = ITEMS[e.i].dim === ITEMS[e.j].dim;
+  const color = sameDim ? DIM_COLORS[ITEMS[e.i].dim] : GRAY_LT;
+  const line = svgEl('path', {
+    fill: 'none',
+    stroke: color,
+    'stroke-width': Math.max(0.5, e.s * 3),
+    opacity: Math.min(0.6, e.s * 0.8),
+    'stroke-linecap': 'round',
+  });
+  line._edge = e;
+  edgeGroup.appendChild(line);
+  return line;
+});
+
+// -- Dimension blobs (visible in states 1, 2)
+const blobGroup = svgEl('g', { class: 'blobs' });
+svg.appendChild(blobGroup);
+
+const blobs = DIM_COLORS.map((color, d) => {
+  const el = svgEl('ellipse', {
+    fill: DIM_SOFT[d],
+    opacity: 0,
+    rx: 0, ry: 0,
+  });
+  blobGroup.appendChild(el);
+  return el;
+});
+
+// -- Dimension labels (visible in states 1, 2)
+const dimLabels = ['Animals', 'Nature', 'Objects'];
+const dimLabelEls = dimLabels.map((label, d) => {
+  const el = svgEl('text', {
+    fill: DIM_COLORS[d],
+    'font-size': '13',
+    'font-weight': '600',
+    'text-anchor': 'middle',
+    'letter-spacing': '2',
+    opacity: 0,
+  });
+  el.textContent = label.toUpperCase();
+  svg.appendChild(el);
+  return el;
+});
+
+// -- Nodes
+const nodeGroup = svgEl('g', { class: 'nodes' });
+svg.appendChild(nodeGroup);
+
+const nodeEls = ITEMS.map((item, i) => {
+  const g = svgEl('g', { cursor: 'pointer' });
+
+  // Outer ring (dimension color, grows in later states)
+  const ring = svgEl('circle', {
+    r: 22,
+    fill: 'white',
+    stroke: GRAY_LT,
+    'stroke-width': 2,
+  });
+  g.appendChild(ring);
+
+  // Inner dot
+  const dot = svgEl('circle', {
+    r: 4,
+    fill: GRAY,
+  });
+  g.appendChild(dot);
+
+  // Label
+  const text = svgEl('text', {
+    y: 34,
+    'text-anchor': 'middle',
+    'font-size': '10',
+    fill: GRAY,
+    'font-weight': '500',
+  });
+  text.textContent = item.name;
+  g.appendChild(text);
+
+  g._ring = ring;
+  g._dot = dot;
+  g._text = text;
+  g._idx = i;
+
+  // Hover events
+  g.addEventListener('mouseenter', (ev) => onNodeHover(i, ev));
+  g.addEventListener('mouseleave', onNodeLeave);
+
+  nodeGroup.appendChild(g);
+  return g;
+});
+
+// -- W-bar mini charts (visible in state 2, inside node circles)
+const wBarGroups = ITEMS.map((item, i) => {
+  const g = svgEl('g', { opacity: 0 });
+  const barW = 5;
+  const barGap = 2;
+  const totalW = 3 * barW + 2 * barGap;
+  const startX = -totalW / 2;
+  const maxH = 18;
+
+  for (let d = 0; d < 3; d++) {
+    const h = item.w[d] * maxH;
+    const bar = svgEl('rect', {
+      x: startX + d * (barW + barGap),
+      y: -h / 2,
+      width: barW,
+      height: Math.max(0.5, h),
+      rx: 1.5,
+      fill: DIM_COLORS[d],
+    });
+    g.appendChild(bar);
+  }
+  nodeEls[i].appendChild(g);
+  return g;
+});
+
+// ===========================================================================
+// UPDATE FUNCTION
+// ===========================================================================
+function setStep(step) {
+  currentStep = step;
+  const pos = POSITIONS[step];
+
+  // Update buttons
+  document.querySelectorAll('.btn').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.step) === step);
+  });
+
+  // Update label
+  const labels = [
+    '<strong>15 items</strong> connected by pairwise similarity. Structure is hidden in the tangle.',
+    'SRF decomposes the similarity matrix into <strong>3 sparse dimensions</strong>. Items cluster by their dominant factor.',
+    'Each item is a <strong>sparse recipe</strong> of dimensions. Most load on just one or two.',
+  ];
+  document.getElementById('stepLabel').innerHTML = labels[step];
+
+  // Animate nodes
+  nodeEls.forEach((g, i) => {
+    const p = pos[i];
+    g.style.transition = 'transform 0.8s cubic-bezier(0.4, 0, 0.2, 1)';
+    g.style.transform = `translate(${p.x}px, ${p.y}px)`;
+
+    const dimColor = DIM_COLORS[ITEMS[i].dim];
+    const ring = g._ring;
+    const dot = g._dot;
+    const text = g._text;
+
+    if (step === 0) {
+      ring.setAttribute('stroke', GRAY_LT);
+      ring.setAttribute('stroke-width', '2');
+      ring.setAttribute('r', '22');
+      ring.setAttribute('fill', 'white');
+      dot.setAttribute('fill', GRAY);
+      dot.setAttribute('r', '4');
+      dot.setAttribute('opacity', '1');
+      text.setAttribute('fill', GRAY);
+      text.setAttribute('font-size', '10');
+      wBarGroups[i].setAttribute('opacity', '0');
+    } else if (step === 1) {
+      ring.setAttribute('stroke', dimColor);
+      ring.setAttribute('stroke-width', '2.5');
+      ring.setAttribute('r', '22');
+      ring.setAttribute('fill', 'white');
+      dot.setAttribute('fill', dimColor);
+      dot.setAttribute('r', '5');
+      dot.setAttribute('opacity', '1');
+      text.setAttribute('fill', dimColor);
+      text.setAttribute('font-size', '11');
+      wBarGroups[i].setAttribute('opacity', '0');
+    } else {
+      ring.setAttribute('stroke', dimColor);
+      ring.setAttribute('stroke-width', '2.5');
+      ring.setAttribute('r', '22');
+      ring.setAttribute('fill', 'white');
+      dot.setAttribute('opacity', '0');
+      text.setAttribute('fill', dimColor);
+      text.setAttribute('font-size', '11');
+      wBarGroups[i].setAttribute('opacity', '1');
+    }
+  });
+
+  // Animate edges
+  setTimeout(() => {
+    edgeEls.forEach(line => {
+      const e = line._edge;
+      const p1 = pos[e.i];
+      const p2 = pos[e.j];
+      const sameDim = ITEMS[e.i].dim === ITEMS[e.j].dim;
+
+      // Curved path
+      const mx = (p1.x + p2.x) / 2;
+      const my = (p1.y + p2.y) / 2;
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const curvature = step === 0 ? 0.25 : 0.15;
+      const cx = mx - dy * curvature;
+      const cy = my + dx * curvature;
+      line.setAttribute('d', `M${p1.x},${p1.y} Q${cx},${cy} ${p2.x},${p2.y}`);
+
+      if (step === 0) {
+        // All connections visible, colored by similarity strength
+        const intensity = Math.min(0.5, e.s * 0.7);
+        line.setAttribute('stroke', '#6EA6CD');
+        line.setAttribute('opacity', intensity);
+        line.setAttribute('stroke-width', Math.max(0.5, e.s * 2.5));
+      } else if (step === 1) {
+        // Within-cluster connections bright, between fade
+        if (sameDim) {
+          line.setAttribute('stroke', DIM_COLORS[ITEMS[e.i].dim]);
+          line.setAttribute('opacity', Math.min(0.5, e.s * 0.7));
+          line.setAttribute('stroke-width', Math.max(0.8, e.s * 3));
+        } else {
+          line.setAttribute('stroke', GRAY_LT);
+          line.setAttribute('opacity', 0.08);
+          line.setAttribute('stroke-width', 0.5);
+        }
+      } else {
+        // Only within-cluster, very subtle
+        if (sameDim) {
+          line.setAttribute('stroke', DIM_COLORS[ITEMS[e.i].dim]);
+          line.setAttribute('opacity', 0.12);
+          line.setAttribute('stroke-width', 1);
+        } else {
+          line.setAttribute('opacity', 0);
+        }
+      }
+    });
+  }, 50);
+
+  // Animate blobs and labels
+  const clusterPos = POSITIONS[1];
+  const colPos = POSITIONS[2];
+  const dimItems = [[], [], []];
+  ITEMS.forEach((item, i) => { dimItems[item.dim].push(i); });
+
+  blobs.forEach((blob, d) => {
+    if (step === 0) {
+      blob.setAttribute('opacity', '0');
+    } else {
+      const items = dimItems[d];
+      const positions = step === 1 ? clusterPos : colPos;
+      let sumX = 0, sumY = 0;
+      items.forEach(i => { sumX += positions[i].x; sumY += positions[i].y; });
+      const cx = sumX / items.length;
+      const cy = sumY / items.length;
+
+      const rx = step === 1 ? 120 : 60;
+      const ry = step === 1 ? 120 : items.length * 35;
+
+      blob.setAttribute('cx', cx);
+      blob.setAttribute('cy', cy);
+      blob.setAttribute('rx', rx);
+      blob.setAttribute('ry', ry);
+      blob.setAttribute('opacity', '0.15');
+    }
+  });
+
+  dimLabelEls.forEach((el, d) => {
+    if (step === 0) {
+      el.setAttribute('opacity', '0');
+    } else {
+      const items = dimItems[d];
+      const positions = step === 1 ? clusterPos : colPos;
+      let sumX = 0;
+      items.forEach(i => { sumX += positions[i].x; });
+      const cx = sumX / items.length;
+
+      const topY = Math.min(...items.map(i => positions[i].y));
+      el.setAttribute('x', cx);
+      el.setAttribute('y', topY - (step === 1 ? 130 : 50));
+      el.setAttribute('opacity', '1');
+    }
+  });
+
+  // Dimension cards
+  document.querySelectorAll('.dim-card').forEach(card => {
+    card.classList.toggle('active', step >= 1);
+  });
+
+  // Animate bar fills in cards
+  if (step >= 1) {
+    setTimeout(() => {
+      document.querySelectorAll('.dim-card .bar-fill').forEach(fill => {
+        fill.style.width = fill.dataset.w + '%';
+      });
+    }, 300);
+  } else {
+    document.querySelectorAll('.dim-card .bar-fill').forEach(fill => {
+      fill.style.width = '0%';
+    });
+  }
+}
+
+// ===========================================================================
+// HOVER INTERACTIONS
+// ===========================================================================
+const tooltip = document.getElementById('tooltip');
+
+function onNodeHover(idx, ev) {
+  const item = ITEMS[idx];
+
+  // Highlight connections
+  edgeEls.forEach(line => {
+    const e = line._edge;
+    if (e.i === idx || e.j === idx) {
+      line.setAttribute('opacity', Math.min(0.8, e.s));
+      line.setAttribute('stroke-width', Math.max(1.5, e.s * 4));
+    } else if (currentStep > 0) {
+      line.style.opacity = '0.02';
+    }
+  });
+
+  // Dim other nodes
+  nodeEls.forEach((g, i) => {
+    if (i !== idx) {
+      const connected = edges.some(e =>
+        (e.i === idx && e.j === i) || (e.j === idx && e.i === i)
+      );
+      g.style.opacity = connected ? '1' : '0.2';
+    }
+  });
+
+  // Show tooltip
+  const ttName = tooltip.querySelector('.tt-name');
+  const ttBars = tooltip.querySelector('.tt-bars');
+  ttName.textContent = item.name;
+  ttBars.innerHTML = '';
+  for (let d = 0; d < 3; d++) {
+    const bar = document.createElement('div');
+    bar.className = 'tt-bar';
+    bar.style.backgroundColor = DIM_COLORS[d];
+    bar.style.height = Math.max(1, item.w[d] * 20) + 'px';
+    ttBars.appendChild(bar);
+  }
+
+  tooltip.classList.add('visible');
+  tooltip.style.left = (ev.clientX + 16) + 'px';
+  tooltip.style.top = (ev.clientY - 10) + 'px';
+}
+
+function onNodeLeave() {
+  edgeEls.forEach(line => {
+    const e = line._edge;
+    const sameDim = ITEMS[e.i].dim === ITEMS[e.j].dim;
+    if (currentStep === 0) {
+      line.setAttribute('opacity', Math.min(0.5, e.s * 0.7));
+      line.setAttribute('stroke-width', Math.max(0.5, e.s * 2.5));
+    } else if (currentStep === 1) {
+      line.setAttribute('opacity', sameDim ? Math.min(0.5, e.s * 0.7) : 0.08);
+      line.setAttribute('stroke-width', sameDim ? Math.max(0.8, e.s * 3) : 0.5);
+    } else {
+      line.setAttribute('opacity', sameDim ? 0.12 : 0);
+      line.setAttribute('stroke-width', sameDim ? 1 : 0);
+    }
+    line.style.opacity = '';
+  });
+
+  nodeEls.forEach(g => { g.style.opacity = '1'; });
+  tooltip.classList.remove('visible');
+}
+
+// ===========================================================================
+// BUILD DIMENSION CARDS
+// ===========================================================================
+function buildDimCards() {
+  const dimItems = [[], [], []];
+  ITEMS.forEach((item, i) => { dimItems[item.dim].push(i); });
+
+  document.querySelectorAll('.dim-card').forEach((card, d) => {
+    const container = card.querySelector('.dim-items');
+    const sorted = [...dimItems[d]].sort((a, b) => ITEMS[b].w[d] - ITEMS[a].w[d]);
+
+    sorted.forEach(idx => {
+      const item = ITEMS[idx];
+      const pct = Math.round(item.w[d] * 100);
+      const div = document.createElement('div');
+      div.className = 'dim-item';
+      div.innerHTML = `
+        <span class="item-name">${item.name}</span>
+        <div class="bar-track">
+          <div class="bar-fill" data-w="${pct}"></div>
+        </div>
+        <span class="item-val">${(item.w[d]).toFixed(2)}</span>
+      `;
+      container.appendChild(div);
+    });
+  });
+}
+
+// ===========================================================================
+// BUILD MINI MATRICES (missing data section)
+// ===========================================================================
+function buildMiniMatrices() {
+  const size = 9;
+  const cellSize = 160 / size;
+  const missingRate = 0.3;
+
+  // Generate a small similarity matrix
+  const subset = [0, 1, 3, 5, 6, 8, 10, 11, 13]; // subset of items
+  const S = [];
+  for (let i = 0; i < size; i++) {
+    S.push([]);
+    for (let j = 0; j < size; j++) {
+      S[i].push(computeSimilarity(subset[i], subset[j]));
+    }
+  }
+
+  // Random mask
+  const mask = [];
+  for (let i = 0; i < size; i++) {
+    mask.push([]);
+    for (let j = 0; j < size; j++) {
+      mask[i].push(i === j || Math.random() > missingRate);
+    }
+  }
+  // Make symmetric
+  for (let i = 0; i < size; i++) {
+    for (let j = i + 1; j < size; j++) {
+      mask[j][i] = mask[i][j];
+    }
+  }
+
+  const svgObs = document.getElementById('matObs');
+  const svgPred = document.getElementById('matPred');
+
+  for (let i = 0; i < size; i++) {
+    for (let j = 0; j < size; j++) {
+      const val = S[i][j];
+      // Blue scale: high similarity = dark blue, low = light
+      const t = Math.max(0, Math.min(1, val));
+      const r = Math.round(234 - t * 224);
+      const g = Math.round(244 - t * 170);
+      const b = Math.round(248 - t * 138);
+      const color = `rgb(${r},${g},${b})`;
+
+      // Predicted (complete)
+      const rectPred = svgEl('rect', {
+        x: j * cellSize + 1, y: i * cellSize + 1,
+        width: cellSize - 2, height: cellSize - 2,
+        rx: 1, fill: color,
+      });
+      svgPred.appendChild(rectPred);
+
+      // Observed (with holes)
+      if (mask[i][j]) {
+        const rectObs = svgEl('rect', {
+          x: j * cellSize + 1, y: i * cellSize + 1,
+          width: cellSize - 2, height: cellSize - 2,
+          rx: 1, fill: color,
+        });
+        svgObs.appendChild(rectObs);
+      } else {
+        // Missing entry -- subtle pattern
+        const rectMiss = svgEl('rect', {
+          x: j * cellSize + 1, y: i * cellSize + 1,
+          width: cellSize - 2, height: cellSize - 2,
+          rx: 1, fill: '#F0F0F0', stroke: '#E0E0E0', 'stroke-width': 0.5,
+          'stroke-dasharray': '2,2',
+        });
+        svgObs.appendChild(rectMiss);
+      }
+    }
+  }
+}
+
+// ===========================================================================
+// EVENT LISTENERS
+// ===========================================================================
+document.querySelectorAll('.btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    setStep(parseInt(btn.dataset.step));
+  });
+});
+
+// Mouse move for tooltip tracking
+document.addEventListener('mousemove', (ev) => {
+  if (tooltip.classList.contains('visible')) {
+    tooltip.style.left = (ev.clientX + 16) + 'px';
+    tooltip.style.top = (ev.clientY - 10) + 'px';
+  }
+});
+
+// ===========================================================================
+// INIT
+// ===========================================================================
+buildDimCards();
+buildMiniMatrices();
+
+// Apply CSS transitions to all SVG elements
+const style = document.createElement('style');
+style.textContent = `
+  .edges path { transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
+  .nodes g { transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease; }
+  .nodes circle, .nodes text { transition: all 0.5s ease; }
+  .blobs ellipse { transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
+  svg text { transition: all 0.5s ease; }
+`;
+document.head.appendChild(style);
+
+// Set initial state
+setStep(0);
+</script>
+</body>
+</html>

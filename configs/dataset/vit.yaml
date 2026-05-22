@@ -2,7 +2,7 @@
 
 name: vit
 type: neural_features
-path: /SSD/projects/deepsim/raw/features/dataset/openai/ViT-L-14
+path: ${paths.ssd}/projects/deepsim/raw/features/dataset/openai/ViT-L-14
 
 # Similarity computation
 similarity_fn: gaussian_kernel

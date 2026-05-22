@@ -30,15 +30,19 @@ def load_shared_data(
     return spose_embedding, indices_48, rsm_48_true
 
 
-def load_triplets(things_data: Path | str, number="4.7mio") -> np.ndarray:
-    path = (
-        things_data / "triplets_47"
-        if number == "4.7mio"
-        else things_data / "triplets_147"
+def load_triplets(
+    things_data: Path | str,
+    number: str = "4.7mio",
+) -> tuple[np.ndarray, np.ndarray]:
+    from datasets import load_dataset
+
+    ds = load_dataset(
+        "things_behavior",
+        root=things_data,
+        triplet_number=number,
+        build_rsm=False,
     )
-    train_triplets = np.loadtxt(path / "trainset.txt").astype(int)
-    validation_triplets = np.loadtxt(path / "validationset.txt").astype(int)
-    return train_triplets, validation_triplets
+    return ds.train_triplets, ds.validation_triplets
 
 
 def load_spose_embedding(

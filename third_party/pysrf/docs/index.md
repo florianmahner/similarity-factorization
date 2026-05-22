@@ -4,17 +4,17 @@ hide:
   - toc
 ---
 
-# PySRF
+# pysrf
 
 **Discover interpretable dimensions from representational similarities.**
 
-Representational similarity is a widely used tool in cognitive science and machine learning. PySRF decomposes similarity matrices in sparse, non-negative dimensions that reveal the latent structure underlying similarities.
+Representational similarity is a widely used tool in cognitive science and machine learning. pysrf decomposes similarity matrices into sparse, non-negative dimensions that reveal the latent structure underlying similarities.
 
-Say we have a similarity matrix $S$, PySRF finds a non-negative embedding $W$ such that $S \approx WW^\top$. Each column of $W$ is a dimension, and each row gives for an item a numeric weight alongside each dimensions. Because dimensions are non-negative and sparse (e.g. many entries drive toward zero), the embedding is an additive, compositional representation where dimensions contribute positively without canceling each other out.
+Given a similarity matrix $S$, pysrf finds a non-negative embedding $W$ such that $S \approx WW^\top$. Each column of $W$ is a dimension, and each row gives for an item a numeric weight alongside each dimension. Because dimensions are non-negative and sparse (for example, many entries drive toward zero), the embedding is an additive, compositional representation where dimensions contribute positively without canceling each other out.
 
-## When to use PySRF
+## When to use pysrf
 
-PySRF works very broadly on in principle any (symmetric) similarity matix. These can come from different domains, for example:
+pysrf works broadly on any symmetric similarity matrix. These can come from different domains, for example:
 
 - **Behavioral data**: any task that yields a measure of similarity between items.
 - **Neural data**: representational similarity matrices derived from fMRI, electrophysiology, or other neural recordings.
@@ -22,8 +22,8 @@ PySRF works very broadly on in principle any (symmetric) similarity matix. These
 
 ## Key capabilities
 
-- **Missing data**: real-world similarity matrices are sometimes incomplete and some entries $i,j$ in a similarity matrix not observed. PySRF can handle missing entries naturally.
-- **Dimensionality estimation**: the number of optimal dimensions can be estimated via cross-validation
+- **Missing data**: real-world similarity matrices are sometimes incomplete and some entries $i,j$ in a similarity matrix not observed. pysrf can handle missing entries naturally.
+- **Dimensionality estimation**: `estimate_rank` estimates rank and `cross_val_score` confirms nearby ranks
 - **Fast solver**: a Cython-accelerated solver provides 10-50x
   speedup over pure Python.
 
@@ -31,14 +31,14 @@ PySRF works very broadly on in principle any (symmetric) similarity matix. These
 
 ```python
 import numpy as np
-from pysrf import SRF
+from pysrf import SRF, estimate_rank
 
 # Your similarity matrix (e.g., from behavioral judgments or neural data)
 s = np.random.rand(100, 100)
 s = (s + s.T) / 2
 
-# Decompose into 10 interpretable dimensions
-model = SRF(rank=10, max_outer=20, random_state=42)
+estimate = estimate_rank(s, random_state=42)
+model = SRF(rank=estimate.rank, max_outer=20, random_state=42)
 w = model.fit_transform(s)
 
 # Reconstruct the similarity matrix from the dimensions

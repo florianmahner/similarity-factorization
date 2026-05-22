@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>General Figure: Method Overview - Design Concepts</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 1200px; margin: 40px auto; padding: 0 20px; color: #333; background: #fafafa; }
+  h1 { font-size: 22px; border-bottom: 2px solid #44AA99; padding-bottom: 8px; }
+  h2 { font-size: 16px; color: #555; margin-top: 32px; }
+  h3 { font-size: 14px; color: #44AA99; }
+  .row { display: flex; gap: 12px; margin: 16px 0; align-items: stretch; }
+  .panel { flex: 1; background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; text-align: center; }
+  .panel h4 { margin: 0 0 8px; font-size: 12px; color: #888; }
+  .panel .icon { font-size: 40px; margin: 12px 0; }
+  .panel .desc { font-size: 11px; color: #666; line-height: 1.4; }
+  .arrow { display: flex; align-items: center; font-size: 24px; color: #ccc; padding: 0 4px; }
+  .option { background: white; border: 2px solid #e8e8e8; border-radius: 10px; padding: 20px; margin: 12px 0; cursor: pointer; transition: border-color 0.2s; }
+  .option:hover { border-color: #44AA99; }
+  .option h3 { margin-top: 0; }
+  .highlight { background: #f0f7f5; border-left: 3px solid #44AA99; padding: 16px; margin: 16px 0; border-radius: 0 8px 8px 0; }
+  .colors { display: flex; gap: 8px; margin: 8px 0; }
+  .swatch { width: 24px; height: 24px; border-radius: 4px; display: inline-block; }
+  .mockup { border: 2px solid #ddd; border-radius: 8px; padding: 8px; background: #fff; margin: 16px 0; }
+  .mockup-label { font-size: 10px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+
+  /* Mini RSM mockup */
+  .rsm-grid { display: grid; gap: 1px; margin: 8px auto; }
+  .rsm-cell { width: 100%; aspect-ratio: 1; border-radius: 1px; }
+
+  /* Flow diagram */
+  .flow { display: flex; align-items: center; gap: 6px; justify-content: center; padding: 12px; }
+  .flow-box { padding: 8px 14px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+  .flow-arrow { color: #ccc; font-size: 18px; }
+</style>
+</head>
+<body>
+
+<h1>General Figure: Method Overview (Fig. 1)</h1>
+<p style="color:#888;">This is the first figure readers see. It must explain SRF clearly in two rows at 180mm x 80mm.</p>
+
+<div class="colors">
+  <span style="font-size:11px; color:#888;">Our palette:</span>
+  <span class="swatch" style="background:#44AA99;" title="TEAL"></span>
+  <span class="swatch" style="background:#CC6677;" title="ROSE"></span>
+  <span class="swatch" style="background:#332288;" title="INDIGO"></span>
+  <span class="swatch" style="background:#DDCC77;" title="SAND"></span>
+  <span class="swatch" style="background:#AA4499;" title="PURPLE"></span>
+</div>
+
+<hr>
+
+<h2>Row A: "Interpretable dimensions from similarities"</h2>
+<p>The hero row. Shows: you give SRF a similarity matrix, it returns sparse interpretable dimensions.</p>
+
+<div class="mockup">
+  <div class="mockup-label">Current layout (4 panels)</div>
+  <div class="row">
+    <div class="panel">
+      <h4>RSM + Arc Diagram</h4>
+      <div class="icon">📊</div>
+      <div class="desc">Similarity matrix as heatmap with arc connections on top showing item relationships. Colored dots = items.</div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="panel">
+      <h4>Graph Representation</h4>
+      <div class="icon">🕸️</div>
+      <div class="desc">Same data as node-link graph with soft colored community blobs (D1, D2, D3).</div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="panel">
+      <h4>W Matrix (Bars)</h4>
+      <div class="icon">📊</div>
+      <div class="desc">Horizontal stacked bars per item showing dimension loadings. Item labels + colored dots. Shows sparsity.</div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="panel">
+      <h4>Reconstructed RSM</h4>
+      <div class="icon">🟦</div>
+      <div class="desc">WW^T reordered by dimension. Block-diagonal structure with D1/D2/D3 headers.</div>
+    </div>
+  </div>
+</div>
+
+<h3>What should we change?</h3>
+
+<div class="option" id="opt-a1">
+  <h3>Option A: Keep current structure, polish visuals</h3>
+  <div class="flow">
+    <span class="flow-box" style="background:#e8f4f1; color:#44AA99;">RSM heatmap<br>+ arc diagram</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-box" style="background:#f5f0e0; color:#b5a030;">Graph with<br>community blobs</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-box" style="background:#fce8ec; color:#CC6677;">Sparse W<br>horizontal bars</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-box" style="background:#e8e4f0; color:#332288;">Block-diagonal<br>reconstruction</span>
+  </div>
+  <p style="font-size:12px; color:#666;">Same 4 panels but generated programmatically with real Mur92 data. The arc diagram is visually distinctive and worth keeping. Regenerate graph using the same style as the SWOW schematic we just built.</p>
+</div>
+
+<div class="option" id="opt-a2">
+  <h3>Option B: Simplify to 3 panels (drop graph)</h3>
+  <div class="flow">
+    <span class="flow-box" style="background:#e8f4f1; color:#44AA99;">RSM heatmap<br>+ arc diagram</span>
+    <span class="flow-arrow">→ S ≈ WW<sup>T</sup> →</span>
+    <span class="flow-box" style="background:#fce8ec; color:#CC6677;">Sparse W bars<br>with item images</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-box" style="background:#e8e4f0; color:#332288;">Original vs<br>Reconstructed</span>
+  </div>
+  <p style="font-size:12px; color:#666;">Removes the graph panel (redundant -- the W bars already show community structure). Uses THINGS images on the W bars for tangibility. Side-by-side S vs WW^T for reconstruction quality.</p>
+</div>
+
+<div class="option" id="opt-a3">
+  <h3>Option C: New narrative (RSM → Equation → W heatmap → Graph)</h3>
+  <div class="flow">
+    <span class="flow-box" style="background:#e8f4f1; color:#44AA99;">RSM with<br>item images</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-box" style="background:#f5f5f5; color:#666;">S ≈ WW<sup>T</sup><br>W ≥ 0, sparse</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-box" style="background:#fce8ec; color:#CC6677;">W as colored<br>heatmap grid</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-box" style="background:#f5f0e0; color:#b5a030;">Community graph<br>(like SWOW)</span>
+  </div>
+  <p style="font-size:12px; color:#666;">Ends with the graph (the "aha" moment) instead of starting with it. W shown as a heatmap grid (like the embedding matrix in the SWOW figure) rather than bars. More compact.</p>
+</div>
+
+<hr>
+
+<h2>Row B: "Imputation and dimensionality estimation"</h2>
+<p>Shows how SRF handles missing data and how to find the right rank k*.</p>
+
+<div class="mockup">
+  <div class="mockup-label">Current layout (4 panels)</div>
+  <div class="row">
+    <div class="panel">
+      <h4>Masked RSM</h4>
+      <div class="icon">❌</div>
+      <div class="desc">Similarity matrix with red □ (validation) and × (missing) marks overlaid.</div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="panel">
+      <h4>Graph + SRF Box</h4>
+      <div class="icon">📦</div>
+      <div class="desc">Node-link graph feeding into SRF box. Shows factorization step.</div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="panel">
+      <h4>Predicted RSM</h4>
+      <div class="icon">🟦</div>
+      <div class="desc">The full reconstructed matrix (no holes).</div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="panel">
+      <h4>Train/Val Curves</h4>
+      <div class="icon">📈</div>
+      <div class="desc">Error vs rank with train (black) and validation (green) crossing at k*.</div>
+    </div>
+  </div>
+</div>
+
+<h3>What should we change?</h3>
+
+<div class="option" id="opt-b1">
+  <h3>Option B1: Keep current (masking + CV)</h3>
+  <p style="font-size:12px; color:#666;">Same structure, just regenerate programmatically with real data. The masked RSM with red/× marks is visually clear. The train/val curve is a universal concept.</p>
+</div>
+
+<div class="option" id="opt-b2">
+  <h3>Option B2: Replace graph+SRF panel with coherence/kappa</h3>
+  <div class="flow">
+    <span class="flow-box" style="background:#e8f4f1; color:#44AA99;">Masked RSM<br>(train/val/missing)</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-box" style="background:#fce8ec; color:#CC6677;">Coherence surface<br>I[k,p]</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-box" style="background:#f5f0e0; color:#b5a030;">Kappa curve<br>with changepoint</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-box" style="background:#e8e4f0; color:#332288;">Predicted RSM<br>(complete)</span>
+  </div>
+  <p style="font-size:12px; color:#666;">Shows our actual rank selection method (kappa) instead of generic CV. More novel but more complex for a general audience.</p>
+</div>
+
+<div class="option" id="opt-b3">
+  <h3>Option B3: Simplified (2 panels: masking → train/val curves)</h3>
+  <div class="flow">
+    <span class="flow-box" style="background:#e8f4f1; color:#44AA99;">Observed RSM<br>with masking pattern</span>
+    <span class="flow-arrow">→ SRF at rank k →</span>
+    <span class="flow-box" style="background:#e8e4f0; color:#332288;">Train/Val error curves<br>with k* marked</span>
+  </div>
+  <p style="font-size:12px; color:#666;">Just the essential idea: mask entries, fit at different ranks, find the minimum. Two big panels instead of four small ones. Leaves more space for Row A.</p>
+</div>
+
+<hr>
+
+<div class="highlight">
+  <h3>Key constraints:</h3>
+  <ul style="font-size:12px; margin:0;">
+    <li><strong>180mm × ~80mm</strong> (2 rows at 40mm each)</li>
+    <li><strong>5pt Arial</strong>, matching other figures</li>
+    <li><strong>Real data</strong> from Mur92 (92 items, 15 subjects) or Peterson (120 items)</li>
+    <li><strong>Programmatic</strong> -- Python + SVG, no manual Illustrator work</li>
+    <li><strong>Our color palette</strong>: TEAL, ROSE, INDIGO, SAND, PURPLE</li>
+    <li>Must tell the story to someone who has <strong>never seen SRF before</strong></li>
+  </ul>
+</div>
+
+<p style="color:#888; font-size:12px; margin-top:32px;">Open this file in your browser or Cursor's preview. Tell me which combination of Row A + Row B options you prefer, or describe a different direction.</p>
+
+</body>
+</html>

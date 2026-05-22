@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 from omegaconf import DictConfig
 
-from similarity.datasets import dispatch_dataset_builder
+from .datasets import dispatch_dataset_builder
 
 
 def get_rank_grid(ds_cfg: DictConfig) -> list[int]:

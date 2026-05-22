@@ -1,0 +1,69 @@
+# Thesis matplotlib style — Tol Muted palette
+# Usage: plt.style.use("path/to/thesis_style.mplstyle")
+
+# --- Color cycle: Rose, Teal, Indigo, Sand, Purple (lightness-spread) ---
+axes.prop_cycle: cycler('color', ['CC6677', '44AA99', '332288', 'DDCC77', 'AA4499'])
+
+# --- Figure ---
+figure.facecolor: white
+figure.dpi: 150
+savefig.dpi: 300
+savefig.facecolor: white
+savefig.bbox: tight
+savefig.pad_inches: 0.05
+
+# --- Font ---
+font.family: sans-serif
+font.sans-serif: Helvetica Neue, Helvetica, Arial, DejaVu Sans
+font.size: 9
+
+# --- Axes ---
+axes.linewidth: 0.6
+axes.spines.top: False
+axes.spines.right: False
+axes.labelsize: 9
+axes.titlesize: 10
+axes.titleweight: bold
+axes.titlepad: 8
+axes.facecolor: white
+axes.edgecolor: 333333
+axes.labelcolor: 333333
+axes.grid: False
+
+# --- Ticks ---
+xtick.major.width: 0.5
+ytick.major.width: 0.5
+xtick.major.size: 3.5
+ytick.major.size: 3.5
+xtick.minor.visible: False
+ytick.minor.visible: False
+xtick.labelsize: 7.5
+ytick.labelsize: 7.5
+xtick.color: 333333
+ytick.color: 333333
+xtick.direction: out
+ytick.direction: out
+
+# --- Legend ---
+legend.fontsize: 7.5
+legend.frameon: False
+legend.handlelength: 1.5
+legend.borderpad: 0.4
+legend.labelspacing: 0.4
+
+# --- Lines ---
+lines.linewidth: 1.5
+lines.markersize: 5
+lines.markeredgewidth: 0.6
+lines.markeredgecolor: white
+
+# --- Scatter ---
+scatter.edgecolors: white
+
+# --- Grid (if turned on) ---
+grid.color: e0e0e0
+grid.linewidth: 0.4
+grid.alpha: 0.7
+
+# --- Image (heatmaps) ---
+image.cmap: RdBu_r

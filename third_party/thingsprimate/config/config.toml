@@ -1,0 +1,144 @@
+[paths]
+# These paths are relative to the 'publish' directory root.
+data_dir = "data"
+functions_dir = "functions"
+fig_dir = "figures"
+results_dir = "data/results"
+mri_dir = "data/human/mri"
+macq_dir = "data/macaque"
+macq_time_averaged_dir = "data/macaque/time_averaged"
+macq_time_resolved_dir = "data/macaque/time_resolved"
+things_dir = "data/things"
+img_dir = "data/images"
+dnn_dir = "data/dnn"
+cache_file = "data/results/cca_state.pkl"
+categories_tsv = "data/things/Categories_final_20200131.tsv"
+
+[external_paths]
+# This is an absolute path to data that might live outside the project.
+mri_betas_base = "/LOCAL/ocontier/thingsmri/bids/derivatives/betas_csv"
+# mri_betas_base = "/LOCAL/bree/THINGS-macq/publish/data/mri/betas_csv"
+
+[analysis]
+monkey_ids = ["N", "F"]
+human_subjects = ["01", "02", "03"]
+roi_monkey = "it"
+roi_human = [
+    "lLOC", "rLOC", "lFFA", "rFFA", 
+    "lPPA", "rPPA", "lEBA", "rEBA", 
+    "LO1 (prf)", "LO2 (prf)"
+]
+n_jobs = 120
+default_reliability = 0.0
+default_split = 0.0
+demean_groups = true # demean human fMRI based on run and session no.
+
+[hyperparameters]
+# Settings for CCA_families.py - final model fitting
+# Updated with best parameters from gridsearch and crossview
+[hyperparameters.cca_families]
+cross-species = { reg = 4.0, n_cc = 79 } # 10^4.0 = 1.00e+04
+human = { reg = 4.0, n_cc = 30 } # 10^4.0 = 1.00e+04  
+monkey = { reg = 2.7, n_cc = 77 } # 10^2.7 = 5.18e+02
+
+# Settings for param_gridsearch.py - hyperparameter optimization
+[hyperparameters.gridsearch]
+n_components = 10
+k_folds_inner = 3
+k_folds_outer = 3
+n_reps = 1
+reg_start = 1 #log10
+reg_stop = 7 #log10
+reg_num = 15 #lin spacing
+
+# Settings for param_crossview.py - statistical robustness testing
+[hyperparameters.crossview]
+n_cc = 100
+n_folds = 5
+n_reps_empirical = 5  # Number of repetitions for empirical CCA (with true labels)
+n_reps_null = 1       # Number of repetitions for each permutation in null distribution
+n_perm = 100
+alpha = 0.05
+perm_jobs = 0  # 0 = use n_jobs, >0 = specific number for permutations
+
+# Settings for inspect.py - visualization and inspection
+[hyperparameters.inspect]
+n_components_to_plot = 10
+n_images_radial_plot = 50
+
+# Settings for CCA+NMF post-processing
+[hyperparameters.cca_nmf]
+max_iter = 1000
+viz_components = { cross-species = 5, human-only = 3, monkey-only = 3 }
+
+# Settings for ADMM analysis
+[hyperparameters.admm]
+n_repeats = 5                # Number of cross-validation repeats
+observed_fraction = 0.3      # Fraction of data to use for training in each CV fold
+n_jobs = -1                # Number of parallel jobs (-1 = use all cores)
+use_fisher_z = true          # Fisher-z transform for RSM averaging
+rho = 1.0                    # ADMM penalty parameter (can be tuned)
+max_outer = 10               # Maximum ADMM outer iterations
+max_inner = 50               # Maximum iterations for w-subproblem
+tol = 1e-4                   # Convergence tolerance
+
+# Rank ranges for each family
+[hyperparameters.admm.rank_ranges]
+# all = [15, 20, 25, 30, 40, 50, 60, 70, 80]
+# human = [15, 20, 25, 30, 40, 50, 60, 70, 80]
+# monkey = [15, 20, 25, 30, 40, 50, 60, 70, 80]
+
+all = [20, 50]
+human = [20, 50]
+monkey = [20, 50]
+
+# Custom visualization ranks (optional override of CV best)
+[hyperparameters.admm.custom_ranks]
+
+[hyperparameters.viz]
+# Global viz controls used by viz_cca.py and viz_admm.py
+top_k = 5            # number of components in top_features
+rsm_top_n = 200      # ADMM RSM crop size
+ridge_pca_n = 250    # PCA components for CCA ridge view-wise models
+
+[hyperparameters.viz.cca]
+selected_components = { cross-species = [1,2,3,4], human = [1,2,3,4], monkey = [1,2,3,4] }
+
+[hyperparameters.viz.admm]
+# Defaults mirror current selections in viz_admm
+selected_components = { all = [1,10,20,47], human = [13,27,28,33], monkey = [12,42,46,53] }
+
+[plotting]
+shared_color = "#81B7B3"
+human_color = "#7c5799"
+monkey_color = "#bda855"
+significant = "#961a1a"
+chance_color = "#000000"
+savefig_format = "pdf"
+# Colors for component visualization
+positive_color = "#A8393F"
+negative_color = "#366EA9"
+semantic_color = "#4a8f4f"
+
+# Small within-class differences, larger between-class differences
+visual_range = [0.9, 0.92]     # Very light gray (tight range)
+behavioral_range = [0.6, 0.62]  # Medium gray (tight range)
+semantic_range = [0.2, 0.22]    # Dark gray (tight range)
+# Math cognition feature colors (royal blues - bold, professional)
+symbol_color = "#2874A6"        # Royal blue
+icon_color = "#5499C7"          # Medium blue
+numerosity_color = "#85C1E2"    # Light blue
+model_arch_spacing = 0.0
+
+[plotting.model_arch]
+cnn = { models = ["alexnet","vgg16","resnet50","clip_rn50"], cmap = "inferno", tmin = 0.25, tmax = 0.45}
+transformer = { models = ["dinov2-vit-base-p14","dinov3-vitb16","clip"], cmap = "copper", tmin = 0.5, tmax = 0.75}
+
+[plotting.model_hatch]
+clip = "///"
+clip_rn50 = "///"
+
+[hyperparameters.ridge]
+reg_start = -2   # log10
+reg_stop  =  6   # log10
+reg_num   = 11   # lin spacing in log space

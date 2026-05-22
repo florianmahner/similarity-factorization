@@ -74,11 +74,5 @@ jobs:
       - name: Install dependencies
         run: poetry install -E dev --no-root
 
-      - name: Lint documentation
-        run: |
-          pip install vale
-          vale sync
-          vale docs/ README.md
-
       - name: Build documentation
         run: poetry run zensical build

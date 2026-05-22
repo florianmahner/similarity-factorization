@@ -1,0 +1,13 @@
+# CLIP ViT-L/14 visual features for THINGS+ images (1854 objects).
+# Features are signed (range ~[-15, +11]), so RBF (gaussian_kernel) is the right choice
+# — it's distance-based and handles negative values cleanly, unlike linear (which would
+# produce a non-PSD-style matrix with negative similarities that SRF can't factorize).
+name: clip_vit_l14
+type: feature_file
+path: ${paths.data_dir}/features/clip_vit_l14
+features_file: clip_vit_l14_features.npy
+similarity_fn: gaussian_kernel
+similarity_kwargs:
+  sigma_scale: 0.4  # following Mahner et al. 2026 (deep-similarity) — selected via H(stability, R²) sweep over 162 DNN feature representations
+bounds_task: clip_vit_l14
+rank_range: [5, 100, 5]

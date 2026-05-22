@@ -1,0 +1,21 @@
+# THINGS Behavior: Triplet accuracy vs SRF rank
+
+defaults:
+  - /base
+  - _self_
+
+experiment_name: things_behavior
+task: rank_sweep
+
+# === Parameters ===
+n_items: 1854
+triplet_version: "4.7mio"
+dims: 66
+alphas: [0, 1]
+ranks: [5, 10, 15, 20, 22, 24, 26, 28, 30, 35, 40, 45, 50, 55, 60, 66]
+seeds: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+# === Paths ===
+dataset_path: ${paths.data_dir}/things
+images_path: /SSD/datasets/things/behav1854
+vice_embedding_path: ${paths.data_dir}/things/vice_embedding_66d.txt

@@ -194,3 +194,17 @@ def run(cfg: DictConfig) -> None:
     log.info("Plotting individual dimensions...")
     _plot_individual_dimensions(output_dir, embedding, images, labels, k=k)
     log.info(f"Saved to {output_dir}")
+
+
+def main() -> None:
+    import hydra
+
+    @hydra.main(version_base=None, config_path=".", config_name="config")
+    def _main(cfg: DictConfig) -> None:
+        run(cfg)
+
+    _main()
+
+
+if __name__ == "__main__":
+    main()

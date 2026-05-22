@@ -1,0 +1,21 @@
+# Plot MDS Embedding with Images
+#
+# Visualize 2D MDS embedding with images at coordinates.
+#
+# Usage:
+#   ./scripts/submit experiments/plot_mds.py dataset=peterson_animals
+#   ./scripts/submit experiments/plot_mds.py dataset=mur92
+
+defaults:
+  - /base
+  - /dataset: ???
+  - _self_
+
+experiment_name: plot_mds
+task: ${dataset.name}
+
+# Subject (for multi-subject datasets)
+subject_id: null
+
+# Image size in pixels
+img_size: 40

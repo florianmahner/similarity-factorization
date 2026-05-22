@@ -438,18 +438,20 @@ def compute_similarity_matrix_from_triplets(
         Laplace smoothing parameter. Formula: (count + alpha) / (shown + 2*alpha).
         Default of 1.0 improves sampling bounds for matrix completion.
     """
-    counts = np.zeros((n, n))
-    shown = np.zeros((n, n))
+    triplets = triplets.astype(np.intp)
+    i, j, k = triplets[:, 0], triplets[:, 1], triplets[:, 2]
+    nn = n * n
 
-    for i, j, k in triplets:
-        for a, b in [(i, j), (i, k), (j, k)]:
-            if a != b:
-                shown[a, b] += 1
-                shown[b, a] += 1
+    counts = np.zeros(nn)
+    counts += np.bincount(i * n + j, minlength=nn)
+    counts += np.bincount(j * n + i, minlength=nn)
+    counts = counts.reshape(n, n)
 
-        if i != j:
-            counts[i, j] += 1
-            counts[j, i] += 1
+    shown = np.zeros(nn)
+    for a, b in [(i, j), (i, k), (j, k)]:
+        shown += np.bincount(a * n + b, minlength=nn)
+        shown += np.bincount(b * n + a, minlength=nn)
+    shown = shown.reshape(n, n)
 
     similarity = np.divide(
         counts + alpha,

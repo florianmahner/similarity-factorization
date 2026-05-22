@@ -1,0 +1,22 @@
+\subsubsection{RSA Comparison}
+\label{sec:exp-rsa}
+
+We compared representational similarity analysis (RSA) to similarity-based representation factorization (SRF) for recovering latent structure from noisy similarity measurements using two simulation designs.
+
+\paragraph{Factorial design}
+We constructed factorial designs with four factors, each having three or more levels, yielding one-hot encoded feature matrices. Similarity matrices were computed as $\mathbf{S} = \mathbf{X}\mathbf{X}^\top$ and corrupted with multiplicative noise at varying signal-to-noise ratios (SNR $\in \{0, 0.1, \ldots, 1.0\}$).
+
+\paragraph{Continuous dimensions (SPoSE)}
+For each repeat, we randomly sampled 50 objects and 5 dimensions from the SPoSE embedding \citep{hebart2020revealing}, which captures human similarity judgments along interpretable semantic dimensions. Similarity matrices were computed and corrupted as above. This design tests recovery of continuous-valued dimensions with realistic covariance structure, complementing the discrete factorial design.
+
+\paragraph{Representational similarity analysis}
+For each factor column $j$, we constructed a hypothesis similarity matrix $\mathbf{H}_j = \mathbf{x}_j \mathbf{x}_j^\top$ and computed the Pearson correlation between the upper-triangular entries of $\mathbf{H}_j$ and the measured similarity matrix $\mathbf{S}$. The null distribution was obtained via the Mantel test, randomly permuting object labels. Because each hypothesis matrix captures only a single column while $\mathbf{S}$ contains contributions from all columns, RSA correlations are inherently weak---even with perfect signal, correlations decrease as the number of columns increases.
+
+\paragraph{Latent factorization}
+We factorized the similarity matrix using SRF at rank equal to the number of ground-truth columns. Recovered dimensions were matched to ground-truth columns using the Hungarian algorithm based on absolute correlations. We evaluated two alignment strategies: (1)~\emph{global alignment}, which computes a single column permutation using all objects, and (2)~\emph{leave-one-out (LOO) alignment}, which determines the permutation for each object using only the remaining $n-1$ objects. The null distribution was obtained by permuting object labels in the ground-truth matrix, re-computing the alignment, and measuring the resulting correlation. This procedure accounts for selection bias introduced by the alignment step.
+
+\paragraph{Statistical testing}
+All permutation tests used absolute correlations (two-sided) to handle sign ambiguity arising from anti-correlated one-hot columns. We performed 1,000 permutations per test and controlled the false discovery rate across columns within each repeat using Benjamini--Hochberg correction at $\alpha = 0.05$. Power was estimated as the proportion of significant tests across 1,000 independent repeats.
+
+\paragraph{Validation}
+We verified calibration by confirming that false positive rates at SNR${}=0$ did not exceed the nominal $\alpha$ level, and that p-values under the null followed a uniform distribution (Kolmogorov--Smirnov test).

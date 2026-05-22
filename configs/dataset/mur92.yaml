@@ -3,7 +3,7 @@
 
 name: mur92
 type: neural_rsm
-path: /SSD/datasets/similarity_datasets/mur92
+path: ${paths.ssd}/datasets/similarity_datasets/mur92
 
 bounds_task: mur92
 rank_range: [1, 20, 1]

@@ -1,0 +1,30 @@
+# SWOW: Predict Behavioral Properties from Consensus Embedding
+#
+# Reads embedding from experiments/datasets/consensus/outputs/swow/
+# Predicts Glasgow Norms ratings using projection, ridge, and lasso methods.
+#
+# Usage:
+#   ./scripts/submit experiments/analyses/swow/run.py --bg
+
+defaults:
+  - /base
+  - _self_
+
+experiment_name: swow
+task: behavioral_prediction
+
+# === Evaluation parameters ===
+pole_size: 20
+n_outer_folds: 5
+n_inner_folds: 3
+
+# === SWOW dataset params (for vocabulary loading) ===
+use_all_responses: true
+top_n_words: null
+min_word_length: 1
+symmetrization: sum
+bidirectional_only: false
+
+# === Paths ===
+data_dir: ${paths.data_dir}/small-world-of-words
+ratings_data_dir: ${paths.data_dir}

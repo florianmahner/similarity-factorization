@@ -1,0 +1,22 @@
+# @package dataset
+# THINGS Monkey IT 22k with TIGHTER RBF kernel (sigma=0.4*median).
+# Identical features/loader to things_monkey_22k; only the kernel changes,
+# to test whether the wide default sigma was diluting the structure for SRF.
+
+# Loader name must match an entry in src/datasets/loaders.py DATASETS
+# (same raw data as things_monkey_22k; only the kernel differs).
+name: things-monkey-22k
+type: neural_features
+path: ${paths.ssd}/datasets/things/macaque
+
+similarity_fn: gaussian_kernel
+similarity_kwargs:
+  sigma_scale: 0.4
+
+loader_kwargs:
+  monkey_type: "F"
+  roi: "it"
+  min_reliab: 0.3
+
+bounds_task: things-monkey-22k-tight
+rank_range: [5, 200, 5]
