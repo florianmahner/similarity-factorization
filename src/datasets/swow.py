@@ -70,6 +70,9 @@ def compute_ppmi(
     """
     Calculate PPMI matrix from count matrix using vectorized operations.
 
+    The diagonal is set to s_ii = -log2(p_i), the self-information of word i,
+    which equals PMI(i,i) under the identity assumption p_ii = p_i.
+
     Args:
         counts: Symmetric count matrix.
         negative_as_nan: If True, Negative PMI is NaN (Missing).
@@ -102,7 +105,8 @@ def compute_ppmi(
         if np.isnan(counts).any():
             ppmi[np.isnan(counts)] = np.nan
 
-    np.fill_diagonal(ppmi, np.nan)
+    self_info = -np.log2(np.maximum(p_marginal, smoothing)).astype(ppmi.dtype)
+    np.fill_diagonal(ppmi, self_info)
     return ppmi
 
 

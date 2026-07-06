@@ -121,6 +121,23 @@ datasets:
     validate:
       n_repeats: 1
 
+  - name: clip_vit_l14_sigma0.4
+    config: clip_vit_l14
+    max_rank: 100
+    estimate_n_jobs: 32
+    validate_n_jobs: 64
+    cv_rank_range: [5, 100, 5]
+    validate:
+      n_repeats: 5
+      variants:
+        - {name: 5fold, n_folds: 5}
+      srf_kwargs:
+        rho: 3.0
+        max_inner: 50
+        tol: 1e-4
+        max_outer: 200
+        check_input: false
+
   - name: clip_vit_l14_sigma0.5
     config: clip_vit_l14_sigma0.5
     max_rank: 100
@@ -177,6 +194,26 @@ datasets:
       n_repeats: 1
       adaptive:
         max_rank: 200
+
+  - name: nsd_subj01_sigma0.4
+    config: nsd
+    subject_id: 1
+    max_rank: 200
+    estimate_n_jobs: 144
+    validate_n_jobs: 144
+    loader_kwargs:
+      return_images: false
+    cv_ranks: [5, 10, 15, 20, 30, 40, 50, 60, 65, 70, 75, 80, 85, 90, 95, 100, 110, 120, 140, 160, 200]
+    validate:
+      n_repeats: 5
+      variants:
+        - {name: 5fold, n_folds: 5}
+      srf_kwargs:
+        rho: 3.0
+        max_inner: 50
+        tol: 1e-4
+        max_outer: 200
+        check_input: false
 
   - name: nsd_subj01_sigma0.5
     config: nsd_sigma0.5
@@ -239,3 +276,20 @@ datasets:
       n_repeats: 1
       adaptive:
         max_rank: 200
+
+  - name: things_macaque2k_F_sigma0.4
+    config: things_macaque_2k_f_sigma0.4
+    max_rank: 200
+    estimate_n_jobs: 32
+    validate_n_jobs: 64
+    cv_ranks: [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 120]
+    validate:
+      n_repeats: 5
+      variants:
+        - {name: 5fold, n_folds: 5}
+      srf_kwargs:
+        rho: 3.0
+        max_inner: 50
+        tol: 1e-4
+        max_outer: 200
+        check_input: false

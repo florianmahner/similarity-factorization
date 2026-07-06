@@ -96,24 +96,27 @@ def _plot_topk_images(output_path, embedding, images, k=10):
     plt.close(fig)
 
 
-def _plot_single_dimension_images(output_dir, dim, embedding, images, k=10):
+def _plot_single_dimension_images(output_dir, dim, embedding, images, k=10, dpi=200):
+    """SVG output — each top-k image is a separate <image> element (ungroup/extract in Affinity)."""
     is_array = isinstance(images, np.ndarray)
     top_idx = np.argsort(embedding[:, dim])[::-1][:k]
     n_cols = int(np.ceil(np.sqrt(k)))
     n_rows = int(np.ceil(k / n_cols))
 
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(1.5 * n_cols, 1.5 * n_rows))
+    fig, axes = plt.subplots(
+        n_rows, n_cols, figsize=(2.5 * n_cols, 2.5 * n_rows), dpi=dpi,
+    )
     axes = np.atleast_2d(axes)
 
     for i, idx in enumerate(top_idx):
         row, col = i // n_cols, i % n_cols
         ax = axes[row, col]
         if is_array:
-            ax.imshow(images[idx])
+            ax.imshow(images[idx], interpolation="lanczos")
         else:
             img_path = images[idx]
             if img_path.exists():
-                ax.imshow(Image.open(img_path).convert("RGB"))
+                ax.imshow(Image.open(img_path).convert("RGB"), interpolation="lanczos")
             else:
                 ax.text(0.5, 0.5, "?", ha="center", va="center", fontsize=12)
         ax.axis("off")
@@ -121,9 +124,11 @@ def _plot_single_dimension_images(output_dir, dim, embedding, images, k=10):
     for i in range(k, n_rows * n_cols):
         axes[i // n_cols, i % n_cols].axis("off")
 
-    fig.suptitle(f"Dimension {dim + 1}", fontsize=12, fontweight="bold", y=1.02)
-    plt.subplots_adjust(wspace=0.05, hspace=0.05)
-    fig.savefig(output_dir / f"dim_{dim + 1:02d}.png", dpi=150, bbox_inches="tight", facecolor="white")
+    plt.subplots_adjust(wspace=0.02, hspace=0.02, left=0, right=1, top=1, bottom=0)
+    fig.savefig(
+        output_dir / f"dim_{dim + 1:02d}.svg",
+        format="svg", bbox_inches="tight", facecolor="none", dpi=dpi,
+    )
     plt.close(fig)
 
 
@@ -145,12 +150,12 @@ def _plot_single_dimension_text(output_dir, dim, embedding, labels, k=10):
     plt.close(fig)
 
 
-def _plot_individual_dimensions(output_dir, embedding, images, labels, k=10):
+def _plot_individual_dimensions(output_dir, embedding, images, labels, k=10, dpi=200):
     dims_dir = output_dir / "dims"
     dims_dir.mkdir(exist_ok=True)
     for dim in range(embedding.shape[1]):
         if images is not None:
-            _plot_single_dimension_images(dims_dir, dim, embedding, images, k=k)
+            _plot_single_dimension_images(dims_dir, dim, embedding, images, k=k, dpi=dpi)
         else:
             _plot_single_dimension_text(dims_dir, dim, embedding, labels, k=k)
 
@@ -159,9 +164,12 @@ def run(cfg: DictConfig) -> None:
     subject_id = cfg.get("subject_id")
     k = cfg.get("k", 10)
     ds_name = cfg.dataset.name
+    # Override for new naming convention (e.g. "nsd_subj01_sigma0.4"). Falls
+    # back to dataset.name + optional /subj{NN} nesting (legacy layout).
+    consensus_dir_name = cfg.get("consensus_dir_name") or ds_name
 
-    ds_dir = CONSENSUS_DIR / ds_name
-    if subject_id is not None:
+    ds_dir = CONSENSUS_DIR / consensus_dir_name
+    if subject_id is not None and (ds_dir / f"subj{subject_id:02d}").exists():
         ds_dir = ds_dir / f"subj{subject_id:02d}"
 
     embedding_path = ds_dir / "embedding.npy"
@@ -177,22 +185,27 @@ def run(cfg: DictConfig) -> None:
     load_kwargs = {"root": cfg.dataset.get("path")}
     if subject_id is not None:
         load_kwargs["subject_id"] = subject_id
-    dataset = load_dataset(cfg.dataset.name, **load_kwargs)
+    if "loader_kwargs" in cfg.dataset:
+        load_kwargs.update(dict(cfg.dataset.loader_kwargs))
+    loader_name = cfg.dataset.get("loader_name", cfg.dataset.name)
+    dataset = load_dataset(loader_name, **load_kwargs)
     labels = _get_item_labels(dataset, embedding.shape[0])
     images = _get_images(dataset)
 
-    output_dir = Path.cwd() / ds_name
+    output_dir = Path(__file__).resolve().parent / "outputs" / consensus_dir_name
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    if images is not None:
-        log.info(f"Plotting top-{k} images per dimension...")
-        _plot_topk_images(output_dir / "topk_images.pdf", embedding, images, k=k)
-    else:
-        log.info(f"Plotting top-{k} labels per dimension...")
+    if images is None:
+        log.info(f"Plotting top-{k} labels per dimension (no images available)...")
         _plot_topk_text(output_dir / "topk_items.pdf", embedding, labels, k=k)
+    else:
+        topk_pdf_k = cfg.get("topk_pdf_k", k)
+        log.info(f"Plotting combined topk_items.pdf (k={topk_pdf_k})...")
+        _plot_topk_images(output_dir / "topk_items.pdf", embedding, images, k=topk_pdf_k)
 
-    log.info("Plotting individual dimensions...")
-    _plot_individual_dimensions(output_dir, embedding, images, labels, k=k)
+    dpi = cfg.get("dpi", 200)
+    log.info(f"Plotting individual dimensions as SVG (k={k}, dpi={dpi})...")
+    _plot_individual_dimensions(output_dir, embedding, images, labels, k=k, dpi=dpi)
     log.info(f"Saved to {output_dir}")
 
 

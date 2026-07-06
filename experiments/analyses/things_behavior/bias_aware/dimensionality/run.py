@@ -68,6 +68,12 @@ def parse_args() -> argparse.Namespace:
         help="Basename for the output JSON. When sharding across hosts, set "
              "different names per host (e.g. partial_<hostname>) to avoid races.",
     )
+    parser.add_argument(
+        "--prior-strength",
+        type=float,
+        default=PRIOR_STRENGTH,
+        help=f"Bias-aware lambda (default {PRIOR_STRENGTH}). Smaller = milder.",
+    )
     return parser.parse_args()
 
 
@@ -88,14 +94,16 @@ def main() -> None:
     log.info("ranks=%s  n_folds=%d  n_repeats=%d  sampling_fraction=%.6f",
              ranks, args.n_folds, args.n_repeats, args.sampling_fraction)
     log.info("srf_kwargs=%s", SRF_KWARGS)
-    log.info("matrix: alpha=%s, weight_mode=%s, lambda=%s", ALPHA, WEIGHT_MODE, PRIOR_STRENGTH)
+    log.info("matrix: alpha=%s, weight_mode=%s, lambda=%s", ALPHA, WEIGHT_MODE, args.prior_strength)
 
     log.info("Loading triplets ...")
     triplets = load_things_train_triplets()
     log.info("  n_triplets=%d", len(triplets))
 
     log.info("Building bias-aware matrix ...")
-    M = build_bias_aware_things_matrix(triplets, n_objects=1854, verbose=True)
+    M = build_bias_aware_things_matrix(
+        triplets, n_objects=1854, prior_strength=args.prior_strength, verbose=True,
+    )
     similarity = M.similarity
 
     rank_means = {}
@@ -135,7 +143,7 @@ def main() -> None:
                 "kind": "bias_aware_fisher",
                 "alpha": ALPHA,
                 "weight_mode": WEIGHT_MODE,
-                "prior_strength": PRIOR_STRENGTH,
+                "prior_strength": float(args.prior_strength),
                 "n_objects": 1854,
             },
             "params": {

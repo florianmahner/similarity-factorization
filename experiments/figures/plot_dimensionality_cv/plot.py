@@ -46,22 +46,11 @@ DATASETS = [
     ("peterson_animals", "Peterson animals", TEAL),
     ("peterson_various", "Peterson various", INDIGO),
     ("things_behavior", "THINGS behavior", SAND),
-    ("clip_vit_l14", "CLIP ViT-L/14", PURPLE),
+    ("clip_vit_l14_sigma0.4", "CLIP ViT-L/14", PURPLE),
     ("swow", "SWOW", GREEN),
-    ("nsd_subj01", "NSD subj01", CYAN),
-    ("things_macaque22k", "Macaque IT", WINE),
+    ("nsd_subj01_sigma0.4", "NSD subj01", CYAN),
+    ("things_macaque2k_F_sigma0.4", "Macaque IT", WINE),
 ]
-
-ANNOTATION_POS = {
-    "mur92": (0.08, 0.90, "left", "top"),
-    "peterson_animals": (0.68, 0.90, "left", "top"),
-    "peterson_various": (0.16, 0.90, "left", "top"),
-    "things_behavior": (0.68, 0.90, "left", "top"),
-    "clip_vit_l14": (0.58, 0.90, "left", "top"),
-    "swow": (0.38, 0.90, "left", "top"),
-    "nsd_subj01": (0.62, 0.90, "left", "top"),
-    "things_macaque22k": (0.55, 0.90, "left", "top"),
-}
 
 FIG_WIDTH_MM = 180
 FIG_WIDTH_IN = FIG_WIDTH_MM / 25.4
@@ -104,6 +93,10 @@ def _rank_spread(block: dict, rank: float) -> float:
     return sem * np.sqrt(count)
 
 
+# Per-dataset minimum rank to display (trims squashing low-rank tail).
+MIN_RANK_DISPLAY = {"things_behavior": 15}
+
+
 def _load_curve(dataset: str, variant: str = "5fold") -> dict:
     path = CV_DIR / dataset / "cross_validation.json"
     payload = json.loads(path.read_text())
@@ -112,6 +105,15 @@ def _load_curve(dataset: str, variant: str = "5fold") -> dict:
     mean = np.array(block["val_mse_mean"], dtype=float)
     spread = np.array([_rank_spread(block, rank) for rank in ranks])
     order = np.argsort(ranks)
+    ranks = ranks[order]
+    mean = mean[order]
+    spread = spread[order]
+    min_rank = MIN_RANK_DISPLAY.get(dataset)
+    if min_rank is not None:
+        keep = ranks >= min_rank
+        ranks = ranks[keep]
+        mean = mean[keep]
+        spread = spread[keep]
     return {
         "dataset": dataset,
         "n": int(payload["n"]),
@@ -120,9 +122,9 @@ def _load_curve(dataset: str, variant: str = "5fold") -> dict:
         "rank_star": int(block["argmin_rank"]),
         "rank_one_se": int(block["one_se_rank"]),
         "status": block.get("status", ""),
-        "ranks": ranks[order],
-        "mean": mean[order],
-        "spread": spread[order],
+        "ranks": ranks,
+        "mean": mean,
+        "spread": spread,
     }
 
 
@@ -134,7 +136,11 @@ def _relative_curve(curve: dict) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
 
 
 def _yticks(y_max: float) -> list[float]:
-    if y_max <= 1.25:
+    if y_max <= 1.06:
+        ticks = [1.0, 1.01, 1.02, 1.03, 1.04, 1.05]
+    elif y_max <= 1.12:
+        ticks = [1.0, 1.025, 1.05, 1.075, 1.10]
+    elif y_max <= 1.25:
         ticks = [1.0, 1.05, 1.1, 1.2]
     elif y_max <= 2.5:
         ticks = [1.0, 1.1, 1.25, 1.5, 2.0]
@@ -161,6 +167,18 @@ def _smooth_curve(x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]
     return x_dense, y_dense
 
 
+def _panel_ymax(y: np.ndarray) -> float:
+    """Choose a compact y-limit from the mean curve, not the uncertainty band."""
+    y_top = float(np.nanmax(y))
+    if y_top <= 1.06:
+        pad = 0.006
+    elif y_top <= 1.25:
+        pad = 0.025
+    else:
+        pad = 0.05 * (y_top - 1.0)
+    return y_top + pad
+
+
 def _rank_ticks(x: np.ndarray, rank_star: int, rank_one_se: int, rank0: int) -> list[int]:
     return sorted({int(x.min()), int(rank_star), int(x.max())})
 
@@ -182,10 +200,9 @@ def _draw_panel(ax: plt.Axes, curve: dict, label: str, color: str) -> None:
     rank0 = curve["rank0"]
     ax.axvline(rank_star, color=color, linewidth=0.9, zorder=1)
 
-    y_max = float(np.nanmax(y_hi) * 1.18)
-    y_max = max(y_max, 1.12)
+    y_max = _panel_ymax(y)
     ax.set_yscale("log")
-    ax.set_ylim(0.985, y_max)
+    ax.set_ylim(0.999, y_max)
     ticks = _yticks(y_max)
     ax.set_yticks(ticks)
     ax.set_yticklabels([_format_tick(t) for t in ticks])
@@ -195,37 +212,23 @@ def _draw_panel(ax: plt.Axes, curve: dict, label: str, color: str) -> None:
     pad = max((x.max() - x.min()) * 0.04, 1.0)
     ax.set_xlim(x.min() - pad, x.max() + pad)
     ax.set_xticks(_rank_ticks(x, rank_star, rank_one_se, rank0))
+    ax.set_xticks(x, minor=True)
     ax.xaxis.set_major_formatter(mticker.ScalarFormatter())
     ax.xaxis.set_minor_formatter(mticker.NullFormatter())
-    ax.tick_params(axis="x", which="minor", bottom=False)
     ax.tick_params(axis="x", labelrotation=35, labelsize=FS - 0.8)
-
-    # Rank-sampling rug: makes adaptive/uneven grids explicit without point markers.
-    rug_top = 0.995 + (y_max - 0.985) * 0.006
-    ax.vlines(x, 0.985, rug_top, color=GRAY_LIGHT, linewidth=0.45, alpha=0.9)
+    ax.tick_params(
+        axis="x",
+        which="minor",
+        bottom=True,
+        top=False,
+        direction="in",
+        length=1.8,
+        width=0.35,
+        color=GRAY_LIGHT,
+    )
 
     ax.set_title(label, loc="left", pad=3, fontweight="normal")
-    _annotate_rank(ax, curve)
     despine(ax)
-
-
-def _annotate_rank(ax: plt.Axes, curve: dict) -> None:
-    rank_star = curve["rank_star"]
-    x, y, ha, va = ANNOTATION_POS[curve["dataset"]]
-
-    ax.text(
-        x,
-        y,
-        f"$k^*$={rank_star}\n$p^*$={curve['p_star']:.2f}",
-        transform=ax.transAxes,
-        ha=ha,
-        va=va,
-        fontsize=FS - 0.35,
-        color=GRAY_DARK,
-        linespacing=1.0,
-        bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.82, "pad": 0.8},
-        zorder=4,
-    )
 
 
 def main() -> None:
@@ -237,7 +240,7 @@ def main() -> None:
     fig, axes = plt.subplots(
         2,
         4,
-        figsize=(FIG_WIDTH_IN, 4.55),
+        figsize=(FIG_WIDTH_IN, 3.4),
         sharex=False,
         sharey=False,
     )
@@ -250,7 +253,7 @@ def main() -> None:
     for row in range(2):
         axes[row * 4].set_ylabel("Relative validation MSE")
     for ax in axes[4:]:
-        ax.set_xlabel("Rank")
+        ax.set_xlabel("Number of dimensions")
 
     fig.subplots_adjust(left=0.07, right=0.995, bottom=0.13, top=0.91, wspace=0.32, hspace=0.34)
 

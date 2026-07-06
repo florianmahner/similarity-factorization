@@ -224,6 +224,7 @@ def _get_monkey_channel_mask(monkey_type: str, roi: str | None = None):
 
 def load_things_monkey(
     root: str | None = None,
+    dataset: str = "22k",
     monkey_type: str = "F",
     roi: str = "it",
     min_reliab: float = 0.3,
@@ -237,7 +238,7 @@ def load_things_monkey(
     from datasets.monkey import load_macaque
 
     data, stimuli, reliab = load_macaque(
-        "22k",
+        dataset,
         monkey_type,
         root=root,
         roi=roi,
@@ -245,12 +246,18 @@ def load_things_monkey(
         average_exemplars=average_exemplars,
     )
 
+    # Canonical iconic THINGS-plus image per category (matches the sandbox viz convention).
+    images_root = Path("/data/labshare/_stachelschwein/SSD/datasets/things/plus")
+    images = [images_root / f"{s}.jpg" for s in stimuli]
+
     return DatasetResult(
-        name="things-monkey-22k",
+        name=f"things-monkey-{dataset}",
         data=data,
         rsm=None,
         metadata={
             "stimuli": stimuli,
+            "images": images,
+            "dataset": dataset,
             "monkey_type": monkey_type,
             "roi": roi,
             "n_channels": data.shape[1],
@@ -352,6 +359,18 @@ def load_things_behavior(
             alpha=alpha,
         )
 
+    # Map each item index (0..n_objects-1) to the canonical THINGS-plus iconic image
+    # via things_concepts.tsv (matches the sandbox viz convention).
+    concepts_path = root / "things_concepts.tsv"
+    images: list[Path] = []
+    if concepts_path.exists():
+        with open(concepts_path) as f:
+            header = f.readline().rstrip("\n").split("\t")
+            id_col = header.index("uniqueID")
+            unique_ids = [line.rstrip("\n").split("\t")[id_col] for line in f]
+        images_root = Path("/data/labshare/_stachelschwein/SSD/datasets/things/plus")
+        images = [images_root / f"{uid}.jpg" for uid in unique_ids[:n_objects]]
+
     return DatasetResult(
         name="things_behavior",
         rsm=rsm,
@@ -363,6 +382,7 @@ def load_things_behavior(
             "n_objects": n_objects,
             "train_triplets": train_triplets,
             "validation_triplets": validation_triplets,
+            "images": images if images else None,
         },
     )
 
@@ -721,6 +741,7 @@ DATASETS = {
     "swow": load_swow,
     "things_behavior": load_things_behavior,
     "things-monkey-2k": load_things_monkey_2k,
+    "things-macaque": load_things_monkey,
     "things-monkey-22k": load_things_monkey,
     "clip_vit_l14": load_clip_vit_l14,
     "dinov3": load_dinov3,

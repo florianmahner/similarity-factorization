@@ -1,7 +1,8 @@
 # @package dataset
 # Peterson fMRI dataset - Various objects subset
 
-name: peterson-various
+name: peterson_various
+loader_name: peterson-various
 type: neural_rsm
 path: ${paths.ssd}/datasets/similarity_datasets/peterson
 

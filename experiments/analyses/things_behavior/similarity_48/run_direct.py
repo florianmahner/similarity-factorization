@@ -55,7 +55,7 @@ def _one_seed(
     validation_triplets: np.ndarray,
     srf_rank: int,
     seed: int,
-) -> list[dict]:
+) -> tuple[list[dict], list[dict]]:
     t0 = time.time()
     srf_embedding = fit_srf_model(similarity, rank=srf_rank, seed=seed)
     rsm_48_spose = reconstruct_rsm(spose_embedding[indices_48])
@@ -80,11 +80,23 @@ def _one_seed(
         corr_spose, acc_spose * 100,
         elapsed,
     )
-    return [
+    summary_rows = [
         {"model": "SRF", "correlation": float(corr_srf), "accuracy": float(acc_srf), "seed": int(seed)},
         {"model": "VICE", "correlation": float(corr_vice), "accuracy": float(acc_vice), "seed": int(seed)},
         {"model": "SPoSE", "correlation": float(corr_spose), "accuracy": float(acc_spose), "seed": int(seed)},
     ]
+    # Per-pair upper-triangle entries for the panel-b scatter.
+    iu = np.triu_indices(len(indices_48), k=1)
+    true_vec = rsm_48_true[iu]
+    per_pair_rows = []
+    for name, rsm in (("SRF", rsm_48_srf), ("SPoSE", rsm_48_spose), ("VICE", rsm_48_vice)):
+        pred_vec = rsm[iu]
+        for k, (t, p) in enumerate(zip(true_vec, pred_vec)):
+            per_pair_rows.append({
+                "model": name, "seed": int(seed), "pair_idx": int(k),
+                "true_similarity": float(t), "predicted_similarity": float(p),
+            })
+    return summary_rows, per_pair_rows
 
 
 def main() -> None:
@@ -120,7 +132,7 @@ def main() -> None:
 
     log.info("Fitting SRF rank=%d for %d seeds ...", srf_rank, len(seeds))
     t_all = time.time()
-    rows_by_seed = Parallel(n_jobs=args.n_jobs, verbose=10)(
+    seed_outputs = Parallel(n_jobs=args.n_jobs, verbose=10)(
         delayed(_one_seed)(
             similarity,
             spose_embedding,
@@ -135,11 +147,18 @@ def main() -> None:
     )
     log.info("All %d seeds done in %.1fs", len(seeds), time.time() - t_all)
 
-    flat_rows = [r for rows in rows_by_seed for r in rows]
-    df = pd.DataFrame(flat_rows)
+    flat_summary = [r for (s, _) in seed_outputs for r in s]
+    flat_pairs = [r for (_, pp) in seed_outputs for r in pp]
+
+    df = pd.DataFrame(flat_summary)
     csv_path = out_dir / "accuracy_comparison.csv"
     df.to_csv(csv_path, index=False)
     log.info("Wrote %s (%d rows)", csv_path, len(df))
+
+    pair_df = pd.DataFrame(flat_pairs)
+    pair_csv = out_dir / "48_performance.csv"
+    pair_df.to_csv(pair_csv, index=False)
+    log.info("Wrote %s (%d rows)", pair_csv, len(pair_df))
 
     log.info("\n=== summary (rank=%d, n_seeds=%d) ===", srf_rank, len(seeds))
     for model in ["SRF", "VICE", "SPoSE"]:

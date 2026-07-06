@@ -1,0 +1,14 @@
+# @package dataset
+# CLIP ViT-L/14 (THINGS-plus 1854), alpha=0.4 RBF kernel.
+# Same underlying features as clip_vit_l14 (cache is a symlink); separate config
+# so the consensus/visualize output dirs reflect the sigma0.4 protocol.
+name: clip_vit_l14_sigma0.4
+loader_name: clip_vit_l14
+type: feature_file
+path: ${paths.data_dir}/features/clip_vit_l14
+features_file: clip_vit_l14_features.npy
+similarity_fn: gaussian_kernel
+similarity_kwargs:
+  sigma_scale: 0.4
+bounds_task: clip_vit_l14_sigma0.4
+rank_range: [5, 100, 5]

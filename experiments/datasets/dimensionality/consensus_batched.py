@@ -41,9 +41,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s
 # converge to comparable solutions.
 SRF_KWARGS = {
     "rho": 3.0,
-    "max_inner": 30,
-    "tol": 0.0,
-    "max_outer": 200,
+    "max_inner": 100,
+    "tol": 1e-4,
+    "max_outer": 50,
     "check_input": False,
 }
 

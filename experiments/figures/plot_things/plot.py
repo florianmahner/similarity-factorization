@@ -87,8 +87,8 @@ def _panel_scatter(ax: plt.Axes, df: pd.DataFrame, fs: float) -> None:
     true_vals = srf["true_similarity"].values
     pred_vals = srf["predicted_similarity"].values
 
-    true_norm = true_vals / true_vals.max()
-    pred_norm = pred_vals / pred_vals.max()
+    true_norm = (true_vals - true_vals.min()) / (true_vals.max() - true_vals.min())
+    pred_norm = (pred_vals - pred_vals.min()) / (pred_vals.max() - pred_vals.min())
     r = np.corrcoef(true_norm, pred_norm)[0, 1]
 
     ax.scatter(

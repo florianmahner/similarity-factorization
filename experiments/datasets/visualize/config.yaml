@@ -12,5 +12,5 @@ defaults:
 experiment_name: visualize
 task: ${dataset.name}
 
-k: 10
+k: 9
 subject_id: null

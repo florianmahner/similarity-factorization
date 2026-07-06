@@ -179,8 +179,10 @@ def _aggregate_block(
     ``batched_validate._record_from_curve``)."""
     rows = []
     kwargs_seen = set()
+    observed_ranks = set()
     for p in sorted(per_fit_dir.glob("*.json")):
         d = json.loads(p.read_text())
+        observed_ranks.add(int(d["rank"]))
         rows.append({
             "rep": int(d["repeat"]),
             "fold": int(d["fold"]),
@@ -197,13 +199,14 @@ def _aggregate_block(
             f"block will only reflect the current run's kwargs.")
 
     curve = pd.DataFrame(rows)
+    target_ranks = sorted(set(int(r) for r in ranks) | observed_ranks)
     variant = {
         "name": variant_name, "n_folds": n_folds, "n_repeats": n_repeats,
         "random_state": random_state,
     }
     params = OmegaConf.create({"srf_kwargs": srf_kwargs, "strategy": "fixed"})
     return _record_from_curve(
-        curve=curve, target_ranks=ranks,
+        curve=curve, target_ranks=target_ranks,
         sampling_fraction=sampling_fraction,
         variant=variant, params=params, n_jobs=n_jobs,
         started=started, resumed_from_json=True,

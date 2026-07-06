@@ -1,0 +1,21 @@
+# @package dataset
+# THINGS macaque 2k Monkey F IT neural features, alpha=0.4 RBF kernel.
+# Mirrors things_macaque_2k_f_sigma0.4.yaml but with name matching the
+# consensus/visualize output directory.
+name: things_macaque2k_F_sigma0.4
+loader_name: things-macaque
+type: neural_features
+path: ${paths.ssd}/datasets/things/macaque
+
+similarity_fn: gaussian_kernel
+similarity_kwargs:
+  sigma_scale: 0.4
+
+loader_kwargs:
+  dataset: "2k"
+  monkey_type: "F"
+  roi: "it"
+  min_reliab: 0.3
+
+bounds_task: things-macaque-2k-f-sigma0.4
+rank_range: [5, 120, 5]

@@ -25,7 +25,8 @@ def fit_srf_model(
     model = SRF(
         rank=rank,
         random_state=seed,
-        max_outer=2000,
+        rho=3.0,
+        max_outer=500,
         max_inner=50,
         tol=1e-4,
         verbose=0,
