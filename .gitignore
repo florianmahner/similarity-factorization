@@ -88,3 +88,16 @@ GEMINI.md
 .tickets/
 .superpowers/
 experiments/paper/Flo-SRF/
+
+# Sandbox / exploratory work (kept local, not part of the paper repo)
+/sandbox/
+/experiments/sandbox/
+
+# Archived work (kept local, never committed)
+_archive/
+
+# update_pysrf scratch experiments (kept local)
+update_pysrf/
+
+# local venvs
+.venv-allen/
