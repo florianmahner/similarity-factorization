@@ -117,3 +117,17 @@ def run(cfg: DictConfig) -> None:
     plot_correlation_bars(all_results, plots_dir / "method_comparison.pdf")
 
     _make_wordclouds(embeddings, vocabulary, out_dir / "wordclouds")
+
+
+def main() -> None:
+    import hydra
+
+    @hydra.main(version_base=None, config_path=".", config_name="config")
+    def _main(cfg: DictConfig) -> None:
+        run(cfg)
+
+    _main()
+
+
+if __name__ == "__main__":
+    main()

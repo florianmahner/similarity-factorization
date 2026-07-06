@@ -138,3 +138,17 @@ def run(cfg: DictConfig) -> None:
     for r in results:
         rows.extend(r)
     pd.DataFrame(rows).to_csv(Path.cwd() / "factorial.csv", index=False)
+
+
+def main() -> None:
+    import hydra
+
+    @hydra.main(version_base=None, config_path=".", config_name="config")
+    def _main(cfg: DictConfig) -> None:
+        run(cfg)
+
+    _main()
+
+
+if __name__ == "__main__":
+    main()

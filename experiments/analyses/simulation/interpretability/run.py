@@ -171,3 +171,17 @@ def run(cfg: DictConfig) -> None:
     csv_path = output_dir / "interpretability.csv"
     df.to_csv(csv_path, index=False)
     log.info(f"Saved {csv_path}")
+
+
+def main() -> None:
+    import hydra
+
+    @hydra.main(version_base=None, config_path=".", config_name="config")
+    def _main(cfg: DictConfig) -> None:
+        run(cfg)
+
+    _main()
+
+
+if __name__ == "__main__":
+    main()

@@ -200,3 +200,17 @@ def run(cfg: DictConfig) -> None:
     }
     (output_dir / "summary.json").write_text(json.dumps(summary, indent=2))
     log.info(f"Saved to {output_dir}")
+
+
+def main() -> None:
+    import hydra
+
+    @hydra.main(version_base=None, config_path=".", config_name="config")
+    def _main(cfg: DictConfig) -> None:
+        run(cfg)
+
+    _main()
+
+
+if __name__ == "__main__":
+    main()

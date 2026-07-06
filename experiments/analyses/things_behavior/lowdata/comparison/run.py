@@ -142,3 +142,17 @@ def run(cfg: DictConfig) -> None:
             )
 
     log.info("Saved %d rows to %s", len(df), output_dir / "lowdata_comparison.csv")
+
+
+def main() -> None:
+    import hydra
+
+    @hydra.main(version_base=None, config_path=".", config_name="config")
+    def _main(cfg: DictConfig) -> None:
+        run(cfg)
+
+    _main()
+
+
+if __name__ == "__main__":
+    main()

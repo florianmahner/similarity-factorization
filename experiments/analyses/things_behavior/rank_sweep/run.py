@@ -143,3 +143,17 @@ def run(cfg: DictConfig) -> None:
             log.info("  k=%3d: %.4f +/- %.4f", rank, row["mean"], row["std"])
 
     log.info("Saved %d rows + %d embeddings", len(df), len(results))
+
+
+def main() -> None:
+    import hydra
+
+    @hydra.main(version_base=None, config_path=".", config_name="config")
+    def _main(cfg: DictConfig) -> None:
+        run(cfg)
+
+    _main()
+
+
+if __name__ == "__main__":
+    main()

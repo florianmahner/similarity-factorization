@@ -95,3 +95,17 @@ def run(cfg: DictConfig) -> None:
     )
     output_file = Path.cwd() / "results.csv"
     df.to_csv(output_file, index=False)
+
+
+def main() -> None:
+    import hydra
+
+    @hydra.main(version_base=None, config_path=".", config_name="config")
+    def _main(cfg: DictConfig) -> None:
+        run(cfg)
+
+    _main()
+
+
+if __name__ == "__main__":
+    main()

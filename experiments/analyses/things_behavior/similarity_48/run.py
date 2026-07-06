@@ -80,3 +80,17 @@ def run(cfg: DictConfig) -> None:
     output_file = Path.cwd() / "results.json"
     with open(output_file, "w") as f:
         json.dump(results, f)
+
+
+def main() -> None:
+    import hydra
+
+    @hydra.main(version_base=None, config_path=".", config_name="config")
+    def _main(cfg: DictConfig) -> None:
+        run(cfg)
+
+    _main()
+
+
+if __name__ == "__main__":
+    main()
