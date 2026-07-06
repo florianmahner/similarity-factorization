@@ -1,49 +1,17 @@
-# srf
+# docs/
 
-Similarity-based Representation Factorization (SRF).
+Internal development notes. For installation and reproduction see the root README (`../README.md`) and `../experiments/README.md`.
 
-### Installation
+These are developer-facing notes (findings, design docs, plans) and are not required to reproduce the paper.
 
+## Contents
 
-This project uses [Poetry](https://python-poetry.org/) for dependency management and includes the `ml-toolkit` as a git subtree in the `srf/ml-toolkit` directory.
+| Path | Description |
+|------|-------------|
+| [`insights/`](insights/README.md) | Experimental knowledge base — dated findings, evidence, and tentative conclusions from experiments. |
+| [`consensus_methods.md`](consensus_methods.md) | Literature review on combining multiple NMF runs into a consensus solution. |
+| [`methods_rsa_comparison.tex`](methods_rsa_comparison.tex) | LaTeX methods writeup comparing RSA and SRF. |
+| [`specs/`](specs/) | Dated design docs and implementation plans (rank selection, coherence extraction). |
+| [`superpowers/`](superpowers/) | Dated design/plan notes for later work (rank estimation, bandwidth stability, dataset restructuring). |
 
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/florianmahner/srf.git
-    cd srf
-    ```
-
-2.  **[Optional] If ml-toolkit directory is missing or needs updating:**
-    The ml-toolkit directory should be included when you clone the repository. However, if you need to add or update it manually:
-    ```bash
-    # To add the tools subtree if missing:
-    git subtree add --prefix=src/tools https://github.com/florianmahner/tools.git main --squash
-
-    # To update the tools subtree later:
-    git subtree pull --prefix=src/tools https://github.com/florianmahner/tools.git main --squash
-    ```
-
-3.  **Install Poetry:**
-    Follow the instructions on the [official Poetry website](https://python-poetry.org/docs/#installation) if you don't have it installed.
-
-4.  **Install dependencies:**
-    This command installs the main project dependencies and the ml-toolkit package:
-    ```bash
-    pyenv install 3.12.4
-    pyenv local 3.12.4
-    poetry env use $(pyenv which python)
-    poetry install
-    ```
-
-### Project Structure
-
-- `srf/`: Main project code
-- `srf/ml-toolkit/`: Machine Learning toolkit (included as a git subtree) providing utilities for data handling, feature extraction, and analysis
-
-### TODOs and Open Questions
-
-This is kind of a project page where we can keep track of pending tasks and future development ideas.
-
-- [ ] Scaling ambiguity in $S = W A H^T$. Normalizing columns?
-- [ ] Currently the project uses tri factor optimization based on block coordinate descent. SRF might be more stable, not yet implemented
-- [ ] Rank selection not working yet.
+Insights are the durable knowledge base; `specs/` and `superpowers/` are process history kept for reference.
