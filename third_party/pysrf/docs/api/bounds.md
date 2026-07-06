@@ -1,32 +1,32 @@
-# Cross-Validation API
+# Sampling Bounds API
 
-::: pysrf.cross_val_score
+## Main Functions
+
+::: pysrf.estimate_sampling_bounds_fast
     options:
       show_root_heading: true
       show_source: true
       heading_level: 3
 
-## Grid Search
-
-::: pysrf.GridSearchCV
+::: pysrf.estimate_sampling_bounds
     options:
       show_root_heading: true
       show_source: true
       heading_level: 3
 
-## CV Strategy
+## Lower Bound Estimation
 
-::: pysrf.EntryMaskSplit
+::: pysrf.pmin_bound
     options:
       show_root_heading: true
       show_source: true
       heading_level: 3
 
+## Upper Bound Estimation
 
-## Scoring
-
-::: pysrf.cross_validation.fit_and_score
+::: pysrf.p_upper_only_k
     options:
       show_root_heading: true
       show_source: true
       heading_level: 3
+

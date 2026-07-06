@@ -36,8 +36,6 @@ from sklearn.utils.validation import (
 )
 from sklearn.utils._param_validation import Interval, StrOptions, Integral, Real
 
-from ._common import is_nan_marker, observation_mask
-
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +65,47 @@ def _frobenius_residual(x: np.ndarray, w: np.ndarray) -> tuple[float, float]:
     reconstruction_err = np.sqrt(max(0.0, ss_x - 2.0 * ss_xw + ss_wwt))
     approx_norm = np.sqrt(ss_wwt)
     return reconstruction_err, approx_norm
+
+
+def _is_nan_marker(missing_values: float | None) -> bool:
+    """Check if missing_values represents NaN.
+
+    Needed because sklearn clone() can break ``is np.nan`` identity checks.
+
+    Parameters
+    ----------
+    missing_values : float or None
+        The sentinel value to test
+
+    Returns
+    -------
+    is_nan : bool
+        True if missing_values is NaN
+    """
+    return missing_values is np.nan or (
+        isinstance(missing_values, float) and np.isnan(missing_values)
+    )
+
+
+def _get_observed_mask(x: np.ndarray, missing_values: float | None) -> np.ndarray:
+    """Boolean mask where True marks observed entries in x.
+
+    Parameters
+    ----------
+    x : ndarray of shape (n, n)
+        Similarity matrix
+    missing_values : float or None
+        Sentinel value for missing data. If None or NaN, uses ``np.isnan``.
+
+    Returns
+    -------
+    mask : ndarray of shape (n, n)
+        Boolean array, True where x is observed
+    """
+    if _is_nan_marker(missing_values) or missing_values is None:
+        return np.isfinite(x)
+    else:
+        return np.not_equal(x, missing_values)
 
 
 def _initialize_w(
@@ -553,14 +592,14 @@ class SRF(TransformerMixin, BaseEstimator):
             x,
             reset=True,
             ensure_all_finite=(
-                "allow-nan" if is_nan_marker(self.missing_values) else True
+                "allow-nan" if _is_nan_marker(self.missing_values) else True
             ),
             ensure_2d=True,
             dtype=np.float64,
             copy=True,
         )
 
-        self._observed_mask = observation_mask(x, self.missing_values)
+        self._observed_mask = _get_observed_mask(x, self.missing_values)
         if not np.any(self._observed_mask):
             raise ValueError(
                 "No observed entries found in the data. All values are missing."
@@ -668,9 +707,9 @@ class SRF(TransformerMixin, BaseEstimator):
             reset=False,
             ensure_2d=True,
             dtype=np.float64,
-            ensure_all_finite="allow-nan" if is_nan_marker(self.missing_values) else True,
+            ensure_all_finite="allow-nan" if self.missing_values is np.nan else True,
         )
-        observed_mask = observation_mask(x, self.missing_values)
+        observation_mask = _get_observed_mask(x, self.missing_values)
         reconstruction = self.reconstruct()
-        mse = np.mean((x[observed_mask] - reconstruction[observed_mask]) ** 2)
+        mse = np.mean((x[observation_mask] - reconstruction[observation_mask]) ** 2)
         return -mse

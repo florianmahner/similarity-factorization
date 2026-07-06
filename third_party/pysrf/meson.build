@@ -35,23 +35,13 @@ py.extension_module(
 
 py.install_sources(
   [
-	    'pysrf/__init__.py',
+    'pysrf/__init__.py',
     'pysrf/_bsum.py',
-    'pysrf/_common.py',
+    'pysrf/bounds.py',
+    'pysrf/coherence.py',
     'pysrf/consensus.py',
     'pysrf/cross_validation.py',
     'pysrf/model.py',
   ],
   subdir: 'pysrf',
-)
-
-py.install_sources(
-  [
-    'pysrf/coherence/__init__.py',
-    'pysrf/coherence/_bootstrap.py',
-    'pysrf/coherence/_estimate.py',
-    'pysrf/coherence/_rank_selection.py',
-    'pysrf/coherence/_sampling_fraction.py',
-  ],
-  subdir: 'pysrf/coherence',
 )

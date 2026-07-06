@@ -1,87 +1,153 @@
-"""Tests for ``pysrf.cross_val_score``."""
-
 import numpy as np
-import pandas as pd
-import pytest
-
-from pysrf import cross_val_score, estimate_rank
-from pysrf._common import observation_mask
-from pysrf.cross_validation import _cv_pool_fraction, _entry_splits
+from pysrf import (
+    SRF,
+    cross_val_score,
+    GridSearchCV,
+    EntryMaskSplit,
+    create_train_val_split,
+)
 from helpers import make_symmetric_matrix
 
 
-@pytest.fixture(scope="module")
-def s():
-    return make_symmetric_matrix(n=60, rank=5, noise_level=0.05, seed=0)
+def test_train_val_split_masks():
+    np.random.seed(42)
+    s = make_symmetric_matrix(n=20, noise_level=0.0)
+    rng = np.random.RandomState(42)
 
-
-def test_returns_long_dataframe(s):
-    curve = cross_val_score(s, ranks=[3, 5, 7], sampling_fraction=0.7,
-                             n_folds=3, n_jobs=1)
-    assert isinstance(curve, pd.DataFrame)
-    assert set(curve.columns) == {"rep", "fold", "rank", "val_mse"}
-    assert len(curve) == 3 * 3  # n_ranks * n_folds * n_repeats (default 1)
-
-
-def test_argmin_near_true_rank(s):
-    est = estimate_rank(s, n_bootstrap=10)
-    curve = cross_val_score(s, ranks=[2, 4, 5, 6, 8],
-                             sampling_fraction=est.sampling_fraction,
-                             n_folds=5, n_jobs=1)
-    mean = curve.groupby("rank")["val_mse"].mean()
-    assert abs(int(mean.idxmin()) - 5) <= 1
-
-
-def test_validates_sampling_fraction(s):
-    with pytest.raises(ValueError, match="sampling_fraction"):
-        cross_val_score(s, ranks=[3], sampling_fraction=1.5)
-    with pytest.raises(ValueError, match="sampling_fraction"):
-        cross_val_score(s, ranks=[3], sampling_fraction=0.0)
-
-
-def test_validates_n_folds(s):
-    with pytest.raises(ValueError, match="n_folds"):
-        cross_val_score(s, ranks=[3], sampling_fraction=0.5, n_folds=1)
-
-
-def test_deterministic(s):
-    a = cross_val_score(s, ranks=[3, 5], sampling_fraction=0.7,
-                         n_folds=3, random_state=11, n_jobs=1)
-    b = cross_val_score(s, ranks=[3, 5], sampling_fraction=0.7,
-                         n_folds=3, random_state=11, n_jobs=1)
-    pd.testing.assert_frame_equal(a, b)
-
-
-def test_splits_hide_only_observed_entries(s):
-    s_missing = s.copy()
-    s_missing[0, 1] = s_missing[1, 0] = np.nan
-    observed = observation_mask(s_missing)
-    splits = _entry_splits(
-        observed,
-        pool_fraction=_cv_pool_fraction(0.6, n_folds=3, n=s.shape[0]),
-        n_folds=3,
-        split_seeds=np.array([11], dtype=np.uint32),
+    train_mask, val_mask = create_train_val_split(
+        s, sampling_fraction=0.8, rng=rng, missing_values=np.nan
     )
-    for _, _, train_mask, validation_mask in splits:
-        assert np.all(train_mask == train_mask.T)
-        assert np.all(validation_mask == validation_mask.T)
-        assert not np.any(train_mask & validation_mask)
-        assert np.all(train_mask <= observed)
-        assert np.all(validation_mask <= observed)
+
+    assert train_mask.shape == s.shape
+    assert val_mask.shape == s.shape
+    assert train_mask.dtype == bool
+    assert val_mask.dtype == bool
+    assert np.allclose(train_mask, train_mask.T)
+    assert np.allclose(val_mask, val_mask.T)
+    # No overlap between train and validation
+    assert not np.any(train_mask & val_mask)
+    # At least some entries in both
+    assert np.sum(train_mask) > 0
+    assert np.sum(val_mask) > 0
 
 
-def test_custom_missing_value(s):
-    s_missing = s.copy()
-    s_missing[0, 1] = s_missing[1, 0] = -1.0
-    curve = cross_val_score(
-        s_missing, ranks=[3], sampling_fraction=0.7,
-        n_folds=3, n_jobs=1, missing_values=-1.0,
-        srf_kwargs={"max_outer": 2, "max_inner": 2},
+def test_entry_mask_split():
+    s = make_symmetric_matrix(n=20, noise_level=0.0)
+
+    cv = EntryMaskSplit(n_repeats=3, sampling_fraction=0.8, random_state=42)
+
+    assert cv.get_n_splits() == 3
+
+    splits = list(cv.split(s))
+    assert len(splits) == 3
+
+    for train_mask, val_mask in splits:
+        assert train_mask.shape == s.shape
+        assert val_mask.shape == s.shape
+        assert train_mask.dtype == bool
+        assert val_mask.dtype == bool
+        assert np.allclose(train_mask, train_mask.T)
+        assert np.allclose(val_mask, val_mask.T)
+        assert not np.any(train_mask & val_mask)
+
+
+def test_SRF_grid_search_cv():
+    s = make_symmetric_matrix(n=20, rank=5, noise_level=0.0)
+
+    param_grid = {"rank": [3, 5, 7], "rho": [2.0, 3.0]}
+    cv = EntryMaskSplit(n_repeats=2, sampling_fraction=0.8, random_state=42)
+
+    grid = GridSearchCV(
+        estimator=SRF(max_outer=5, random_state=42),
+        param_grid=param_grid,
+        cv=cv,
+        n_jobs=1,
+        verbose=0,
     )
-    assert len(curve) == 3
+
+    grid.fit(s)
+
+    assert hasattr(grid, "best_params_")
+    assert hasattr(grid, "best_score_")
+    assert hasattr(grid, "cv_results_")
+    assert "rank" in grid.best_params_
+    assert "rho" in grid.best_params_
 
 
-def test_cap_warning_when_inflation_exceeds_cap(s):
-    with pytest.warns(RuntimeWarning, match="cap"):
-        cross_val_score(s, ranks=[3], sampling_fraction=0.95,
-                         n_folds=3, n_jobs=1)
+def test_cross_val_score():
+    s = make_symmetric_matrix(n=20, rank=5, noise_level=0.0)
+
+    param_grid = {"rank": [3, 5]}
+
+    result = cross_val_score(
+        s,
+        param_grid=param_grid,
+        n_repeats=2,
+        sampling_fraction=0.8,
+        random_state=42,
+        verbose=0,
+        n_jobs=1,
+    )
+
+    assert hasattr(result, "best_params_")
+    assert hasattr(result, "best_score_")
+    assert "rank" in result.best_params_
+
+
+def test_cross_val_score_with_missing_data():
+    s = make_symmetric_matrix(n=20, rank=5, noise_level=0.0)
+
+    mask = np.random.rand(*s.shape) < 0.1
+    mask = mask | mask.T
+    s[mask] = np.nan
+
+    param_grid = {"rank": [3, 5]}
+
+    result = cross_val_score(
+        s,
+        param_grid=param_grid,
+        n_repeats=2,
+        sampling_fraction=0.8,
+        random_state=42,
+        verbose=0,
+        n_jobs=1,
+        missing_values=np.nan,
+    )
+
+    assert hasattr(result, "best_params_")
+    assert hasattr(result, "best_score_")
+
+
+def test_cross_val_score_fit_final():
+    s = make_symmetric_matrix(n=20, rank=5, noise_level=0.0)
+
+    result = cross_val_score(
+        s,
+        param_grid={"rank": [5]},
+        n_repeats=2,
+        sampling_fraction=0.8,
+        random_state=42,
+        verbose=0,
+        n_jobs=1,
+        fit_final_estimator=True,
+    )
+
+    assert hasattr(result, "best_estimator_")
+    assert hasattr(result.best_estimator_, "w_")
+
+
+def test_rank_recovery():
+    s = make_symmetric_matrix(n=100, rank=5, noise_level=0.0)
+
+    result = cross_val_score(
+        s,
+        estimator=SRF(rho=3.0, max_outer=50, max_inner=20, random_state=42),
+        param_grid={"rank": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]},
+        n_repeats=5,
+        estimate_sampling_fraction=True,
+        sampling_selection="mean",
+        random_state=42,
+        verbose=0,
+    )
+
+    assert result.best_params_["rank"] == 5

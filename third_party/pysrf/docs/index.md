@@ -23,7 +23,7 @@ pysrf works broadly on any symmetric similarity matrix. These can come from diff
 ## Key capabilities
 
 - **Missing data**: real-world similarity matrices are sometimes incomplete and some entries $i,j$ in a similarity matrix not observed. pysrf can handle missing entries naturally.
-- **Dimensionality estimation**: `estimate_rank` estimates rank and `cross_val_score` confirms nearby ranks
+- **Dimensionality estimation**: the number of optimal dimensions can be estimated via cross-validation
 - **Fast solver**: a Cython-accelerated solver provides 10-50x
   speedup over pure Python.
 
@@ -31,14 +31,14 @@ pysrf works broadly on any symmetric similarity matrix. These can come from diff
 
 ```python
 import numpy as np
-from pysrf import SRF, estimate_rank
+from pysrf import SRF
 
 # Your similarity matrix (e.g., from behavioral judgments or neural data)
 s = np.random.rand(100, 100)
 s = (s + s.T) / 2
 
-estimate = estimate_rank(s, random_state=42)
-model = SRF(rank=estimate.rank, max_outer=20, random_state=42)
+# Decompose into 10 interpretable dimensions
+model = SRF(rank=10, max_outer=20, random_state=42)
 w = model.fit_transform(s)
 
 # Reconstruct the similarity matrix from the dimensions
