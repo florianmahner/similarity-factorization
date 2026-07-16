@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Similarity-based Representation Factorization (SRF) for modeling representations"
 authors = [{name = "Florian Mahner", email = "florian.mahner@icloud.com"}]
 readme = "README.md"
-license = {text = "MIT"}
+license = {text = "BSD-3-Clause"}
 requires-python = ">=3.10"
 keywords = ["matrix-factorization", "representation-learning", "similarity", "nmf"]
 dependencies = [
