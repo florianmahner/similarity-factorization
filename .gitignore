@@ -64,6 +64,13 @@ experiments/*/logs/
 *.*pyc
 
 
+# Demo assets ship with the paper submission — exempt from the ignores above.
+!demo/
+!demo/*.npz
+!demo/*.md
+!demo/*.txt
+!demo/*.py
+
 # Jupyter
 .ipynb_checkpoints/
 *.ipynb

@@ -1,0 +1,7 @@
+# Minimal dependencies to run the demo (demo/run_demo.py).
+# Install the SRF method package (pysrf) separately, e.g.
+#   pip install ./third_party/pysrf
+# These are the versions the demo was tested with.
+numpy>=2.0,<3.0
+scipy>=1.13,<2.0
+scikit-learn>=1.7,<2.0
