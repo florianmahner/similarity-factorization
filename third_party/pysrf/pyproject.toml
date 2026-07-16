@@ -1,6 +1,6 @@
 [project]
 name = "pysrf"
-version = "0.1.0"
+version = "0.1.1"
 description = "Similarity-based Representation Factorization (SRF) for modeling representations"
 authors = [{name = "Florian Mahner", email = "florian.mahner@icloud.com"}]
 readme = "README.md"
